@@ -1,0 +1,14 @@
+**/*.test.ts
+**/test-support/
+.github/
+scripts/
+AGENTS.md
+*.tgz
+.env
+.env.*
+**/.cache/
+**/node_modules/
+**/factory-api-keys.json
+**/api-keys.json
+**/*.sqlite
+**/*.sqlite-*

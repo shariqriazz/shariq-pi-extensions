@@ -1,0 +1,161 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import factoryExtension from "./index.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders } from "./factory/api-keys.ts";
+import { refreshFactoryToken } from "./factory/auth.ts";
+import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
+import { factoryApiForModel } from "./factory/models.ts";
+import { FACTORY_SYSTEM_MARKER, sanitizeFactoryContext } from "./factory/responses.ts";
+
+async function registeredFactory() {
+  const providers = new Map<string, any>();
+  const commands: string[] = [];
+  const handlers = new Map<string, any>();
+  const pi = {
+    registerProvider(id: string, config: any) { providers.set(id, config); },
+    registerCommand(name: string) { commands.push(name); },
+    on(name: string, handler: any) { handlers.set(name, handler); },
+  };
+  await factoryExtension(pi as never);
+  return { providers, commands, handlers, config: providers.get(PROVIDER_ID) };
+}
+
+test("Factory requests preserve Pi guidance behind the required Factory system marker", () => {
+  const context = sanitizeFactoryContext({
+    systemPrompt: "You are an expert coding assistant operating inside pi, a coding agent harness.",
+    messages: [{ role: "user", content: "hello" }],
+  });
+  assert.ok(context.systemPrompt.startsWith(FACTORY_SYSTEM_MARKER));
+  assert.match(context.systemPrompt, /running in Pi/);
+  assert.doesNotMatch(context.systemPrompt, /operating inside pi/);
+  assert.equal(sanitizeFactoryContext(context).systemPrompt.split(FACTORY_SYSTEM_MARKER).length - 1, 1);
+});
+
+test("routes selected models through their Factory API families", () => {
+  assert.equal(factoryApiForModel("gemini-3.7-flash"), "google-generative-ai");
+  assert.equal(factoryApiForModel("deepseek-v4-flash-0731"), "openai-completions");
+  assert.equal(factoryApiForModel("inkling"), "openai-completions");
+});
+
+test("registers one unified Factory provider and one operator command", async () => {
+  const { providers, commands, config } = await registeredFactory();
+  assert.deepEqual([...providers.keys()], ["factory"]);
+  assert.deepEqual(commands, ["factory-status"]);
+  assert.equal(config.models.length, 12);
+  assert.equal(config.headers["X-Client-Version"], FALLBACK_DROID_VERSION);
+  const ids = config.models.map((model: any) => model.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.includes("gpt-5.6-luna"));
+  for (const removed of [
+    "claude-opus-4-8",
+    "claude-opus-4-8-fast",
+    "claude-sonnet-4-6",
+    "gpt-5.5",
+    "gpt-5.5-fast",
+    "gemini-3.5-flash",
+    "grok-4.5",
+    "garnet-07-15",
+    "atlas-07-21",
+    "aster-07-15",
+    "amber-07-09",
+    "agate-07-11",
+    "kimi-k2.7-code",
+    "claude-haiku-4-5-20251001",
+    "claude-opus-5",
+    "claude-opus-5-fast",
+    "gemini-3.1-pro-preview",
+    "glm-5.2-fast",
+    "inkling",
+    "minimax-m3",
+    "nemotron-3-ultra",
+  ]) {
+    assert.ok(!ids.includes(removed), `${removed} should not be registered`);
+  }
+  assert.ok(ids.includes("gpt-5.5-pro"), "gpt-5.5-pro should remain until a 5.6 Pro replacement exists");
+  assert.ok(ids.includes("grok-4.6"), "current Grok should be registered");
+  const byId = new Map(config.models.map((model: any) => [model.id, model]));
+  for (const [id, provider] of Object.entries({
+    "kimi-k3": "fireworks",
+    "glm-5.2": "baseten",
+    "deepseek-v4-flash-0731": "fireworks",
+    "deepseek-v4-pro": "fireworks",
+  })) {
+    const model: any = byId.get(id);
+    assert.ok(model, `${id} should be registered`);
+    assert.equal(model.headers["x-api-provider"], provider);
+  }
+  const geminiFlash: any = byId.get("gemini-3.7-flash");
+  assert.ok(geminiFlash, "gemini-3.7-flash should be registered");
+  assert.equal(geminiFlash.contextWindow, 1_000_000);
+  assert.equal(geminiFlash.maxTokens, 65_536);
+  const kimi: any = byId.get("kimi-k3");
+  assert.ok(kimi, "kimi-k3 should be registered");
+  assert.equal(kimi.contextWindow, 1_048_576);
+  assert.equal(kimi.maxTokens, 131_072);
+  assert.deepEqual(kimi.input, ["text", "image"]);
+  assert.equal(kimi.thinkingLevelMap.max, "max");
+  const deepseekFlash: any = byId.get("deepseek-v4-flash-0731");
+  assert.ok(deepseekFlash, "deepseek-v4-flash-0731 should be registered");
+  assert.equal(deepseekFlash.contextWindow, 1_040_000);
+  assert.equal(deepseekFlash.maxTokens, 131_072);
+  assert.deepEqual(deepseekFlash.input, ["text"]);
+  assert.equal(deepseekFlash.thinkingLevelMap.max, "max");
+});
+
+test("session reload refreshes Pi's in-memory credential view", async () => {
+  const { handlers } = await registeredFactory();
+  let reloads = 0;
+  handlers.get("session_start")({}, { modelRegistry: { authStorage: { reload() { reloads++; } } } });
+  assert.equal(reloads, 1);
+});
+
+test("registers native API-key auth alongside Factory account OAuth", async () => {
+  const { config } = await registeredFactory();
+  assert.equal(config.apiKey, "$FACTORY_API_KEY");
+  assert.ok(config.oauth);
+});
+
+test("configured key login stores a non-secret file selector", async () => {
+  if (factoryApiKeyStatus().configured === 0) return;
+  const { config } = await registeredFactory();
+  const result = await config.oauth.login({
+    async onSelect() { return "api-key-config"; },
+    async onPrompt() { throw new Error("unexpected prompt"); },
+    onAuth() {},
+    onDeviceCode() {},
+  });
+  assert.deepEqual(result, {
+    access: FACTORY_API_KEY_FILE_SENTINEL,
+    refresh: FACTORY_API_KEY_FILE_SENTINEL,
+    expires: Number.MAX_SAFE_INTEGER,
+  });
+  assert.deepEqual(await config.oauth.refreshToken(result), result);
+});
+
+test("organization-scoped OAuth refresh matches current Droid", async () => {
+  const originalFetch = globalThis.fetch;
+  let body = "";
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    body = String(init?.body || "");
+    return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    await refreshFactoryToken("old-refresh", "org-current");
+    const params = new URLSearchParams(body);
+    assert.equal(params.get("grant_type"), "refresh_token");
+    assert.equal(params.get("organization_id"), "org-current");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("request auth routing distinguishes OAuth, direct keys, and configured key rotation", () => {
+  const jwt = `a.${Buffer.from(JSON.stringify({ exp: 1 })).toString("base64url")}.c`;
+  assert.equal(factoryAuthModeFromHeaders({ Authorization: `Bearer ${jwt}` }), "oauth");
+  assert.equal(factoryAuthModeFromHeaders({ authorization: "Bearer factory-key" }), "api-key");
+  assert.equal(factoryAuthModeFromHeaders({ Authorization: `Bearer ${FACTORY_API_KEY_FILE_SENTINEL}` }), "api-key-file");
+  assert.equal(factoryAuthModeFromHeaders({}), "missing");
+});

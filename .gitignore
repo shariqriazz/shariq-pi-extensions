@@ -1,0 +1,23 @@
+node_modules/
+__pycache__/
+*.py[cod]
+coverage/
+dist/
+*.tgz
+.DS_Store
+.env
+.env.*
+!.env.example
+.npmrc
+
+# Runtime state and secrets never belong in the package.
+auth.json
+factory-api-keys.json
+api-keys.json
+*.sqlite
+*.sqlite-*
+.cache/
+
+# Local test artifacts.
+*.log
+*.tmp
