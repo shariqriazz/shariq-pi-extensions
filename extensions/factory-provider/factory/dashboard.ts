@@ -257,7 +257,7 @@ export class FactoryDashboard implements Component {
         this.theme.fg("dim", " Run /login factory to configure an account or API-key file."),
       ];
     }
-    const rowsPerAccount = compact ? 3 : 4;
+    const rowsPerAccount = compact ? 1 : 4;
     const visibleCount = Math.max(1, Math.floor(height / rowsPerAccount));
     const start = Math.min(
       Math.max(0, this.selected - Math.floor(visibleCount / 2)),
@@ -274,9 +274,11 @@ export class FactoryDashboard implements Component {
       const status = stateLabel(this.theme, stateColor(state), state);
       const first = joinSides(` ${marker} ${title}`, `${status} `, width);
       lines.push(selected ? this.theme.bg("selectedBg", padLine(first, width)) : first);
-      lines.push(`   ${this.theme.fg("muted", compactPool("Standard", account.record?.limits?.standard, account.record?.fetchedAt))}`);
-      lines.push(`   ${this.theme.fg("muted", compactPool("Core", account.record?.limits?.core, account.record?.fetchedAt))}`);
-      if (!compact) lines.push("");
+      if (!compact) {
+        lines.push(`   ${this.theme.fg("muted", compactPool("Standard", account.record?.limits?.standard, account.record?.fetchedAt))}`);
+        lines.push(`   ${this.theme.fg("muted", compactPool("Core", account.record?.limits?.core, account.record?.fetchedAt))}`);
+        lines.push("");
+      }
     }
     if (start > 0 && lines.length) lines[0] = this.theme.fg("dim", `   ↑ ${start} more`);
     const below = accounts.length - start - visible.length;
