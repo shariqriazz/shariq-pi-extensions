@@ -4,9 +4,9 @@ Last verified: 2026-08-20
 
 ## Package boundary
 
-The repository has two publishable Pi packages:
+The repository has two Pi package boundaries:
 
-- the root `@shariqriaz/pi-extensions` package contains the default suite;
+- the repository root contains the default Git-installed suite;
 - `packages/pi-memory` contains optional persistent memory and is never loaded by the root manifest.
 
 Both packages declare exact entrypoints through `package.json#pi.extensions`. Pi therefore loads only intentional extension factories instead of scanning every TypeScript file.
@@ -34,11 +34,11 @@ Third-party runtime dependencies are normal package dependencies:
 - `@lydell/node-pty` powers managed background terminals;
 - `effect` powers subagent lifecycle and coordination.
 
-The repository uses npm workspaces so the optional memory package shares one lockfile without being bundled into the default Pi manifest.
+The repository uses npm workspaces so the optional memory package shares one development lockfile without entering the default Pi manifest.
 
 ## Runtime state
 
-Source checkouts and npm package directories are treated as immutable. Extensions resolve writable state through Pi's APIs:
+Managed Git checkouts are treated as immutable. Extensions resolve writable state through Pi's APIs:
 
 - Factory state: `<agent-dir>/factory/`
 - Pi Memory state: `<agent-dir>/pi-memory/`
@@ -53,6 +53,6 @@ Runtime paths use `node:path`, `getAgentDir()`, `CONFIG_DIR_NAME`, `os.homedir()
 
 ## Loading and updates
 
-Pi installs Git packages under its managed Git directory and npm packages under its managed npm directory. Package updates can replace or clean those checkouts, so user state must never be written beside extension source.
+Pi installs this package under its managed Git directory. Updates can reset and clean that checkout, so user state must never be written beside extension source.
 
 `pi config` controls individual resources in the default package. Pi Memory uses a separate package boundary because persistent memory should require an explicit installation rather than a default resource toggle.

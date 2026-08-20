@@ -1,6 +1,7 @@
 {
-  "name": "@shariqriaz/pi-extensions",
+  "name": "shariq-pi-extensions",
   "version": "0.1.0",
+  "private": true,
   "description": "Private cross-platform extension suite for the Pi coding agent.",
   "license": "UNLICENSED",
   "type": "module",
@@ -17,9 +18,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/shariqriazz/shariq-pi-extensions.git"
-  },
-  "publishConfig": {
-    "access": "restricted"
   },
   "files": [
     "extensions",

@@ -1,31 +1,23 @@
 # Pi Memory
 
-Optional persistent memory for Pi. It is intentionally shipped as a separate package so the main extension suite never enables memory implicitly.
+Optional persistent memory for Pi. It is deliberately absent from the root package manifest so installing the default extension suite never enables memory implicitly.
 
-## Install or enable
+## Enable from a trusted clone
 
 ```bash
-pi install npm:@shariqriaz/pi-memory
+pi install <repo>/packages/pi-memory
 ```
 
-Reload Pi after installation:
-
-```text
-/reload
-```
+Run `/reload` after installation.
 
 ## Disable
 
-```bash
-pi remove npm:@shariqriaz/pi-memory
-```
+Remove the same local package source through `pi remove` or `pi config`, then run `/reload`. Removing the package stops memory capture but does not delete its database. Runtime data remains under `<agent-dir>/pi-memory`, independent of the Git checkout.
 
-Then run `/reload`. Removing the package stops memory capture but does not delete its database. Runtime data stays under Pi's agent directory in `pi-memory/`, independent of the package checkout.
-
-If an existing database was archived elsewhere while memory was disabled, restore that directory to `<agent-dir>/pi-memory` before reinstalling. Keep the directory mode `0700` and database/config files `0600`.
+If an existing database was archived elsewhere while memory was disabled, restore that directory to `<agent-dir>/pi-memory` before enabling the package. Keep the directory mode `0700` and database/config files `0600`.
 
 ## Data and configuration
 
-The extension stores its SQLite database, projections, and model selection under the active Pi agent directory. It uses Pi's `getAgentDir()` API instead of assuming a specific home directory or operating system layout.
+The extension stores its SQLite database, projections, and model selection under the active Pi agent directory. It uses Pi's `getAgentDir()` API instead of assuming a particular home directory or operating-system layout.
 
 See [`extensions/pi-memory/README.md`](extensions/pi-memory/README.md) for tools, extraction behavior, and recovery details.

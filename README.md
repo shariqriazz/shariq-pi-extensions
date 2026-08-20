@@ -1,27 +1,16 @@
 # Shariq's Pi extensions
 
-Private, cross-platform Pi extensions and their operating skills maintained as one installable package. The suite keeps source code, tests, and release metadata in one repository while leaving credentials and runtime state on each machine.
+Private, cross-platform Pi extensions and their operating skills maintained in one GitHub repository. Credentials and runtime state stay on each machine.
 
 ## Install
 
-### Private GitHub repository
-
-Use SSH so Git can authenticate through the machine's configured GitHub key:
+Install globally from the private repository:
 
 ```bash
-pi install git:git@github.com:shariqriazz/shariq-pi-extensions
+pi install git:https://github.com/shariqriazz/shariq-pi-extensions
 ```
 
-### Private npm package
-
-Authenticate npm first, then install the restricted package:
-
-```bash
-npm login
-pi install npm:@shariqriaz/pi-extensions
-```
-
-Run `/reload` in an existing Pi session after installation. New sessions load the package automatically.
+Git uses the machine's configured GitHub credentials. Run `/reload` in an existing Pi session after installation; new sessions load the package automatically.
 
 ## Included extensions
 
@@ -40,7 +29,9 @@ The default package contains:
 - Pi subagents
 - lightweight URL fetching
 
-The package also declares the `background-terminals` and `subagents` skills so Pi loads the operating guidance automatically with those tools. Pi reads them from its managed package checkout; duplicating files under `<agent-dir>/skills` is unnecessary and would leave stale copies after removal. See [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) for commands, tools, configuration, and external dependencies.
+The package also declares the `background-terminals` and `subagents` skills so Pi loads their operating guidance automatically. Pi reads them from its managed Git checkout; duplicating files under `<agent-dir>/skills` is unnecessary and would leave stale copies after removal.
+
+See [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) for commands, tools, configuration, and external dependencies.
 
 ## Enable or disable extensions
 
@@ -50,29 +41,23 @@ Open Pi's package configuration UI:
 pi config
 ```
 
-Toggle individual resources, save, and run `/reload`. Removing the package disables the whole suite:
+Toggle individual resources, save, and run `/reload`. Remove the Git package to disable the whole suite:
 
 ```bash
-pi remove git:git@github.com:shariqriazz/shariq-pi-extensions
-# or
-pi remove npm:@shariqriaz/pi-extensions
+pi remove git:https://github.com/shariqriazz/shariq-pi-extensions
 ```
 
-### Optional Pi Memory
+## Optional Pi Memory
 
-Pi Memory is deliberately excluded from the default suite. Install it separately only when persistent memory is wanted:
+Pi Memory is included in this repository under [`packages/pi-memory`](packages/pi-memory), but it is deliberately absent from the root Pi manifest. Installing the default suite cannot activate memory.
+
+To enable it from a trusted local clone, install the subpackage explicitly:
 
 ```bash
-pi install npm:@shariqriaz/pi-memory
+pi install <repo>/packages/pi-memory
 ```
 
-Disable it without deleting its database:
-
-```bash
-pi remove npm:@shariqriaz/pi-memory
-```
-
-Its source remains in this repository under [`packages/pi-memory`](packages/pi-memory), but installing the main suite never loads it.
+Remove that same local package source and run `/reload` to disable memory. Its database remains under `<agent-dir>/pi-memory` unless it is archived separately.
 
 ## Update
 
@@ -80,13 +65,13 @@ Its source remains in this repository under [`packages/pi-memory`](packages/pi-m
 pi update --extensions --no-approve
 ```
 
-Unpinned Git and npm installs follow their configured update source. A Git source pinned to a tag or commit stays pinned until the source reference is changed explicitly.
+An unpinned Git installation follows the repository's default branch. A source pinned to a tag or commit remains fixed until its reference is changed explicitly.
 
 ## Machine-local configuration
 
-The package never contains credentials. Configure authentication separately on each machine through Pi login, environment variables, or the service's normal credential store.
+The repository never contains credentials. Configure authentication separately on each machine through Pi login, environment variables, or the service's normal credential store.
 
-Runtime files use Pi's active agent directory rather than a fixed home or checkout path. This keeps the same package usable on macOS and Linux and avoids writing into Git or npm installation directories.
+Runtime files use Pi's active agent directory rather than a fixed home or checkout path. This keeps the same package usable on macOS and Linux and prevents updates from overwriting state.
 
 ## Development
 
@@ -94,11 +79,11 @@ Runtime files use Pi's active agent directory rather than a fixed home or checko
 mise install --locked
 mise exec --locked -- npm ci
 mise exec --locked -- npm run validate
-mise exec --locked -- npm run validate --workspace @shariqriaz/pi-memory
+mise exec --locked -- npm run validate --workspace packages/pi-memory
 mise exec --locked -- npm run pack:inspect
 ```
 
-See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for repository workflow and publication checks, and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for package boundaries.
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for repository workflow and cutover checks, and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for package boundaries.
 
 ## Provenance
 

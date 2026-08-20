@@ -1,6 +1,7 @@
 {
-  "name": "@shariqriaz/pi-memory",
+  "name": "shariq-pi-memory",
   "version": "0.1.0",
+  "private": true,
   "description": "Optional persistent memory extension for the Pi coding agent.",
   "license": "UNLICENSED",
   "type": "module",
@@ -16,9 +17,6 @@
     "type": "git",
     "url": "git+https://github.com/shariqriazz/shariq-pi-extensions.git",
     "directory": "packages/pi-memory"
-  },
-  "publishConfig": {
-    "access": "restricted"
   },
   "files": [
     "extensions/pi-memory/index.ts",
