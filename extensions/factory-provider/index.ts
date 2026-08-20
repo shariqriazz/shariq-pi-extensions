@@ -1,7 +1,6 @@
 import type {
   ExtensionAPI,
   ExtensionContext,
-  ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 import { FACTORY_CLIENT_PROTOCOL, FACTORY_RESPONSES_BASE_URL, PROVIDER_ID } from "./factory/constants.ts";
@@ -20,7 +19,6 @@ import {
   loadFactoryLimitCache,
   refreshFactoryLimits,
   type FactoryLimitCredential,
-  type FactoryLimitRecord,
 } from "./factory/limits.ts";
 
 const API_KEY_CONFIG_METHOD = "api-key-config";
@@ -36,8 +34,6 @@ function configuredApiKeyFileCredential(): OAuthCredentials {
 export default async function factoryExtension(pi: ExtensionAPI) {
   const clientVersion = droidVersion();
   const models = parseModelsFromDroidHelp().map(toPiModel);
-  let activeUi: ExtensionUIContext | undefined;
-  let refreshGeneration = 0;
 
   const limitCredentials = async (
     ctx: ExtensionContext,
@@ -72,50 +68,17 @@ export default async function factoryExtension(pi: ExtensionAPI) {
     ];
   };
 
-  const updateLimitsWidget = (
-    records: ReadonlyArray<FactoryLimitRecord>,
-    ctx: ExtensionContext,
-  ) => {
-    if (!ctx.hasUI) return;
-    if (!records.length) {
-      ctx.ui.setWidget("factory-limits", undefined);
-      return;
-    }
-    const lines = [
-      ctx.ui.theme.fg(
-        "accent",
-        ctx.ui.theme.bold("Factory usage · separate per credential"),
-      ),
-      ...records.slice(0, 5).flatMap((record) =>
-        formatLimitRecord(record).map((line, index) =>
-          index === 0
-            ? ctx.ui.theme.fg("text", line)
-            : ctx.ui.theme.fg("dim", line),
-        ),
-      ),
-      ...(records.length > 5
-        ? [ctx.ui.theme.fg("muted", `… ${records.length - 5} more; use /factory-limits`)]
-        : []),
-    ];
-    ctx.ui.setWidget("factory-limits", lines, { placement: "belowEditor" });
-  };
-
   const refreshLimits = async (
     ctx: ExtensionContext,
     force: boolean,
   ) => {
-    const generation = refreshGeneration;
     const credentials = await limitCredentials(ctx);
-    if (!credentials.length) {
-      if (generation === refreshGeneration) updateLimitsWidget([], ctx);
-      return [];
-    }
+    if (!credentials.length) return [];
     const records = await refreshFactoryLimits(credentials, {
       force,
       version: clientVersion,
       signal: ctx.signal,
     });
-    if (generation === refreshGeneration) updateLimitsWidget(records, ctx);
     return records;
   };
 
@@ -182,30 +145,16 @@ export default async function factoryExtension(pi: ExtensionAPI) {
   pi.on("session_start", (_event, ctx) => {
     const authStorage = (ctx.modelRegistry as any).authStorage;
     authStorage?.reload?.();
-    if (ctx.hasUI) activeUi = ctx.ui;
-    const cached = loadFactoryLimitCache().records;
-    if (cached.length) updateLimitsWidget(cached, ctx);
-    void refreshLimits(ctx, false).catch((error) => {
-      if (ctx.hasUI) {
-        ctx.ui.notify(
-          `Factory usage refresh failed: ${error instanceof Error ? error.message : String(error)}`,
-          "warning",
-        );
-      }
+    void refreshLimits(ctx, false).catch(() => {
+      // Limits are advisory and refreshed silently; /factory-limits reports on demand.
     });
   });
 
   pi.on("agent_end", (_event, ctx) => {
     if (ctx.model?.provider !== PROVIDER_ID) return;
     void refreshLimits(ctx, false).catch(() => {
-      // Cached usage remains visible; the manual command reports refresh errors.
+      // Cached usage remains available; the manual command reports refresh errors.
     });
-  });
-
-  pi.on("session_shutdown", () => {
-    refreshGeneration++;
-    activeUi?.setWidget("factory-limits", undefined);
-    activeUi = undefined;
   });
 
   pi.registerCommand("factory-status", {
@@ -227,13 +176,47 @@ export default async function factoryExtension(pi: ExtensionAPI) {
 
   pi.registerCommand("factory-limits", {
     description: "Refresh and show separate Standard and Droid Core usage for each Factory credential",
-    handler: async (_args, ctx) => {
-      const records = await refreshLimits(ctx, true);
-      if (!records.length) {
-        ctx.ui.notify("No active Factory credential is available for usage lookup.", "warning");
+    handler: async (args, ctx) => {
+      const query = args.trim().toLowerCase();
+      const credentials = await limitCredentials(ctx);
+      const matching = query
+        ? credentials.filter((credential) =>
+            credential.label.toLowerCase().includes(query),
+          )
+        : credentials;
+      if (!matching.length) {
+        ctx.ui.notify(
+          query
+            ? `No Factory credential label matches "${args.trim()}".`
+            : "No active Factory credential is available for usage lookup.",
+          "warning",
+        );
         return;
       }
-      ctx.ui.notify(records.flatMap((record) => formatLimitRecord(record)).join("\n"), "info");
+      let credential = matching[0];
+      if (matching.length > 1) {
+        const choices = matching.map(
+          (entry, index) => `${index + 1}. ${entry.label}`,
+        );
+        const selected = await ctx.ui.select(
+          "Factory usage · choose a credential",
+          choices,
+        );
+        if (!selected) return;
+        const index = choices.indexOf(selected);
+        if (index < 0) return;
+        credential = matching[index];
+      }
+      const [record] = await refreshFactoryLimits([credential], {
+        force: true,
+        version: clientVersion,
+        signal: ctx.signal,
+      });
+      if (!record) {
+        ctx.ui.notify("Factory usage is unavailable for that credential.", "warning");
+        return;
+      }
+      ctx.ui.notify(formatLimitRecord(record).join("\n"), record.error ? "warning" : "info");
     },
   });
 }

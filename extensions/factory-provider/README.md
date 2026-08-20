@@ -60,7 +60,7 @@ There are no `-oauth` or `-api-key` model duplicates. The user-curated catalog e
 /factory-limits
 ```
 
-`/factory-status` reports catalog and authentication state. `/factory-limits` force-refreshes Factory's authoritative billing data. The extension also shows a compact UI widget with separate Standard and Droid Core limits for each credential.
+`/factory-status` reports catalog and authentication state. `/factory-limits` force-refreshes Factory's authoritative billing data on demand. With multiple credentials, it opens a scalable credential picker and shows separate Standard and Droid Core limits only for the selected entry. You can filter by label with `/factory-limits <label>`.
 
 Usage is never estimated from Pi token counts: Factory's API already applies model multipliers and cache-hit discounts. Cached records refresh at most every 15 minutes during normal sessions and after Factory runs; the manual command is the explicit force-refresh path.
 
