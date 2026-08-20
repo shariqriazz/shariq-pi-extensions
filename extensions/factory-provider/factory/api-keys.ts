@@ -6,7 +6,9 @@ import { streamSimpleFactoryResponses } from "./responses.ts";
 import {
   cachedLimitDecision,
   factoryCredentialId,
+  refreshFactoryLimits,
 } from "./limits.ts";
+import { droidVersion } from "./droid.ts";
 
 export const FACTORY_API_KEY_FILE_SENTINEL = "pi-factory-api-key-file";
 export const FACTORY_API_KEYS_PATH = join(FACTORY_STATE_DIR, "api-keys.json");
@@ -26,6 +28,7 @@ type FactoryApiKeyConfig = {
 
 type KeyRuntimeState = {
   cooldownUntil?: number;
+  cooldownKind?: "auth" | "rate" | "quota";
   lastError?: string;
   lastUsedAt?: number;
 };
@@ -91,26 +94,86 @@ export function loadFactoryApiKeys(): FactoryApiKeyEntry[] {
   });
 }
 
-function activeKeyEntries() {
-  const now = Date.now();
-  return loadFactoryApiKeys().filter((entry) => {
-    const runtime = state.get(keyId(entry));
-    return !runtime?.cooldownUntil || runtime.cooldownUntil <= now;
-  });
+export function sortFactoryApiKeysByLastUsed(
+  entries: FactoryApiKeyEntry[],
+  lastUsed = (entry: FactoryApiKeyEntry) => state.get(keyId(entry))?.lastUsedAt,
+) {
+  return entries
+    .map((entry, index) => ({ entry, index, lastUsedAt: lastUsed(entry) ?? 0 }))
+    .sort((left, right) =>
+      left.lastUsedAt - right.lastUsedAt || left.index - right.index,
+    )
+    .map(({ entry }) => entry);
 }
 
-function classifyCooldownMs(message: string): number | null {
+function activeKeyEntries(modelId?: string) {
+  const now = Date.now();
+  const active = loadFactoryApiKeys().filter((entry) => {
+    const id = keyId(entry);
+    const runtime = state.get(id);
+    if (!runtime?.cooldownUntil || runtime.cooldownUntil <= now) return true;
+    if (runtime.cooldownKind !== "quota" || !modelId) return false;
+    const decision = cachedLimitDecision(entry.key, modelId, now);
+    if (decision?.available === true) {
+      state.set(id, { ...runtime, cooldownUntil: undefined, cooldownKind: undefined });
+      return true;
+    }
+    if (decision?.available === false && decision.resetAt) {
+      state.set(id, { ...runtime, cooldownUntil: decision.resetAt });
+    }
+    return false;
+  });
+  // Least-recently-used ordering distributes successful traffic instead of
+  // draining the first configured key before considering the rest.
+  return sortFactoryApiKeysByLastUsed(active);
+}
+
+function classifyCooldown(message: string): { ms: number; kind: "auth" | "rate" | "quota" } | null {
   const lower = message.toLowerCase();
-  if (/\b(401|403)\b/.test(lower) || lower.includes("unauthorized") || lower.includes("invalid api key") || lower.includes("forbidden")) return AUTH_COOLDOWN_MS;
-  if (/\b429\b/.test(lower) || lower.includes("rate limit")) return RATE_COOLDOWN_MS;
-  if (lower.includes("quota") || lower.includes("billing") || lower.includes("credit") || lower.includes("usage limit") || lower.includes("exhaust")) return DEFAULT_COOLDOWN_MS;
+  if (/\b(401|403)\b/.test(lower) || lower.includes("unauthorized") || lower.includes("invalid api key") || lower.includes("forbidden")) return { ms: AUTH_COOLDOWN_MS, kind: "auth" };
+  if (/\b429\b/.test(lower) || lower.includes("rate limit")) return { ms: RATE_COOLDOWN_MS, kind: "rate" };
+  if (lower.includes("quota") || lower.includes("billing") || lower.includes("credit") || lower.includes("usage limit") || lower.includes("exhaust")) return { ms: DEFAULT_COOLDOWN_MS, kind: "quota" };
   return null;
 }
 
-function markKeyFailure(entry: FactoryApiKeyEntry, error: string) {
-  const cooldownMs = classifyCooldownMs(error);
-  if (!cooldownMs) return false;
-  state.set(keyId(entry), { cooldownUntil: Date.now() + cooldownMs, lastError: error, lastUsedAt: Date.now() });
+function markKeyFailure(
+  entry: FactoryApiKeyEntry,
+  error: string,
+  modelId: string,
+) {
+  const cooldown = classifyCooldown(error);
+  if (!cooldown) return false;
+  const now = Date.now();
+  const cached = cachedLimitDecision(entry.key, modelId, now);
+  state.set(keyId(entry), {
+    cooldownUntil:
+      cached?.available === false && cached.resetAt
+        ? cached.resetAt
+        : now + cooldown.ms,
+    cooldownKind: cooldown.kind,
+    lastError: error,
+    lastUsedAt: now,
+  });
+
+  // Authorization failures cannot query billing. For rate/quota failures,
+  // refresh Factory's authoritative windows and replace the fallback cooldown
+  // with the exact monthly/weekly/5-hour reset when available.
+  if (cooldown.kind !== "auth") {
+    void refreshFactoryLimits(
+      [{ label: entry.label, secret: entry.key }],
+      { force: true, version: droidVersion() },
+    ).then(() => {
+      const decision = cachedLimitDecision(entry.key, modelId);
+      if (decision?.available !== false || !decision.resetAt) return;
+      const runtime = state.get(keyId(entry)) ?? {};
+      state.set(keyId(entry), {
+        ...runtime,
+        cooldownUntil: decision.resetAt,
+      });
+    }).catch(() => {
+      // Retain the conservative error-class fallback cooldown.
+    });
+  }
   return true;
 }
 
@@ -171,13 +234,13 @@ export function selectFactoryApiKeysByLimits(
 export function streamSimpleFactoryApiKeyResponses(model: any, context: any, options?: any) {
   const stream = createAssistantMessageEventStream();
   (async () => {
-    const selected = selectFactoryApiKeysByLimits(activeKeyEntries(), model.id);
+    const selected = selectFactoryApiKeysByLimits(activeKeyEntries(model.id), model.id);
     const keys = selected.keys;
     if (!keys.length) {
       stream.push(errorEvent(
         model,
         selected.exhausted.length
-          ? `No configured Factory API key has available ${model.id} usage (${selected.exhausted.join("; ")}). Refresh with /factory-limits.`
+          ? `No configured Factory API key has available ${model.id} usage (${selected.exhausted.join("; ")}). Refresh with /factory.`
           : `No active Factory API keys configured. Add keys to ${FACTORY_API_KEYS_PATH} or FACTORY_API_KEYS.`,
       ));
       stream.end();
@@ -196,7 +259,7 @@ export function streamSimpleFactoryApiKeyResponses(model: any, context: any, opt
         const error = errorText(event);
         if (error) {
           lastError = error;
-          const retryNext = !hasStarted && markKeyFailure(key, error);
+          const retryNext = !hasStarted && markKeyFailure(key, error, model.id);
           if (retryNext) {
             retriedBeforeStart = true;
             break;
@@ -266,6 +329,7 @@ export function factoryApiKeyStatus() {
     keys: keys.map((entry) => {
       const runtime = state.get(keyId(entry));
       return {
+        id: keyId(entry),
         label: entry.label,
         key: maskKey(entry.key),
         cooldownSeconds: runtime?.cooldownUntil && runtime.cooldownUntil > now ? Math.ceil((runtime.cooldownUntil - now) / 1000) : 0,

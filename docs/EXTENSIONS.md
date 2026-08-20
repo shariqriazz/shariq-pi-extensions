@@ -10,7 +10,7 @@ Registers the `antigravity` provider and `/login antigravity` flow for supported
 
 ### [Factory provider](../extensions/factory-provider/README.md)
 
-Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory-status` reports catalog and authentication state without exposing keys. `/factory-limits` force-refreshes authoritative Factory usage on demand, using a credential picker when several keys exist; `/factory-limits <label>` filters directly. Standard and Droid Core windows stay separate per credential without a persistent footer or aggregation. Background refreshes are throttled to 15 minutes.
+Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory` opens one full-width dashboard for provider/authentication state, model metadata, rotation status, and authoritative Factory usage across every credential. Standard and Droid Core windows stay separate, percentages are labeled as used, and keys are never aggregated. Rotation applies a monthly → weekly → 5-hour eligibility waterfall, then selects the least recently used eligible key and retains same-request failover for recognized pre-output errors. Background refreshes are throttled to 15 minutes; `r` force-refreshes from the dashboard.
 
 Rotating keys belong in `<agent-dir>/factory/api-keys.json`. Droid metadata cache belongs in `<agent-dir>/factory/droid.json`. Refresh metadata explicitly after upgrading Droid:
 

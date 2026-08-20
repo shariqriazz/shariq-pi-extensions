@@ -141,29 +141,43 @@ function saveFactoryLimitCache(cache: FactoryLimitCache) {
   fs.chmodSync(FACTORY_LIMITS_CACHE_PATH, 0o600);
 }
 
-function active(bucket: FactoryLimitBucket, now = Date.now()) {
-  if (
-    typeof bucket.secondsRemaining === "number" &&
-    bucket.secondsRemaining > 0
-  ) return true;
-  if (!bucket.windowEnd) return false;
-  const end = Date.parse(bucket.windowEnd);
-  return Number.isFinite(end) && end > now;
+function bucketResetAt(
+  bucket: FactoryLimitBucket,
+  observedAt = Date.now(),
+) {
+  if (bucket.windowEnd) {
+    const end = Date.parse(bucket.windowEnd);
+    if (Number.isFinite(end)) return end;
+  }
+  if (typeof bucket.secondsRemaining === "number") {
+    return observedAt + bucket.secondsRemaining * 1000;
+  }
+  return undefined;
+}
+
+function active(
+  bucket: FactoryLimitBucket,
+  now = Date.now(),
+  observedAt = now,
+) {
+  const resetAt = bucketResetAt(bucket, observedAt);
+  return resetAt !== undefined && resetAt > now;
 }
 
 /** Parent windows dominate exhausted child windows: monthly → weekly → 5-hour. */
 export function exhaustedBucket(
   limits: FactoryPoolLimits | undefined,
   now = Date.now(),
+  observedAt = now,
 ): "monthly" | "weekly" | "fiveHour" | undefined {
   if (!limits) return undefined;
-  if (active(limits.monthly, now) && limits.monthly.usedPercent >= 100) {
+  if (active(limits.monthly, now, observedAt) && limits.monthly.usedPercent >= 100) {
     return "monthly";
   }
-  if (active(limits.weekly, now) && limits.weekly.usedPercent >= 100) {
+  if (active(limits.weekly, now, observedAt) && limits.weekly.usedPercent >= 100) {
     return "weekly";
   }
-  if (active(limits.fiveHour, now) && limits.fiveHour.usedPercent >= 100) {
+  if (active(limits.fiveHour, now, observedAt) && limits.fiveHour.usedPercent >= 100) {
     return "fiveHour";
   }
   return undefined;
@@ -181,15 +195,21 @@ export function cachedLimitDecision(
   const record = loadFactoryLimitCache().records.find(
     (item) => item.id === factoryCredentialId(secret),
   );
-  if (
-    !record?.limits ||
-    now - record.fetchedAt > FACTORY_LIMITS_TTL_MS * 2
-  ) return undefined;
+  if (!record?.limits) return undefined;
   const poolName = billingPoolForModel(modelId);
-  const exhausted = exhaustedBucket(record.limits[poolName], now);
-  return exhausted
-    ? { available: false as const, pool: poolName, exhausted, label: record.label }
-    : { available: true as const, pool: poolName, label: record.label };
+  const limits = record.limits[poolName];
+  const exhausted = exhaustedBucket(limits, now, record.fetchedAt);
+  if (exhausted && limits) {
+    return {
+      available: false as const,
+      pool: poolName,
+      exhausted,
+      resetAt: bucketResetAt(limits[exhausted], record.fetchedAt),
+      label: record.label,
+    };
+  }
+  if (now - record.fetchedAt > FACTORY_LIMITS_TTL_MS * 2) return undefined;
+  return { available: true as const, pool: poolName, label: record.label };
 }
 
 let refreshPromise: Promise<FactoryLimitRecord[]> | undefined;
@@ -272,13 +292,14 @@ export function refreshFactoryLimits(
   return refreshPromise;
 }
 
-function resetText(bucket: FactoryLimitBucket, now = Date.now()) {
-  if (!active(bucket, now)) return "reset";
-  const seconds =
-    bucket.secondsRemaining ??
-    (bucket.windowEnd
-      ? Math.max(0, Math.round((Date.parse(bucket.windowEnd) - now) / 1000))
-      : 0);
+function resetText(
+  bucket: FactoryLimitBucket,
+  now = Date.now(),
+  observedAt = now,
+) {
+  if (!active(bucket, now, observedAt)) return "reset";
+  const resetAt = bucketResetAt(bucket, observedAt);
+  const seconds = resetAt ? Math.max(0, Math.round((resetAt - now) / 1000)) : 0;
   if (!seconds) return "reset soon";
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -289,32 +310,33 @@ export function formatPoolLimits(
   name: "Standard" | "Core",
   limits: FactoryPoolLimits | undefined,
   now = Date.now(),
+  observedAt = now,
 ) {
   if (!limits) return `${name}: unavailable`;
-  const exhausted = exhaustedBucket(limits, now);
+  const exhausted = exhaustedBucket(limits, now, observedAt);
   if (exhausted === "monthly") {
-    return `${name}: monthly 100% · resets ${resetText(limits.monthly, now)} · weekly/5h inactive`;
+    return `${name} used: monthly 100% · resets ${resetText(limits.monthly, now, observedAt)} · weekly/5h inactive`;
   }
   if (exhausted === "weekly") {
-    return `${name}: monthly ${limits.monthly.usedPercent}% · weekly 100% · resets ${resetText(limits.weekly, now)} · 5h inactive`;
+    return `${name} used: monthly ${limits.monthly.usedPercent}% · weekly 100% · resets ${resetText(limits.weekly, now, observedAt)} · 5h inactive`;
   }
   if (exhausted === "fiveHour") {
-    return `${name}: monthly ${limits.monthly.usedPercent}% · weekly ${limits.weekly.usedPercent}% · 5h 100% · resets ${resetText(limits.fiveHour, now)}`;
+    return `${name} used: monthly ${limits.monthly.usedPercent}% · weekly ${limits.weekly.usedPercent}% · 5h 100% · resets ${resetText(limits.fiveHour, now, observedAt)}`;
   }
   const parts = [
-    active(limits.monthly, now) ? `M ${limits.monthly.usedPercent}%` : undefined,
-    active(limits.weekly, now) ? `W ${limits.weekly.usedPercent}%` : undefined,
-    active(limits.fiveHour, now) ? `5h ${limits.fiveHour.usedPercent}%` : undefined,
+    active(limits.monthly, now, observedAt) ? `M ${limits.monthly.usedPercent}%` : undefined,
+    active(limits.weekly, now, observedAt) ? `W ${limits.weekly.usedPercent}%` : undefined,
+    active(limits.fiveHour, now, observedAt) ? `5h ${limits.fiveHour.usedPercent}%` : undefined,
   ].filter(Boolean);
-  return `${name}: ${parts.join(" · ") || "fresh window"}`;
+  return `${name} used: ${parts.join(" · ") || "fresh window"}`;
 }
 
 export function formatLimitRecord(record: FactoryLimitRecord, now = Date.now()) {
   const ageMinutes = Math.max(0, Math.floor((now - record.fetchedAt) / 60_000));
   const lines = [
     `${record.label} · ${ageMinutes ? `${ageMinutes}m old` : "just refreshed"}${record.error ? ` · refresh error: ${record.error}` : ""}`,
-    `  ${formatPoolLimits("Standard", record.limits?.standard, now)}`,
-    `  ${formatPoolLimits("Core", record.limits?.core, now)}`,
+    `  ${formatPoolLimits("Standard", record.limits?.standard, now, record.fetchedAt)}`,
+    `  ${formatPoolLimits("Core", record.limits?.core, now, record.fetchedAt)}`,
   ];
   return lines;
 }

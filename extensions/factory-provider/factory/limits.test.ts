@@ -29,6 +29,20 @@ test("monthly and weekly exhaustion suppress less relevant windows", () => {
   assert.match(formatPoolLimits("Standard", weekly, now), /5h inactive/);
 });
 
+test("eligibility is a monthly → weekly → 5-hour waterfall", () => {
+  assert.equal(exhaustedBucket(limits({ monthly: 100, weekly: 0, fiveHour: 0 }), now), "monthly");
+  assert.equal(exhaustedBucket(limits({ monthly: 50, weekly: 100, fiveHour: 0 }), now), "weekly");
+  assert.equal(exhaustedBucket(limits({ monthly: 50, weekly: 50, fiveHour: 100 }), now), "fiveHour");
+  assert.equal(exhaustedBucket(limits({ monthly: 99, weekly: 99, fiveHour: 99 }), now), undefined);
+});
+
+test("secondsRemaining is anchored to fetch time and cannot extend a stale cooldown", () => {
+  const value = limits({ weekly: 100 });
+  value.weekly = { usedPercent: 100, windowEnd: null, secondsRemaining: 3_600 };
+  assert.equal(exhaustedBucket(value, now, now - 30 * 60_000), "weekly");
+  assert.equal(exhaustedBucket(value, now, now - 2 * 60 * 60_000), undefined);
+});
+
 test("expired exhaustion does not block a credential", () => {
   const value = limits({ weekly: 100 });
   value.weekly = { usedPercent: 100, windowEnd: past, secondsRemaining: null };

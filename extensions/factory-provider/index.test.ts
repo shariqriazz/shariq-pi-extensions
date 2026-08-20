@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import factoryExtension from "./index.ts";
-import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits } from "./factory/api-keys.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
 import { factoryApiForModel } from "./factory/models.ts";
@@ -88,10 +88,10 @@ test("routes selected models through their Factory API families", () => {
   assert.equal(factoryApiForModel("inkling"), "openai-completions");
 });
 
-test("registers one unified Factory provider and its operator commands", async () => {
+test("registers one unified Factory provider and one dashboard command", async () => {
   const { providers, commands, config } = await registeredFactory();
   assert.deepEqual([...providers.keys()], ["factory"]);
-  assert.deepEqual(commands, ["factory-status", "factory-limits"]);
+  assert.deepEqual(commands, ["factory"]);
   assert.equal(config.models.length, 12);
   assert.equal(config.headers["X-Client-Version"], FALLBACK_DROID_VERSION);
   const ids = config.models.map((model: any) => model.id);
@@ -211,6 +211,19 @@ test("organization-scoped OAuth refresh matches current Droid", async () => {
   }
 });
 
+test("rotating keys prefer the least recently used eligible credential", () => {
+  const keys = [
+    { label: "first", key: "key-a" },
+    { label: "second", key: "key-b" },
+    { label: "third", key: "key-c" },
+  ];
+  const lastUsed = new Map([["key-a", 300], ["key-b", 100], ["key-c", 200]]);
+  assert.deepEqual(
+    sortFactoryApiKeysByLastUsed(keys, (entry) => lastUsed.get(entry.key)).map((entry) => entry.label),
+    ["second", "third", "first"],
+  );
+});
+
 test("rotating keys skip only the credential exhausted for the selected billing pool", () => {
   const selected = selectFactoryApiKeysByLimits(
     [
@@ -220,7 +233,7 @@ test("rotating keys skip only the credential exhausted for the selected billing 
     "gpt-5.6-luna",
     (key) =>
       key === "key-a"
-        ? { available: false, pool: "standard", exhausted: "monthly", label: "standard-exhausted" }
+        ? { available: false, pool: "standard", exhausted: "monthly", resetAt: Date.now() + 3_600_000, label: "standard-exhausted" }
         : { available: true, pool: "standard", label: "available" },
   );
   assert.deepEqual(selected.keys.map((entry) => entry.label), ["available"]);

@@ -90,8 +90,8 @@ Known current values:
 
 1. `/reload`
 2. `/login factory` if not logged in.
-3. Run `/factory-status` and `/factory-limits`.
-4. Confirm Standard and Droid Core usage appears separately for each configured credential.
+3. Run `/factory`.
+4. Confirm every configured credential appears in the dashboard with separately labeled Standard and Droid Core usage.
 5. Send a tiny prompt with `factory/gpt-5.6-sol` or another known model.
 
 If Factory responds with `Unable to determine client version`, inspect/update `FACTORY_CLIENT_PROTOCOL` or Droid version detection.

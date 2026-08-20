@@ -36,7 +36,7 @@ Use Pi's native **Use an API key** option to enter and store one Factory API key
 
 Pi stores the selected authentication method under the single `factory` provider. Consequently `/logout` shows one Factory entry and removes whichever Factory credential is active. Switching authentication method means running `/login factory` again; the model catalog does not change.
 
-Configured multi-key mode keeps fill-first rotation and cooldown behavior. Direct API-key and OAuth requests share the same transport/model catalog while applying the appropriate organization-header behavior automatically.
+Configured multi-key mode rotates least-recently-used eligible keys and applies error-specific cooldowns. Eligibility is a billing-pool waterfall: monthly, weekly, and 5-hour windows must all be available for the selected Standard or Droid Core model. Direct API-key and OAuth requests share the same transport/model catalog while applying the appropriate organization-header behavior automatically.
 
 ## Models
 
@@ -53,18 +53,17 @@ The extension loads one curated catalog from the installed Droid metadata and `f
 
 There are no `-oauth` or `-api-key` model duplicates. The user-curated catalog excludes every `-fast` variant and the explicit removals documented in `factory/models.ts`. The current Gemini Pro, MiniMax M3, Nemotron 3 Ultra, and Inkling entries remain hidden; reconsider each family only after its vendor releases a newer generation/model.
 
-## Operator status and usage limits
+## Factory dashboard
 
 ```text
-/factory-status
-/factory-limits
+/factory
 ```
 
-`/factory-status` reports catalog and authentication state. `/factory-limits` force-refreshes Factory's authoritative billing data on demand. With multiple credentials, it opens a scalable credential picker and shows separate Standard and Droid Core limits only for the selected entry. You can filter by label with `/factory-limits <label>`.
+`/factory` opens a full-width account dashboard combining provider status, authentication, Droid/model metadata, rotation cooldowns, and separate Standard and Droid Core usage for every credential. Percentages are explicitly labeled as **used**. Navigate with the arrow keys or `j`/`k`, press `r` to force-refresh every account, and press Escape to close.
 
 Usage is never estimated from Pi token counts: Factory's API already applies model multipliers and cache-hit discounts. Cached records refresh at most every 15 minutes during normal sessions and after Factory runs; the manual command is the explicit force-refresh path.
 
-Configured rotating API keys remain separate. Each label gets its own Standard and Core record, and the extension never sums or averages them. Fresh cached exhaustion can skip only that credential during rotation. Monthly exhaustion suppresses weekly and 5-hour detail; weekly exhaustion suppresses 5-hour detail. Expired windows do not block a key.
+Configured rotating API keys remain separate. Each label gets its own Standard and Core record, and the extension never sums or averages them. Fresh cached exhaustion skips only that credential for the relevant model pool. Monthly exhaustion makes weekly and 5-hour availability irrelevant; weekly exhaustion makes 5-hour availability irrelevant. Among keys that pass the complete waterfall, least-recently-used ordering distributes traffic. Recognized pre-output authorization, rate, quota, billing, or exhaustion errors cool down that key and retry the next eligible key in the same request. Expired windows do not block a key.
 
 ## Required request behavior
 

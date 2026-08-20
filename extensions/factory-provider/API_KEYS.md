@@ -8,10 +8,10 @@ Configure rotating keys in:
 <agent-dir>/factory/api-keys.json
 ```
 
-Then run `/login factory` and select **Factory API keys — use configured keys**. Pi stores a non-secret selector while the extension keeps keys in the permission-restricted JSON file and applies fill-first rotation/cooldowns.
+Then run `/login factory` and select **Factory API keys — use configured keys**. Pi stores a non-secret selector while the extension keeps keys in the permission-restricted JSON file. Rotation filters keys through the selected model pool's monthly → weekly → 5-hour availability waterfall, chooses the least recently used eligible key, and applies error-specific cooldown/failover behavior.
 
 Alternatively choose Pi's top-level **Use an API key** authentication method to store one key through normal credential storage.
 
 Use `/logout` to remove the active Factory authentication selection. The configured key file is intentionally not deleted by logout.
 
-Check status with `/factory-status`. For a smoke test, use the current `factory/kimi-k3` model.
+Open `/factory` to inspect every account, its Standard/Core usage, and rotation status. For a smoke test, use the current `factory/kimi-k3` model.
