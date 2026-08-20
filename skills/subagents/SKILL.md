@@ -24,13 +24,14 @@ This skill governs temporary Pi child agents. The `codex-thread-orchestrator` sk
 
 ## Wait by notification; inspect progress only when justified
 
-A successful `spawn_agent` or `task` call starts asynchronous work and returns control to the parent. Completion notices automatically wake the parent, so notification-driven waiting is the normal path.
+A successful `spawn_agent` or `task` call starts asynchronous work and returns control to the parent. When a child finishes, its completion notice automatically starts the next main-agent turn. The parent does not need to remain active or check once before ending its turn.
 
 After dispatch:
 
 1. Continue only parent work that is independently useful to the requested result.
 2. If no such work remains, end the turn immediately. A short progress note is enough when the user needs one.
-3. Resume when a child completion notice arrives. Collect the completed result, launch any intentionally queued work if capacity requires waves, and otherwise keep waiting through notifications.
+3. Do not call `wait_agent`, `list_agents`, or `check_agent` in the same turn merely because the child was just launched. Ending the turn is the waiting mechanism.
+4. Resume when a child completion notice invokes the main agent. Collect the completed result, launch any intentionally queued work if capacity requires waves, and otherwise keep waiting through notifications.
 
 A progress check is reasonable when the user asks for status, a child has run materially longer than expected for its task and model, an interruption left its state unclear, or current status will change an immediate coordination decision. Prefer `check_agent` for one known child and `list_agents` for a batch overview. Use `wait_agent` to collect results already expected to be available, not as a running-status probe.
 

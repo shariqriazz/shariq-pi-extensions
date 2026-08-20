@@ -66,6 +66,8 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   assert.match(taskSchema, /Default none/);
   assert.match(taskTool?.description ?? "", /background/);
   assert.match(taskTool?.description ?? "", /return their ids immediately/);
+  assert.match(taskTool?.description ?? "", /Completion notices automatically start the next parent turn/);
+  assert.match(taskTool?.promptGuidelines.join("\n") ?? "", /Do not call wait_agent, list_agents, or check_agent merely to watch them run/);
   assert.doesNotMatch(taskTool?.description ?? "", /wait for all/i);
 
   const waitTool = tools.get("wait_agent");
@@ -75,6 +77,7 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   const guidelines = tools.get("spawn_agent")?.promptGuidelines.join("\n") ?? "";
   assert.match(guidelines, /end the turn so Pi remains available to the user/);
   assert.match(guidelines, /Do not poll background agents/);
+  assert.match(guidelines, /completion automatically starts the next parent turn/);
   assert.doesNotMatch(guidelines, /blocking parallel fan-out/);
   for (const legacy of [
     "subagent_spawn",

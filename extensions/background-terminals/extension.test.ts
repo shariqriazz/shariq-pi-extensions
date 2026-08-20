@@ -33,13 +33,64 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   const guidelines = start.promptGuidelines.join("\n");
   assert.match(guidelines, /Use start_terminal by default/);
   assert.match(guidelines, /Never use a large bash timeout/);
-  assert.match(guidelines, /end the turn so Pi stays available to the user/);
-  assert.match(guidelines, /completion wakes the parent automatically/);
+  assert.match(guidelines, /end the turn immediately/);
+  assert.match(guidelines, /completion automatically sends a follow-up and starts the next parent turn/);
+  assert.match(guidelines, /do not call read_terminal, list_terminals, or start a timer/);
   assert.match(JSON.stringify(start.parameters), /working_dir/);
+
+  const read = tools.get("read_terminal");
+  assert.match(read.description, /only when the user asks for progress or current output is required for immediate interaction/);
+  assert.match(read.description, /automatically sends a follow-up/);
 
   const write = tools.get("write_terminal");
   assert.match(write.description, /Ctrl\+C/);
   assert.match(JSON.stringify(write.parameters), /press_enter/);
+});
+
+test("reading a settled terminal does not suppress automatic completion delivery", async () => {
+  const tools = new Map<string, any>();
+  const hooks = new Map<string, (...args: any[]) => any>();
+  const messages: Array<{ message: any; options: any }> = [];
+  extension({
+    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerCommand() {},
+    registerMessageRenderer() {},
+    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
+    sendMessage(message: any, options: any) { messages.push({ message, options }); },
+  } as never);
+
+  const context = {
+    cwd: process.cwd(),
+    hasUI: false,
+    isIdle: () => false,
+    ui: {},
+  };
+  hooks.get("session_start")?.({}, context);
+  const started = await tools.get("start_terminal").execute(
+    "call-read-settled",
+    {
+      command: `${JSON.stringify(process.execPath)} -e "setTimeout(() => console.log('finished'), 30)"`,
+      title: "read completion fixture",
+      wait_ms: 0,
+    },
+    undefined,
+    undefined,
+    context,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const read = await tools.get("read_terminal").execute(
+    "call-read",
+    { id: started.details.id, cursor: 0, wait_ms: 0 },
+    undefined,
+  );
+  assert.equal(read.details.status, "done");
+  assert.equal(messages.length, 0, "delivery stays deferred while the parent is active");
+
+  hooks.get("agent_settled")?.();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.message.customType, "background-terminal-result");
+  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp", triggerTurn: true });
+  await hooks.get("session_shutdown")?.();
 });
 
 test("a model-started terminal returns immediately and wakes an idle parent on completion", async () => {

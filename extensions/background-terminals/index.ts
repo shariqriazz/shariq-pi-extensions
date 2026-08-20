@@ -140,7 +140,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     promptSnippet: "Start an interactive or long-running command in a managed background PTY.",
     promptGuidelines: [
       "Use start_terminal by default for servers, watchers, downloads, long or uncertain builds and tests, interactive shells, and any command that should not occupy the main turn; reserve bash for short commands whose result is needed immediately. Never use a large bash timeout merely to wait for long work.",
-      "After start_terminal returns, continue useful work or end the turn so Pi stays available to the user. Do not poll repeatedly: completion wakes the parent automatically; use read_terminal only when current output is needed for the next decision.",
+      "After start_terminal returns, continue only genuinely independent work. If none remains, end the turn immediately. The terminal completion automatically sends a follow-up and starts the next parent turn; do not call read_terminal, list_terminals, or start a timer merely to check whether it finished.",
       "Use stop_terminal when a managed process is no longer needed. Background terminals are session-scoped and are stopped during session shutdown or reload.",
     ],
     parameters: Type.Object({
@@ -201,7 +201,8 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     name: "read_terminal",
     label: "Read Background Terminal",
     description:
-      "Read output from a managed background terminal without blocking longer than wait_ms. " +
+      "Read output from a managed background terminal only when the user asks for progress or current output is required for immediate interaction. " +
+      "Do not use it to wait for completion: terminal settlement automatically sends a follow-up that starts the next parent turn. " +
       "Pass the cursor from the previous terminal result to receive only newer output. Output is tail-truncated for model context; the full log path is reported when available.",
     promptSnippet: "Read new output from a managed background terminal by id and cursor.",
     parameters: Type.Object({
@@ -215,7 +216,6 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         waitMs: params.wait_ms,
         signal,
       });
-      if (result.snapshot.status !== "running") consume(params.id);
       return {
         content: [{ type: "text", text: formatReadResult(result) }],
         details: {
@@ -255,7 +255,6 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         waitMs: params.wait_ms ?? 250,
         signal,
       });
-      if (result.snapshot.status !== "running") consume(params.id);
       return {
         content: [{ type: "text", text: formatReadResult(result) }],
         details: {

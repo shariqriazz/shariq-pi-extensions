@@ -34,13 +34,13 @@ The goal extension adds persistent, branch-safe objectives, progress evidence, b
 
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
-The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`.
+The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. Child settlement automatically sends a follow-up that starts the next parent turn; status tools are for explicit inspection, not waiting.
 
 ### Background terminals
 
 Managed PTYs support servers, watchers, long builds, downloads, and interactive processes. The extension tracks up to eight concurrent terminals, retains bounded output, stores full logs in restrictive temporary directories, and stops process groups during shutdown or reload.
 
-Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`.
+Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`. A model-started terminal automatically sends a completion or failure follow-up and starts the next parent turn. Reading a terminal no longer suppresses that delivery; agents should inspect only for explicit progress requests or immediate interaction.
 
 ## Web access
 

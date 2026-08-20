@@ -605,7 +605,10 @@ export default function (pi: ExtensionAPI) {
     label: "Spawn Pi Subagent",
     description: SUBAGENT_SPAWN_TOOL_DESCRIPTION,
     promptSnippet: SUBAGENT_SPAWN_PROMPT_SNIPPET,
-    promptGuidelines: SUBAGENT_SPAWN_PROMPT_GUIDELINES,
+    promptGuidelines: [
+      ...SUBAGENT_SPAWN_PROMPT_GUIDELINES,
+      "After spawn_agent starts a child, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch it run; completion automatically starts the next parent turn.",
+    ],
     parameters: Type.Object({
       message: Type.String({
         description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.prompt,
@@ -1031,7 +1034,10 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "task",
     label: "Start Pi Subagent Tasks",
-    description: "Start independent subagent tasks together in the background and return their ids immediately. The parent remains free to continue working or end its turn; completion notices arrive automatically.",
+    description: "Start independent subagent tasks together in the background and return their ids immediately. Completion notices automatically start the next parent turn, so the parent should end its current turn when no independent work remains instead of checking status.",
+    promptGuidelines: [
+      "After task starts children, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch them run; completion automatically starts the next parent turn.",
+    ],
     parameters: Type.Object({
       tasks: Type.Array(
         Type.Object({

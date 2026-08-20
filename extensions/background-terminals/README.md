@@ -32,6 +32,8 @@ Each output response carries a byte cursor. Pass it to the next read/write opera
 - Output is sanitized before TUI or model rendering.
 - Processes run in their own PTY process group and are stopped on session shutdown, replacement, or reload.
 - Shutdown and stop operations are bounded and escalate from SIGTERM to SIGKILL.
+- Model-started terminals automatically deliver one completion/failure follow-up that starts the next parent turn.
+- Reading settled output does not consume or suppress the automatic completion delivery.
 - Completion delivery is keyed by terminal id to prevent duplicate follow-ups.
 
 ## Validation
