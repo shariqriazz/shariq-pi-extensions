@@ -146,7 +146,7 @@ test("registers one unified Factory provider and one dashboard command", async (
   const { providers, commands, config } = await registeredFactory();
   assert.deepEqual([...providers.keys()], ["factory"]);
   assert.deepEqual(commands, ["factory"]);
-  assert.equal(config.models.length, 12);
+  assert.equal(config.models.length, 13);
   assert.equal(config.headers["X-Client-Version"], FALLBACK_DROID_VERSION);
   const ids = config.models.map((model: any) => model.id);
   assert.equal(new Set(ids).size, ids.length);
@@ -158,7 +158,6 @@ test("registers one unified Factory provider and one dashboard command", async (
     "gpt-5.5",
     "gpt-5.5-fast",
     "gemini-3.5-flash",
-    "grok-4.5",
     "garnet-07-15",
     "atlas-07-21",
     "aster-07-15",
@@ -177,7 +176,14 @@ test("registers one unified Factory provider and one dashboard command", async (
     assert.ok(!ids.includes(removed), `${removed} should not be registered`);
   }
   assert.ok(ids.includes("gpt-5.5-pro"), "gpt-5.5-pro should remain until a 5.6 Pro replacement exists");
+  assert.ok(ids.includes("grok-4.5"), "Grok 4.5 should be registered");
   assert.ok(ids.includes("grok-4.6"), "current Grok should be registered");
+  const grok45 = config.models.find((model: any) => model.id === "grok-4.5");
+  const grok46 = config.models.find((model: any) => model.id === "grok-4.6");
+  assert.equal(grok45.contextWindow, 200_000);
+  assert.equal(grok45.maxTokens, 63_356);
+  assert.equal(grok46.contextWindow, 200_000);
+  assert.equal(grok46.maxTokens, 63_356);
   const byId = new Map(config.models.map((model: any) => [model.id, model]));
   for (const [id, provider] of Object.entries({
     "kimi-k3": "fireworks",
