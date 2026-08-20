@@ -37,14 +37,14 @@ function values(metrics: GenerationMetrics, now = Date.now()) {
     : undefined;
   const estimatedTokens = metrics.streamedChars / 4;
   const outputTokens = metrics.exactOutputTokens ?? estimatedTokens;
-  // End-to-end throughput deliberately starts at request/turn start rather
-  // than first streamed delta. This includes provider latency, prefill, and
-  // hidden reasoning time instead of overstating reasoning-model speed.
-  const endToEndSeconds = metrics.requestStartedAt
-    ? Math.max(0, ((metrics.completedAt ?? now) - metrics.requestStartedAt) / 1_000)
+  // Conventional TPS measures decode throughput from first streamed token to
+  // completion. TTFT and elapsed time separately expose provider latency,
+  // prefill, and hidden reasoning before visible streaming begins.
+  const generationSeconds = metrics.firstTokenAt
+    ? Math.max(0, ((metrics.completedAt ?? now) - metrics.firstTokenAt) / 1_000)
     : undefined;
-  const tps = endToEndSeconds && endToEndSeconds > 0.05
-    ? outputTokens / endToEndSeconds
+  const tps = generationSeconds && generationSeconds > 0.05
+    ? outputTokens / generationSeconds
     : undefined;
   return {
     elapsed,

@@ -19,7 +19,7 @@ test("formats finalized per-message throughput without an estimate marker", () =
     exactOutputTokens: 200,
     phase: "done",
   }, ctx as never, 4_000);
-  assert.equal(line, "◆ last response · TPS 67 tok/s · TTFT 1.0s · 3.0s · 200 out");
+  assert.equal(line, "◆ last response · TPS 100 tok/s · TTFT 1.0s · 3.0s · 200 out");
 });
 
 test("registers streaming, tool, and lifecycle handlers", () => {

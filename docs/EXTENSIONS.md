@@ -66,7 +66,7 @@ Displays the estimated prompt and session contribution to the active context win
 
 ### [Performance status](../extensions/performance-status/README.md)
 
-Adds a responsive footer-area status row for each assistant message. Live TPS/output are marked as estimates; final TPS uses provider-reported output tokens divided by complete request-to-message time so provider latency, prefill, and hidden reasoning are included. TTFT, elapsed time, output tokens, and active tools remain separate.
+Adds a responsive footer-area status row for each assistant message. Live TPS/output are marked as estimates; final TPS uses conventional decode throughput from first streamed token to message completion. TTFT and total elapsed time separately expose provider latency, prefill, and hidden reasoning; output tokens and active tools remain separate.
 
 ### [Git info](../extensions/git-info/README.md)
 
