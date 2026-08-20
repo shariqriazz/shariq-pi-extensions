@@ -9,13 +9,13 @@ This private monorepo packages Shariq's Pi extensions for installation through G
 - `mise install --locked` — install the pinned Node toolchain.
 - `mise exec --locked -- npm ci` — install the locked workspace dependencies.
 - `mise exec --locked -- npm run validate` — typecheck and test the default suite and validate package boundaries.
-- `mise exec --locked -- npm run validate --workspace @shariqriazz/pi-memory` — validate optional Pi Memory.
+- `mise exec --locked -- npm run validate --workspace @shariqriaz/pi-memory` — validate optional Pi Memory.
 - `mise exec --locked -- npm run pack:inspect` — inspect the default npm tarball before publishing.
 
 ## Package boundaries
 
 - Declare default extension entrypoints explicitly in root `package.json#pi.extensions`; do not rely on directory auto-discovery.
-- Keep Pi Memory out of the root manifest. It is disabled by default because it ships as `@shariqriazz/pi-memory`.
+- Keep Pi Memory out of the root manifest. It is disabled by default because it ships as `@shariqriaz/pi-memory`.
 - Keep `skills/background-terminals` and `skills/subagents` aligned with their extension APIs; Pi loads them from the package and they must not be copied by install scripts.
 - Put third-party runtime modules in root `dependencies`. Pi-owned packages and `typebox` remain optional peer dependencies and pinned development dependencies.
 - Keep shared runtime helpers in `extensions/shared`; do not duplicate them across extensions.

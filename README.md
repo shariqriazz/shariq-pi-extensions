@@ -18,7 +18,7 @@ Authenticate npm first, then install the restricted package:
 
 ```bash
 npm login
-pi install npm:@shariqriazz/pi-extensions
+pi install npm:@shariqriaz/pi-extensions
 ```
 
 Run `/reload` in an existing Pi session after installation. New sessions load the package automatically.
@@ -55,7 +55,7 @@ Toggle individual resources, save, and run `/reload`. Removing the package disab
 ```bash
 pi remove git:git@github.com:shariqriazz/shariq-pi-extensions
 # or
-pi remove npm:@shariqriazz/pi-extensions
+pi remove npm:@shariqriaz/pi-extensions
 ```
 
 ### Optional Pi Memory
@@ -63,13 +63,13 @@ pi remove npm:@shariqriazz/pi-extensions
 Pi Memory is deliberately excluded from the default suite. Install it separately only when persistent memory is wanted:
 
 ```bash
-pi install npm:@shariqriazz/pi-memory
+pi install npm:@shariqriaz/pi-memory
 ```
 
 Disable it without deleting its database:
 
 ```bash
-pi remove npm:@shariqriazz/pi-memory
+pi remove npm:@shariqriaz/pi-memory
 ```
 
 Its source remains in this repository under [`packages/pi-memory`](packages/pi-memory), but installing the main suite never loads it.
@@ -94,7 +94,7 @@ Runtime files use Pi's active agent directory rather than a fixed home or checko
 mise install --locked
 mise exec --locked -- npm ci
 mise exec --locked -- npm run validate
-mise exec --locked -- npm run validate --workspace @shariqriazz/pi-memory
+mise exec --locked -- npm run validate --workspace @shariqriaz/pi-memory
 mise exec --locked -- npm run pack:inspect
 ```
 

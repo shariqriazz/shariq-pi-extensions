@@ -72,7 +72,7 @@ Adds `/exit` as an alias for Pi's normal quit command. Keep this extension limit
 
 ## Optional persistent memory
 
-Pi Memory is maintained under `packages/pi-memory` and published separately as `@shariqriazz/pi-memory`. It injects bounded relevant memories, queues asynchronous extraction, and stores durable state in SQLite under `<agent-dir>/pi-memory/`.
+Pi Memory is maintained under `packages/pi-memory` and published separately as `@shariqriaz/pi-memory`. It injects bounded relevant memories, queues asynchronous extraction, and stores durable state in SQLite under `<agent-dir>/pi-memory/`.
 
 It is not part of the root package manifest. Installing or updating the default suite cannot activate memory.
 

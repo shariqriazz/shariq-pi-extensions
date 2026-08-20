@@ -5,7 +5,7 @@ Optional persistent memory for Pi. It is intentionally shipped as a separate pac
 ## Install or enable
 
 ```bash
-pi install npm:@shariqriazz/pi-memory
+pi install npm:@shariqriaz/pi-memory
 ```
 
 Reload Pi after installation:
@@ -17,7 +17,7 @@ Reload Pi after installation:
 ## Disable
 
 ```bash
-pi remove npm:@shariqriazz/pi-memory
+pi remove npm:@shariqriaz/pi-memory
 ```
 
 Then run `/reload`. Removing the package stops memory capture but does not delete its database. Runtime data stays under Pi's agent directory in `pi-memory/`, independent of the package checkout.

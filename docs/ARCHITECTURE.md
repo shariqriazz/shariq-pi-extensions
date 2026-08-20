@@ -6,7 +6,7 @@ Last verified: 2026-08-20
 
 The repository has two publishable Pi packages:
 
-- the root `@shariqriazz/pi-extensions` package contains the default suite;
+- the root `@shariqriaz/pi-extensions` package contains the default suite;
 - `packages/pi-memory` contains optional persistent memory and is never loaded by the root manifest.
 
 Both packages declare exact entrypoints through `package.json#pi.extensions`. Pi therefore loads only intentional extension factories instead of scanning every TypeScript file.

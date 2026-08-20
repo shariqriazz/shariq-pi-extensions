@@ -27,7 +27,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: npm run validate
-      - run: npm run validate --workspace @shariqriazz/pi-memory
+      - run: npm run validate --workspace @shariqriaz/pi-memory
       - name: Publish suite
         if: inputs.package == 'suite'
         run: npm publish --access restricted
@@ -35,6 +35,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish memory
         if: inputs.package == 'memory'
-        run: npm publish --access restricted --workspace @shariqriazz/pi-memory
+        run: npm publish --access restricted --workspace @shariqriaz/pi-memory
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

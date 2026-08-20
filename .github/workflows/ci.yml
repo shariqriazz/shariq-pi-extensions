@@ -18,6 +18,6 @@ jobs:
           cache: true
       - run: npm ci
       - run: npm run validate
-      - run: npm run validate --workspace @shariqriazz/pi-memory
+      - run: npm run validate --workspace @shariqriaz/pi-memory
       - run: npm pack --dry-run
-      - run: npm pack --dry-run --workspace @shariqriazz/pi-memory
+      - run: npm pack --dry-run --workspace @shariqriaz/pi-memory

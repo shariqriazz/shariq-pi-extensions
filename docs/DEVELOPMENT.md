@@ -21,14 +21,14 @@ Run the default suite and optional memory package separately:
 
 ```bash
 mise exec --locked -- npm run validate
-mise exec --locked -- npm run validate --workspace @shariqriazz/pi-memory
+mise exec --locked -- npm run validate --workspace @shariqriaz/pi-memory
 ```
 
 The root validation checks TypeScript, runtime tests, declared extension and skill entrypoints, and forbidden runtime files. Before publishing, inspect both package payloads:
 
 ```bash
 mise exec --locked -- npm pack --dry-run
-mise exec --locked -- npm pack --dry-run --workspace @shariqriazz/pi-memory
+mise exec --locked -- npm pack --dry-run --workspace @shariqriaz/pi-memory
 ```
 
 Review the complete file list. Neither tarball may contain credentials, `.env`, Factory API-key configuration, caches, databases, sessions, logs, or `node_modules`.
@@ -67,7 +67,7 @@ Unpinned Git installations follow repository updates. Tagged Git installations r
 Do not remove a working local extension set before the managed package is available.
 
 1. Publish and verify the private GitHub and npm packages.
-2. Run `pi install npm:@shariqriazz/pi-extensions`; do not reload yet.
+2. Run `pi install npm:@shariqriaz/pi-extensions`; do not reload yet.
 3. Move the old auto-discovered extension directories out of the active Pi extension directory so package and local copies cannot load together.
 4. Keep the optional memory package uninstalled. Preserve its source and data outside active discovery paths.
 5. Move machine-local Factory key and Droid cache files into `<agent-dir>/factory/` with restrictive permissions.
@@ -99,7 +99,7 @@ Publish restricted packages from a validated clean commit:
 
 ```bash
 npm publish --access restricted
-npm publish --access restricted --workspace @shariqriazz/pi-memory
+npm publish --access restricted --workspace @shariqriaz/pi-memory
 ```
 
 The manual GitHub publish workflow requires a repository secret named `NPM_TOKEN`. npm and GitHub releases must come from the same source commit.
