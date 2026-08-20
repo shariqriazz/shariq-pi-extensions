@@ -83,6 +83,7 @@ interface Entry {
   pump?: Fiber.Fiber<void>;
   liveToolMap: Map<string, LiveToolState>;
   maxConcurrent: number;
+  concurrencyGroup: string;
   /** Idle restart dispatched but RunStarted not folded yet; counts as running
    * so concurrent restarts cannot race past the cap. */
   restarting?: boolean;
@@ -107,6 +108,7 @@ export interface SubagentReadModel {
   peerMessages(): ReadonlyArray<PeerMessage>;
   recordPeerMessage(message: PeerMessage): void;
   clearWorktree(id: string): void;
+  retain(id: string, retained: boolean): void;
   /**
    * Register the settle hook. `consumed` is true when an active
    * wait_agent/close_agent is collecting the result (so it must not also be
@@ -179,6 +181,7 @@ const makeManager = Effect.gen(function* () {
   const entries = new Map<string, Entry>();
   const waitInterest = new Map<string, number>();
   const rollingBack = new Set<string>();
+  const retained = new Set<string>();
   const listeners = new Set<() => void>();
   /** One-shot nextChange waiters, swapped out before invocation so waiters
    * re-registering during notification are not visited in the same sweep. */
@@ -187,7 +190,15 @@ const makeManager = Effect.gen(function* () {
   const cleanups = new Set<Fiber.Fiber<unknown>>();
   const peerMessages: PeerMessage[] = [];
   let counter = 0;
-  let reserved = 0;
+  const reservedByGroup = new Map<string, number>();
+  const reservedIn = (group: string) => reservedByGroup.get(group) ?? 0;
+  const reserve = (group: string, count: number) =>
+    reservedByGroup.set(group, reservedIn(group) + count);
+  const release = (group: string, count: number) => {
+    const next = reservedIn(group) - count;
+    if (next > 0) reservedByGroup.set(group, next);
+    else reservedByGroup.delete(group);
+  };
   let disposed = false;
   let onSettled:
     ((snap: SubagentSnapshot, consumed: boolean) => void) | undefined;
@@ -224,9 +235,11 @@ const makeManager = Effect.gen(function* () {
     });
   });
 
-  const runningCount = () =>
+  const runningCount = (group: string) =>
     [...entries.values()].filter(
-      (e) => e.snapshot.status === "running" || e.restarting === true,
+      (entry) =>
+        entry.concurrencyGroup === group &&
+        (entry.snapshot.status === "running" || entry.restarting === true),
     ).length;
 
   const addInterest = (ids: ReadonlyArray<string>) => {
@@ -248,7 +261,9 @@ const makeManager = Effect.gen(function* () {
     const candidates = [...entries.values()]
       .filter(
         (e) =>
-          e.snapshot.status !== "running" && !waitInterest.has(e.snapshot.id),
+          e.snapshot.status !== "running" &&
+          !waitInterest.has(e.snapshot.id) &&
+          !retained.has(e.snapshot.id),
       )
       .sort(
         (a, b) =>
@@ -395,12 +410,13 @@ const makeManager = Effect.gen(function* () {
                 message: "Subagent manager is shutting down.",
               });
             }
-            if (runningCount() + reserved >= task.maxConcurrent) {
+            const group = task.concurrencyGroup ?? "default";
+            if (runningCount(group) + reservedIn(group) >= task.maxConcurrent) {
               return new ConcurrencyLimitError({
                 message: `Max ${task.maxConcurrent} Pi subagents can run concurrently. Let one finish or close one before spawning another. Use /subagents config to change maxConcurrent.`,
               });
             }
-            reserved++;
+            reserve(group, 1);
             return Effect.void;
           },
         );
@@ -457,6 +473,7 @@ const makeManager = Effect.gen(function* () {
           scope,
           liveToolMap: new Map(),
           maxConcurrent: task.maxConcurrent,
+          concurrencyGroup: task.concurrencyGroup ?? "default",
         };
         entries.set(id, entry);
 
@@ -488,7 +505,7 @@ const makeManager = Effect.gen(function* () {
         : doSpawn.pipe(
             Effect.ensuring(
               Effect.sync(() => {
-                reserved--;
+                release(task.concurrencyGroup ?? "default", 1);
                 notify();
               }),
             ),
@@ -502,17 +519,22 @@ const makeManager = Effect.gen(function* () {
     Effect.gen(function* () {
       if (tasks.length === 0) return [];
       const limit = Math.min(...tasks.map((task) => task.maxConcurrent));
+      const groups = new Set(tasks.map((task) => task.concurrencyGroup ?? "default"));
+      if (groups.size !== 1) {
+        return yield* new SpawnError({ message: "A batch must use one concurrency group." });
+      }
+      const group = [...groups][0]!;
       yield* Effect.suspend(
         (): Effect.Effect<void, SpawnError | ConcurrencyLimitError> => {
           if (disposed) {
             return new SpawnError({ message: "Subagent manager is shutting down." });
           }
-          if (runningCount() + reserved + tasks.length > limit) {
+          if (runningCount(group) + reservedIn(group) + tasks.length > limit) {
             return new ConcurrencyLimitError({
-              message: `Cannot start ${tasks.length} tasks atomically: ${runningCount()} running and ${reserved} reserved with maxConcurrent ${limit}.`,
+              message: `Cannot start ${tasks.length} tasks atomically: ${runningCount(group)} running and ${reservedIn(group)} reserved with maxConcurrent ${limit}.`,
             });
           }
-          reserved += tasks.length;
+          reserve(group, tasks.length);
           return Effect.void;
         },
       );
@@ -550,7 +572,7 @@ const makeManager = Effect.gen(function* () {
         ),
         Effect.ensuring(
           Effect.sync(() => {
-            reserved -= tasks.length;
+            release(group, tasks.length);
             notify();
           }),
         ),
@@ -665,7 +687,7 @@ const makeManager = Effect.gen(function* () {
       // must respect the same cap as spawn. Steering an already-running one
       // does not consume additional capacity.
       if (entry.snapshot.status !== "running") {
-        if (runningCount() + reserved >= entry.maxConcurrent) {
+        if (runningCount(entry.concurrencyGroup) + reservedIn(entry.concurrencyGroup) >= entry.maxConcurrent) {
           return new SendError({
             message: `Max ${entry.maxConcurrent} Pi subagents can run concurrently; restarting "${id}" would exceed that.`,
           });
@@ -756,6 +778,11 @@ const makeManager = Effect.gen(function* () {
       if (!entry) return;
       entry.snapshot.meta = { ...entry.snapshot.meta, worktree: undefined };
       notify(id);
+    },
+    retain: (id, keep) => {
+      if (keep) retained.add(id);
+      else retained.delete(id);
+      pruneSettled();
     },
     setOnSettled: (hook) => {
       onSettled = hook;

@@ -179,7 +179,7 @@ Avoid fast variants unless specifically debugging them to reduce spend.
 - Factory may block specific Pi system-prompt phrases; compatibility fixes live in `factory/responses.ts`.
 - Factory Anthropic currently rejects system prompts on this OAuth path; `factory/responses.ts` omits Pi's system prompt for Anthropic-family models.
 - Some Factory models use OpenAI Chat rather than Responses even though they are under the same `/api/llm/o/v1` base.
-- Droid 0.199.0 embeds a conservative 262,144/65,536 Kimi K3 proxy limit; the deterministic catalog intentionally uses Kimi's documented 1,048,576 context and 131,072 default completion limit.
+- Droid 0.200.0 embeds a conservative 262,144/65,536 Kimi K3 proxy limit; the deterministic catalog intentionally uses Kimi's documented 1,048,576 context and 131,072 default completion limit.
 - Explicitly approved feature-gated models are merged from the deterministic fallback catalog when Droid omits them from help. Catalog visibility does not bypass Factory account/org entitlement; gated endpoints may still reject live requests.
 - Core-model `fireworks`/`baseten` overrides are selected per model from current OpenRouter throughput, latency, uptime, and context data; re-check them when Droid or provider telemetry changes.
 - Gemini uses Factory's custom `/api/llm/g/v1/generate` shape, not the standard Google SDK URL layout.

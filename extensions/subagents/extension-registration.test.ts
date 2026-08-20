@@ -14,6 +14,10 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   const commands: string[] = [];
   const hooks: string[] = [];
   const fakePi = {
+    events: {
+      on() { return () => {}; },
+      emit() {},
+    },
     registerTool(definition: any) {
       tools.set(definition.name, definition);
     },

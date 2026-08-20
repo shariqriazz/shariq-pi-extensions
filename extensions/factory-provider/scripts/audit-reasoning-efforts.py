@@ -38,9 +38,9 @@ def load_key():
 def droid_version():
     binary = os.environ.get("FACTORY_DROID_BINARY") or os.environ.get("DROID_BINARY") or "droid"
     try:
-        return subprocess.check_output([binary, "--version"], text=True, timeout=5).strip() or "0.199.0"
+        return subprocess.check_output([binary, "--version"], text=True, timeout=5).strip() or "0.200.0"
     except (OSError, subprocess.SubprocessError):
-        return "0.199.0"
+        return "0.200.0"
 
 
 KEY = load_key()

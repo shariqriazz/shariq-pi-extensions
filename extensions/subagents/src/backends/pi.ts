@@ -109,6 +109,8 @@ const CHILD_EXCLUDED_TOOL_NAMES = [
   "task",
   "reply_question",
   "workflow",
+  "create_orchestration",
+  "get_orchestration",
   "ask_user",
 ] as const;
 
@@ -554,6 +556,7 @@ const makePiSession = (
         capability: task.capability,
         isolation: task.isolation,
         worktree: task.worktree,
+        concurrencyGroup: task.concurrencyGroup,
         resumedFrom: task.resumeSessionFile,
       };
     };

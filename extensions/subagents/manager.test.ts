@@ -172,6 +172,22 @@ test("the concurrency cap rejects a fifth running subagent", async () => {
   });
 });
 
+test("concurrency groups enforce independent project pools", async () => {
+  await withManager(async (manager, runtime) => {
+    const grouped = (prompt: string, group: string): SpawnTask => ({
+      ...task(prompt),
+      maxConcurrent: 1,
+      concurrencyGroup: group,
+    });
+    await runTool(runtime, manager.spawn("pi", grouped("Project A", "project-a")));
+    await runTool(runtime, manager.spawn("pi", grouped("Project B", "project-b")));
+    await assert.rejects(
+      runTool(runtime, manager.spawn("pi", grouped("Project A second", "project-a"))),
+      /Max 1 Pi subagents/,
+    );
+  });
+});
+
 test("batch spawn returns running children without consuming their eventual results", async () => {
   await withManager(async (manager, runtime) => {
     const settled: Array<{ id: string; consumed: boolean }> = [];

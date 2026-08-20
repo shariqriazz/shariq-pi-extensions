@@ -67,7 +67,7 @@ strings "$(which droid)" | rg 'api/llm/o/v1|X-Factory-Client|X-Client-Version|wo
 Known current values:
 
 - Model registry values are embedded near the Droid binary strings for `$o={...}` with fields like `contextLimits`, `images`, and `pdf`.
-- Examples verified in Droid 0.199.0:
+- Examples verified through Droid 0.200.0:
   - Gemini 3.7 Flash: `maxInputTokens: 1000000`, `maxOutputTokens: 65536`, PDF and image input enabled, with `low`, `medium`, and `high` reasoning.
   - Inkling: `maxInputTokens: 1040000`, `maxOutputTokens: 32768`, images enabled, PDF disabled, Fireworks and Baseten routes.
   - DeepSeek V4 Flash 0731: `maxInputTokens: 1040000`, `maxOutputTokens: 131072`, images/PDF disabled, Fireworks route.
@@ -90,7 +90,8 @@ Known current values:
 
 1. `/reload`
 2. `/login factory` if not logged in.
-3. Run `/factory-status`.
-4. Send a tiny prompt with `factory/gpt-5.6-sol` or another known model.
+3. Run `/factory-status` and `/factory-limits`.
+4. Confirm Standard and Droid Core usage appears separately for each configured credential.
+5. Send a tiny prompt with `factory/gpt-5.6-sol` or another known model.
 
 If Factory responds with `Unable to determine client version`, inspect/update `FACTORY_CLIENT_PROTOCOL` or Droid version detection.

@@ -10,7 +10,7 @@ Registers the `antigravity` provider and `/login antigravity` flow for supported
 
 ### [Factory provider](../extensions/factory-provider/README.md)
 
-Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory-status` reports catalog and authentication state without exposing keys.
+Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory-status` reports catalog and authentication state without exposing keys. `/factory-limits` force-refreshes authoritative Factory usage; a cached UI widget shows separate Standard and Droid Core windows for each credential without aggregating rotating API keys. Normal refreshes are throttled to 15 minutes.
 
 Rotating keys belong in `<agent-dir>/factory/api-keys.json`. Droid metadata cache belongs in `<agent-dir>/factory/droid.json`. Refresh metadata explicitly after upgrading Droid:
 
@@ -35,6 +35,12 @@ The goal extension adds persistent, branch-safe objectives, progress evidence, b
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
 The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. Child settlement automatically sends a follow-up that starts the next parent turn; status tools are for explicit inspection, not waiting.
+
+### [Orchestration](../extensions/orchestration/README.md)
+
+The Orchestration extension coordinates explicitly requested large tasks through a dedicated orchestrator plus configurable explorer, frontend, backend, general-worker, and reviewer models. `/orchestration` opens the dashboard and `/orchestration settings` configures global role models. It reuses the canonical Subagents runtime, maintains a 10-worker pool per project, isolates Git writers in task worktrees, resumes the original worker for substantial review fixes, and applies final reviewed changes without committing or pushing.
+
+The model-facing `create_orchestration` tool starts planning only after an explicit orchestration request. `get_orchestration` reports status without advancing work. Interrupted runs recover paused under `<agent-dir>/orchestration/`.
 
 ### [Background terminals](../extensions/background-terminals/README.md)
 

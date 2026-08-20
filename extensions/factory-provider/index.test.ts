@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import factoryExtension from "./index.ts";
-import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile } from "./factory/api-keys.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
 import { factoryApiForModel } from "./factory/models.ts";
@@ -88,10 +88,10 @@ test("routes selected models through their Factory API families", () => {
   assert.equal(factoryApiForModel("inkling"), "openai-completions");
 });
 
-test("registers one unified Factory provider and one operator command", async () => {
+test("registers one unified Factory provider and its operator commands", async () => {
   const { providers, commands, config } = await registeredFactory();
   assert.deepEqual([...providers.keys()], ["factory"]);
-  assert.deepEqual(commands, ["factory-status"]);
+  assert.deepEqual(commands, ["factory-status", "factory-limits"]);
   assert.equal(config.models.length, 12);
   assert.equal(config.headers["X-Client-Version"], FALLBACK_DROID_VERSION);
   const ids = config.models.map((model: any) => model.id);
@@ -145,6 +145,7 @@ test("registers one unified Factory provider and one operator command", async ()
   assert.equal(kimi.maxTokens, 131_072);
   assert.deepEqual(kimi.input, ["text", "image"]);
   assert.equal(kimi.thinkingLevelMap.max, "max");
+  assert.match(kimi.name, /Droid Core/);
   const deepseekFlash: any = byId.get("deepseek-v4-flash-0731");
   assert.ok(deepseekFlash, "deepseek-v4-flash-0731 should be registered");
   assert.equal(deepseekFlash.contextWindow, 1_040_000);
@@ -208,6 +209,22 @@ test("organization-scoped OAuth refresh matches current Droid", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("rotating keys skip only the credential exhausted for the selected billing pool", () => {
+  const selected = selectFactoryApiKeysByLimits(
+    [
+      { label: "standard-exhausted", key: "key-a" },
+      { label: "available", key: "key-b" },
+    ],
+    "gpt-5.6-luna",
+    (key) =>
+      key === "key-a"
+        ? { available: false, pool: "standard", exhausted: "monthly", label: "standard-exhausted" }
+        : { available: true, pool: "standard", label: "available" },
+  );
+  assert.deepEqual(selected.keys.map((entry) => entry.label), ["available"]);
+  assert.deepEqual(selected.exhausted, ["standard-exhausted: standard monthly exhausted"]);
 });
 
 test("request auth routing distinguishes OAuth, direct keys, and configured key rotation", () => {

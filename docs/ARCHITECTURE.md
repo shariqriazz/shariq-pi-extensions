@@ -17,7 +17,7 @@ docs/                            package-level maintenance documentation
 scripts/                         repository validation helpers
 ```
 
-Extension entrypoints register tools, commands, providers, events, or UI. Shared code stays in `extensions/shared` only when more than one extension owns the behavior. Provider-specific protocol and authentication code remains inside its provider directory. The background-terminal and subagent skills ship beside their extensions so a new machine receives the required lifecycle guidance with the tools.
+Extension entrypoints register tools, commands, providers, events, or UI. Shared code stays in `extensions/shared` only when more than one extension owns the behavior. Provider-specific protocol and authentication code remains inside its provider directory. The background-terminal, orchestration, and subagent skills ship beside their extensions so a new machine receives the required lifecycle guidance with the tools.
 
 ## Dependency model
 
@@ -34,9 +34,10 @@ The repository uses one root manifest and lockfile for the full extension suite.
 
 Managed Git checkouts are treated as immutable. Extensions resolve writable state through Pi's APIs:
 
-- Factory state: `<agent-dir>/factory/`
+- Factory key selection, Droid metadata, and throttled per-credential limit cache: `<agent-dir>/factory/`
 - Pi Memory state: `<agent-dir>/pi-memory/`
 - Subagent configuration and catalog: paths derived from `getAgentDir()`
+- Orchestration settings and run ledgers: `<agent-dir>/orchestration/`
 - project configuration: paths derived from Pi's `CONFIG_DIR_NAME`
 
 Credentials remain in Pi auth storage, environment variables, service credential stores, or ignored machine-local files. Package source never contains an API key, OAuth token, database, cache, or session.

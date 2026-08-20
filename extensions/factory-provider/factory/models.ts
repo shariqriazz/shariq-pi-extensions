@@ -1,5 +1,9 @@
 import { FACTORY_API_BASE_URL } from "./constants.ts";
 import { droidExecHelp } from "./droid.ts";
+import {
+  billingPoolForModel,
+  type FactoryBillingPool,
+} from "./limits.ts";
 
 export type FactoryModel = {
   id: string;
@@ -14,9 +18,10 @@ export type FactoryModel = {
   api: "openai-responses" | "openai-completions" | "anthropic-messages" | "google-generative-ai";
   baseUrl: string;
   apiProvider?: string;
+  billingPool: FactoryBillingPool;
 };
 
-type BinaryCapability = Omit<FactoryModel, "id" | "name" | "reasoning" | "supportedReasoningEfforts" | "defaultReasoningEffort" | "api" | "baseUrl" | "apiProvider"> & Partial<Pick<FactoryModel, "api" | "baseUrl" | "apiProvider">>;
+type BinaryCapability = Omit<FactoryModel, "id" | "name" | "reasoning" | "supportedReasoningEfforts" | "defaultReasoningEffort" | "api" | "baseUrl" | "apiProvider" | "billingPool"> & Partial<Pick<FactoryModel, "api" | "baseUrl" | "apiProvider">>;
 
 // Tracks the current Droid embedded registry; re-check the active binary after Droid upgrades.
 // Re-check with UPDATING.md when Droid changes. Keep only the latest/current model per
@@ -38,7 +43,7 @@ const BINARY_CAPABILITIES: Record<string, BinaryCapability> = {
   "glm-5.2": { contextWindow: 1_040_000, maxTokens: 131_072, images: false, pdf: false },
   "glm-5.2-fast": { contextWindow: 524_288, maxTokens: 131_072, images: false, pdf: false },
   // Kimi documents a 1,048,576-token context and a 131,072-token default
-  // completion limit. Droid 0.199.0 still embeds a conservative 262,144/65,536
+  // completion limit. Droid 0.200.0 still embeds a conservative 262,144/65,536
   // proxy entry, so keep this explicit product-capability override.
   "kimi-k3": { contextWindow: 1_048_576, maxTokens: 131_072, images: true, pdf: false },
   "inkling": { contextWindow: 1_040_000, maxTokens: 32_768, images: true, pdf: false },
@@ -117,6 +122,7 @@ export const DROID_MODELS_FALLBACK: FactoryModel[] = Object.entries(BINARY_CAPAB
     defaultReasoningEffort: reasoning.default,
     ...capability,
     ...familyForModel(id),
+    billingPool: billingPoolForModel(id),
   } as FactoryModel;
 });
 
@@ -210,6 +216,9 @@ export function parseModelsFromDroidHelp(): FactoryModel[] {
         supportedReasoningEfforts: reasoning.supported,
         defaultReasoningEffort: reasoning.default,
         ...capabilityForModel(id),
+        billingPool: /\(Droid Core\)/i.test(match[2])
+          ? "core"
+          : billingPoolForModel(id),
       });
     }
     for (const line of detailSection.split(/\r?\n/)) {
@@ -245,7 +254,10 @@ function thinkingMap(model: FactoryModel) {
 export function toPiModel(model: FactoryModel) {
   return {
     id: model.id,
-    name: model.name,
+    name:
+      model.billingPool === "core" && !/Droid Core/i.test(model.name)
+        ? `${model.name} (Droid Core)`
+        : model.name,
     baseUrl: model.baseUrl,
     headers: model.apiProvider ? { "x-api-provider": model.apiProvider } : undefined,
     reasoning: model.reasoning,

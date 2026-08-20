@@ -8,7 +8,7 @@ factory/<model-id>
 
 ## Requirements and installation
 
-Use Pi 0.83.0 or newer. Factory access requires either a Factory account or API key. The deterministic catalog and fallback client identity track Droid CLI 0.199.0; an installed Droid CLI can refresh machine-local version and model metadata but is not bundled with this extension.
+Use Pi 0.83.0 or newer. Factory access requires either a Factory account or API key. The deterministic catalog and fallback client identity track Droid CLI 0.200.0; an installed Droid CLI can refresh machine-local version and model metadata but is not bundled with this extension.
 
 Install it through the private suite package, then restart Pi or run `/reload` and authenticate with `/login factory`. Verify installation without making a model request:
 
@@ -53,13 +53,18 @@ The extension loads one curated catalog from the installed Droid metadata and `f
 
 There are no `-oauth` or `-api-key` model duplicates. The user-curated catalog excludes every `-fast` variant and the explicit removals documented in `factory/models.ts`. The current Gemini Pro, MiniMax M3, Nemotron 3 Ultra, and Inkling entries remain hidden; reconsider each family only after its vendor releases a newer generation/model.
 
-## Operator status
+## Operator status and usage limits
 
 ```text
 /factory-status
+/factory-limits
 ```
 
-This command reports catalog/authentication status without exposing secrets or adding model-callable status tools.
+`/factory-status` reports catalog and authentication state. `/factory-limits` force-refreshes Factory's authoritative billing data. The extension also shows a compact UI widget with separate Standard and Droid Core limits for each credential.
+
+Usage is never estimated from Pi token counts: Factory's API already applies model multipliers and cache-hit discounts. Cached records refresh at most every 15 minutes during normal sessions and after Factory runs; the manual command is the explicit force-refresh path.
+
+Configured rotating API keys remain separate. Each label gets its own Standard and Core record, and the extension never sums or averages them. Fresh cached exhaustion can skip only that credential during rotation. Monthly exhaustion suppresses weekly and 5-hour detail; weekly exhaustion suppresses 5-hour detail. Expired windows do not block a key.
 
 ## Required request behavior
 

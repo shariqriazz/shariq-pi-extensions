@@ -71,6 +71,7 @@ import {
 import { buildTaskPrompt, forkConversation, parseForkTurns } from "./src/context.ts";
 import {
   applyAgentWorktree,
+  applyAgentWorktreeTo,
   createAgentWorktree,
   discardAgentWorktree,
   inspectAgentWorktree,
@@ -89,6 +90,11 @@ import {
   openSubagentPicker,
   openSubagentTakeover,
 } from "./src/ui/takeover.ts";
+import {
+  isCoordinatorRequest,
+  SUBAGENT_COORDINATOR_REQUEST,
+  type SubagentCoordinator,
+} from "./src/coordinator.ts";
 import {
   allocateSubagentId,
   loadSubagentCatalog,
@@ -361,6 +367,8 @@ export default function (pi: ExtensionAPI) {
     forkTurns?: string;
     resumeFrom?: string;
     origin?: SubagentOrigin;
+    concurrencyGroup?: string;
+    maxConcurrent?: number;
   }
 
   interface PreparedSpawn {
@@ -411,7 +419,12 @@ export default function (pi: ExtensionAPI) {
     if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
       throw new Error(`cwd is not a directory: ${cwd}`);
     }
-    if (profile.isolation === "worktree" && options.cwd && !resumeSessionFile) {
+    if (
+      profile.isolation === "worktree" &&
+      options.cwd &&
+      !resumeSessionFile &&
+      options.origin !== "orchestration"
+    ) {
       throw new Error('cwd and isolation="worktree" are mutually exclusive.');
     }
 
@@ -454,7 +467,8 @@ export default function (pi: ExtensionAPI) {
         agentType: profile.agentType,
         persona: profile.persona,
         isolation: profile.isolation,
-        maxConcurrent: config.maxConcurrent,
+        maxConcurrent: options.maxConcurrent ?? config.maxConcurrent,
+        concurrencyGroup: options.concurrencyGroup,
         worktree,
         resumeSessionFile,
         preferredId,
@@ -533,6 +547,10 @@ export default function (pi: ExtensionAPI) {
 
   const onSettled = (snap: SubagentSnapshot, consumed: boolean) => {
     persistSnapshot(snap);
+    if (snap.meta.origin === "orchestration") {
+      resultDelivery.consume([snap.id]);
+      return;
+    }
     if (snap.meta.origin === "btw") {
       resultDelivery.consume([snap.id]);
       pi.appendEntry<BtwEntryData>(BTW_ENTRY_TYPE, {
@@ -555,6 +573,72 @@ export default function (pi: ExtensionAPI) {
     resultDelivery.defer({ ...snap, meta: { ...snap.meta } });
     if (sessionContext?.isIdle()) flushResults();
   };
+
+  const coordinator: SubagentCoordinator = {
+    async spawn(ctx, options) {
+      const manager = await getManager();
+      const snapshot = await spawnPiAgent(manager, ctx, {
+        ...options,
+        origin: "orchestration",
+      });
+      manager.view.retain(snapshot.id, true);
+      return snapshot;
+    },
+    async send(id, message) {
+      const manager = await getManager();
+      await runTool(getRuntime(), manager.send(id, message));
+      const snapshot = manager.view.get(id);
+      if (!snapshot) throw new Error(`Subagent "${id}" is no longer tracked.`);
+      return snapshot;
+    },
+    async cancel(ids) {
+      const manager = await getManager();
+      await runTool(getRuntime(), manager.cancel(ids));
+    },
+    async get(id) {
+      return (await getManager()).view.get(id);
+    },
+    async list() {
+      return (await getManager()).view.list();
+    },
+    async subscribe(listener) {
+      return (await getManager()).view.subscribe(listener);
+    },
+    async apply(id, targetCwd) {
+      const manager = await getManager();
+      const snapshot = manager.view.get(id);
+      if (!snapshot?.meta.worktree) throw new Error(`Subagent "${id}" has no worktree.`);
+      if (snapshot.status === "running") throw new Error(`Subagent "${id}" is still running.`);
+      const exec = (command: string, args: string[], options?: Parameters<typeof pi.exec>[2]) =>
+        pi.exec(command, args, options);
+      return targetCwd
+        ? applyAgentWorktreeTo(exec, snapshot.meta.worktree, targetCwd)
+        : applyAgentWorktree(exec, snapshot.meta.worktree);
+    },
+    async discard(id) {
+      const manager = await getManager();
+      const snapshot = manager.view.get(id);
+      if (!snapshot?.meta.worktree) return;
+      await discardAgentWorktree(
+        (command, args, options) => pi.exec(command, args, options),
+        snapshot.meta.worktree,
+      );
+      manager.view.clearWorktree(id);
+      const updated = manager.view.get(id);
+      if (updated) persistSnapshot(updated);
+      manager.view.retain(id, false);
+    },
+    async release(id) {
+      const manager = await getManager();
+      manager.view.retain(id, false);
+    },
+  };
+  const unsubscribeCoordinator = pi.events.on(
+    SUBAGENT_COORDINATOR_REQUEST,
+    (request) => {
+      if (isCoordinatorRequest(request)) request.accept(coordinator);
+    },
+  );
 
   pi.on("session_start", (_event, ctx) => {
     sessionContext = ctx;
@@ -582,6 +666,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_shutdown", async () => {
     sessionContext = undefined;
+    unsubscribeCoordinator();
     resultDelivery.clear();
     for (const pending of pendingQuestions.values()) {
       pending.reject(new Error("Parent Pi session shut down before replying."));

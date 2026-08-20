@@ -35,6 +35,7 @@
       "./extensions/firecrawl-web/index.ts",
       "./extensions/git-info/index.ts",
       "./extensions/goal/index.ts",
+      "./extensions/orchestration/index.ts",
       "./extensions/pi-memory/index.ts",
       "./extensions/shell-shortcuts/index.ts",
       "./extensions/subagents/index.ts",
@@ -42,6 +43,7 @@
     ],
     "skills": [
       "./skills/background-terminals",
+      "./skills/orchestration",
       "./skills/subagents"
     ]
   },

@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { FACTORY_STATE_DIR } from "./constants.ts";
 import { streamSimpleFactoryResponses } from "./responses.ts";
+import {
+  cachedLimitDecision,
+  factoryCredentialId,
+} from "./limits.ts";
 
 export const FACTORY_API_KEY_FILE_SENTINEL = "pi-factory-api-key-file";
 export const FACTORY_API_KEYS_PATH = join(FACTORY_STATE_DIR, "api-keys.json");
@@ -10,7 +14,7 @@ const DEFAULT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const AUTH_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const RATE_COOLDOWN_MS = 30 * 60 * 1000;
 
-type FactoryApiKeyEntry = {
+export type FactoryApiKeyEntry = {
   label: string;
   key: string;
   disabled?: boolean;
@@ -30,7 +34,7 @@ const state = new Map<string, KeyRuntimeState>();
 let lastConfigurationWarning: string | undefined;
 
 function keyId(entry: FactoryApiKeyEntry) {
-  return entry.label || maskKey(entry.key);
+  return factoryCredentialId(entry.key);
 }
 
 export function maskKey(key: string) {
@@ -143,12 +147,39 @@ function streamAttempt(model: any, context: any, options: any, key: FactoryApiKe
   return streamSimpleFactoryResponses(model, context, { ...options, headers });
 }
 
+export function selectFactoryApiKeysByLimits(
+  entries: FactoryApiKeyEntry[],
+  modelId: string,
+  decide = cachedLimitDecision,
+) {
+  const decisions = entries.map((key) => ({
+    key,
+    decision: decide(key.key, modelId),
+  }));
+  return {
+    keys: decisions
+      .filter(({ decision }) => decision?.available !== false)
+      .map(({ key }) => key),
+    exhausted: decisions
+      .filter(({ decision }) => decision?.available === false)
+      .map(({ key, decision }) =>
+        `${key.label}: ${decision!.pool} ${decision!.exhausted} exhausted`,
+      ),
+  };
+}
+
 export function streamSimpleFactoryApiKeyResponses(model: any, context: any, options?: any) {
   const stream = createAssistantMessageEventStream();
   (async () => {
-    const keys = activeKeyEntries();
+    const selected = selectFactoryApiKeysByLimits(activeKeyEntries(), model.id);
+    const keys = selected.keys;
     if (!keys.length) {
-      stream.push(errorEvent(model, `No active Factory API keys configured. Add keys to ${FACTORY_API_KEYS_PATH} or FACTORY_API_KEYS.`));
+      stream.push(errorEvent(
+        model,
+        selected.exhausted.length
+          ? `No configured Factory API key has available ${model.id} usage (${selected.exhausted.join("; ")}). Refresh with /factory-limits.`
+          : `No active Factory API keys configured. Add keys to ${FACTORY_API_KEYS_PATH} or FACTORY_API_KEYS.`,
+      ));
       stream.end();
       return;
     }

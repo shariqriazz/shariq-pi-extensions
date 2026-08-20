@@ -1,0 +1,61 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { visibleWidth } from "@earendil-works/pi-tui";
+import { openOrchestrationDashboard } from "./dashboard.ts";
+
+test("orchestration dashboard stays bounded in list and detail views", async () => {
+  let component: { render(width: number): string[]; handleInput(data: string): void } | undefined;
+  const theme = {
+    fg(_color: string, text: string) { return text; },
+    bold(text: string) { return text; },
+  };
+  const tui = { requestRender() {}, terminal: { rows: 30 } };
+  const keys = {
+    matches(data: string, binding: string) {
+      return (binding === "tui.select.confirm" && data === "\r") ||
+        (binding === "tui.select.up" && data === "up") ||
+        (binding === "tui.select.down" && data === "down");
+    },
+  };
+  const run = {
+    id: "orc_test",
+    objective: "Build a complete application with a deliberately long objective",
+    cwd: "/tmp/project",
+    projectKey: "project",
+    gitBacked: true,
+    status: "awaiting-approval",
+    summary: "Plan summary",
+    tasks: [{
+      id: "frontend",
+      title: "Build a responsive frontend with long descriptive text",
+      description: "Frontend",
+      role: "frontend",
+      dependencies: [],
+      acceptanceCriteria: ["works"],
+      status: "pending",
+      fixRounds: 0,
+    }],
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const engine = {
+    list: () => [run],
+  };
+  const ctx = {
+    ui: {
+      custom(factory: Function) {
+        component = factory(tui, theme, keys, () => {});
+        return Promise.resolve();
+      },
+    },
+  };
+  await openOrchestrationDashboard(ctx as never, engine as never, {
+    create() {}, settings() {}, feedback() {}, approve() {}, togglePause() {}, cancel() {},
+  });
+  assert.ok(component);
+  for (const width of [28, 60, 100]) {
+    assert.ok(component!.render(width).every((line) => visibleWidth(line) <= width));
+  }
+  component!.handleInput("\r");
+  assert.ok(component!.render(40).every((line) => visibleWidth(line) <= 40));
+});

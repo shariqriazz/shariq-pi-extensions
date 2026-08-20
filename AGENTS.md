@@ -16,7 +16,7 @@ This private repository packages all of the user's Pi extensions as one Git-inst
 - Declare every extension entrypoint explicitly in root `package.json#pi.extensions`; do not rely on directory auto-discovery.
 - Keep each extension under `extensions/<name>` in the single root package so `pi config` can enable or disable it individually. Do not create nested Pi packages for suite extensions.
 - Every directory under `extensions/` must have a README. Every declared extension must have a repository-native test included by the root `npm test` command.
-- Keep `skills/background-terminals` and `skills/subagents` aligned with their extension APIs; Pi loads them from the package and install scripts must not copy them elsewhere.
+- Keep `skills/background-terminals`, `skills/orchestration`, and `skills/subagents` aligned with their extension APIs; Pi loads them from the package and install scripts must not copy them elsewhere.
 - Put third-party runtime modules in root `dependencies`. Pi-owned packages and `typebox` remain optional peer dependencies and pinned development dependencies.
 - Keep shared runtime helpers in `extensions/shared`; do not duplicate them across extensions.
 - Runtime state must use Pi's `getAgentDir()` or project `CONFIG_DIR_NAME`. Never hardcode a user home, checkout path, operating-system-specific package path, or active extension directory.
