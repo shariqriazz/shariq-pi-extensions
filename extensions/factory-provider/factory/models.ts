@@ -172,7 +172,7 @@ export function factoryApiForModel(id: string) {
 function familyForModel(id: string): Pick<BinaryCapability, "api" | "baseUrl" | "apiProvider"> {
   const api = factoryApiForModel(id);
   if (api === "anthropic-messages") {
-    return { api, baseUrl: FACTORY_ANTHROPIC_BASE_URL, apiProvider: id.startsWith("minimax-") ? "fireworks" : "anthropic" };
+    return { api, baseUrl: FACTORY_ANTHROPIC_BASE_URL, apiProvider: id.startsWith("minimax-") ? "fireworks" : "bedrock_anthropic" };
   }
   if (api === "google-generative-ai") return { api, baseUrl: FACTORY_GEMINI_BASE_URL, apiProvider: "google" };
   if (api === "openai-completions") {

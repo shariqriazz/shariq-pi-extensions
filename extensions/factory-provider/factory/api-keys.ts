@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-import { FACTORY_STATE_DIR } from "./constants.ts";
+import { FACTORY_API_BASE_URL, FACTORY_STATE_DIR } from "./constants.ts";
+import { factoryApiForModel } from "./models.ts";
 import { streamSimpleFactoryResponses } from "./responses.ts";
+import { createFactoryResponsesWebSocketFetch } from "./websocket.ts";
 import {
   cachedLimitDecision,
   factoryCredentialId,
@@ -128,9 +131,11 @@ function activeKeyEntries(modelId?: string) {
   return sortFactoryApiKeysByLastUsed(active);
 }
 
-function classifyCooldown(message: string): { ms: number; kind: "auth" | "rate" | "quota" } | null {
+export function classifyFactoryKeyCooldown(message: string): { ms: number; kind: "auth" | "rate" | "quota" } | null {
   const lower = message.toLowerCase();
-  if (/\b(401|403)\b/.test(lower) || lower.includes("unauthorized") || lower.includes("invalid api key") || lower.includes("forbidden")) return { ms: AUTH_COOLDOWN_MS, kind: "auth" };
+  // A bare 401/403 usually means our Factory transport or headers are wrong.
+  // Disable a credential only when Factory explicitly identifies the key itself.
+  if (lower.includes("invalid api key") || lower.includes("api key revoked") || lower.includes("api key expired")) return { ms: AUTH_COOLDOWN_MS, kind: "auth" };
   if (/\b429\b/.test(lower) || lower.includes("rate limit")) return { ms: RATE_COOLDOWN_MS, kind: "rate" };
   if (lower.includes("quota") || lower.includes("billing") || lower.includes("credit") || lower.includes("usage limit") || lower.includes("exhaust")) return { ms: DEFAULT_COOLDOWN_MS, kind: "quota" };
   return null;
@@ -141,7 +146,7 @@ function markKeyFailure(
   error: string,
   modelId: string,
 ) {
-  const cooldown = classifyCooldown(error);
+  const cooldown = classifyFactoryKeyCooldown(error);
   if (!cooldown) return false;
   const now = Date.now();
   const cached = cachedLimitDecision(entry.key, modelId, now);
@@ -205,9 +210,59 @@ function errorEvent(model: any, message: string): any {
   };
 }
 
-function streamAttempt(model: any, context: any, options: any, key: FactoryApiKeyEntry) {
-  const headers = { ...(model.headers || {}), ...(options?.headers || {}), Authorization: `Bearer ${key.key}` };
-  return streamSimpleFactoryResponses(model, context, { ...options, headers });
+const organizationIdCache = new Map<string, Promise<string | undefined>>();
+
+async function factoryApiKeyOrganizationId(key: FactoryApiKeyEntry, version: string) {
+  const id = keyId(key);
+  let pending = organizationIdCache.get(id);
+  if (!pending) {
+    pending = fetch(`${FACTORY_API_BASE_URL}/api/cli/whoami`, {
+      headers: {
+        Authorization: `Bearer ${key.key}`,
+        "User-Agent": `factory-cli/${version}`,
+        "X-Client-Version": version,
+        "X-Factory-Client": "cli",
+      },
+    }).then(async (response) => {
+      if (!response.ok) return undefined;
+      const body = await response.json() as { organization_id?: string; organizationId?: string };
+      return body.organization_id || body.organizationId;
+    }).catch(() => undefined);
+    organizationIdCache.set(id, pending);
+  }
+  return pending;
+}
+
+async function streamAttempt(model: any, context: any, options: any, key: FactoryApiKeyEntry) {
+  const api = factoryApiForModel(model.id);
+  const version = droidVersion();
+  const sessionId = options?.sessionId || randomUUID();
+  const assistantMessageId = randomUUID();
+  const organizationId = await factoryApiKeyOrganizationId(key, version);
+  const headers: Record<string, string> = {
+    ...(model.headers || {}),
+    ...(options?.headers || {}),
+    "User-Agent": `factory-cli/${version}`,
+    "X-Client-Version": version,
+    "X-Factory-Client": "cli",
+    "X-Provider-Routing-Source": "configured_order",
+    "X-Session-Id": sessionId,
+    "X-Assistant-Message-Id": assistantMessageId,
+    ...(organizationId ? { "X-Factory-Org-Id": organizationId } : {}),
+  };
+  delete headers.Authorization;
+  delete headers.authorization;
+  headers.Authorization = `Bearer ${key.key}`;
+  if (api === "anthropic-messages") headers["X-Api-Key"] = "placeholder";
+
+  return streamSimpleFactoryResponses(model, context, {
+    ...options,
+    sessionId,
+    headers,
+    ...(api === "openai-responses"
+      ? { fetch: createFactoryResponsesWebSocketFetch({ apiKey: key.key, assistantMessageId, headers }) }
+      : {}),
+  });
 }
 
 export function selectFactoryApiKeysByLimits(
@@ -250,7 +305,7 @@ export function streamSimpleFactoryApiKeyResponses(model: any, context: any, opt
     let lastError = "";
     for (const key of keys) {
       markKeyUsed(key);
-      const inner = streamAttempt(model, context, options, key);
+      const inner = await streamAttempt(model, context, options, key);
       const buffered: any[] = [];
       let hasStarted = false;
       let retriedBeforeStart = false;

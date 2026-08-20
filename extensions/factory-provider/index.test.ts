@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import factoryExtension from "./index.ts";
-import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, classifyFactoryKeyCooldown, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
 import { factoryApiForModel } from "./factory/models.ts";
@@ -19,6 +19,12 @@ async function registeredFactory() {
   await factoryExtension(pi as never);
   return { providers, commands, handlers, config: providers.get(PROVIDER_ID) };
 }
+
+test("generic Factory authorization responses do not disable valid rotating keys", () => {
+  assert.equal(classifyFactoryKeyCooldown('401 {"detail":"Missing authorization token"}'), null);
+  assert.equal(classifyFactoryKeyCooldown("403 Forbidden"), null);
+  assert.equal(classifyFactoryKeyCooldown("401 invalid API key")?.kind, "auth");
+});
 
 test("Factory requests preserve Pi guidance behind the required Factory system marker", () => {
   const context = sanitizeFactoryContext({

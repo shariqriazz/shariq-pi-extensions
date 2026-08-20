@@ -268,16 +268,20 @@ export function streamFactoryGemini(model: any, context: any, options?: any) {
 export function streamSimpleFactoryResponses(model: any, context: any, options?: any) {
   const api = factoryApiForModel(model.id);
   const routedModel = { ...model, api };
-  let sanitizedContext = sanitizeFactoryContext(context);
-  if (api === "anthropic-messages") {
-    // Factory's Anthropic surface currently rejects requests with a system prompt
-    // for these OAuth-routed models. Keep user/developer conversation messages,
-    // but omit Pi's system prompt.
-    sanitizedContext = { ...sanitizedContext, systemPrompt: undefined };
-  }
+  const sanitizedContext = sanitizeFactoryContext(context);
   switch (api) {
-    case "anthropic-messages":
-      return streamSimple(routedModel, sanitizedContext, options);
+    case "anthropic-messages": {
+      const reasoningDisabled = options?.reasoning === "off" || options?.reasoning === "none";
+      if (!reasoningDisabled) return streamSimple(routedModel, sanitizedContext, options);
+      return streamSimple(routedModel, sanitizedContext, {
+        ...options,
+        reasoning: undefined,
+        onPayload: async (payload: any, payloadModel: any) => {
+          if (payload?.thinking?.type === "disabled") delete payload.thinking;
+          return options?.onPayload ? options.onPayload(payload, payloadModel) : payload;
+        },
+      });
+    }
     case "google-generative-ai":
       return streamFactoryGemini(routedModel, sanitizedContext, options);
     case "openai-completions":
