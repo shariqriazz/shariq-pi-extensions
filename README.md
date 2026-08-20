@@ -26,12 +26,13 @@ The package contains:
 - persistent task goals
 - dedicated multi-agent orchestration
 - Pi Memory
+- per-response TPS, TTFT, elapsed-time, and output status
 - Context Usage display
 - small shell and command shortcuts
 - Pi subagents
 - lightweight URL fetching
 
-The package also declares the `background-terminals`, `orchestration`, and `subagents` skills so Pi loads their operating guidance automatically. Pi reads them from its managed Git checkout; duplicating files under `<agent-dir>/skills` is unnecessary and would leave stale copies after removal.
+The package also includes the `ember-warm-dark` TUI theme and declares the `background-terminals`, `orchestration`, and `subagents` skills so Pi loads their operating guidance automatically. Pi reads them from its managed Git checkout; duplicating files under `<agent-dir>/skills` is unnecessary and would leave stale copies after removal.
 
 See [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) for commands, tools, configuration, and external dependencies.
 

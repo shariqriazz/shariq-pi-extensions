@@ -21,6 +21,7 @@
     "!extensions/**/*.test.ts",
     "!extensions/subagents/test-support",
     "skills",
+    "themes",
     "docs",
     "README.md"
   ],
@@ -36,6 +37,7 @@
       "./extensions/git-info/index.ts",
       "./extensions/goal/index.ts",
       "./extensions/orchestration/index.ts",
+      "./extensions/performance-status/index.ts",
       "./extensions/pi-memory/index.ts",
       "./extensions/shell-shortcuts/index.ts",
       "./extensions/subagents/index.ts",
@@ -45,6 +47,9 @@
       "./skills/background-terminals",
       "./skills/orchestration",
       "./skills/subagents"
+    ],
+    "themes": [
+      "./themes/ember-warm-dark.json"
     ]
   },
   "scripts": {

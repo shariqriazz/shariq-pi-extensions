@@ -1,6 +1,6 @@
 # Pi Context Usage
 
-Displays a startup `[Context Usage]` panel showing the estimated context-window cost of Pi's runtime system prompt, AGENTS.md files, skill index, active tool schemas, and session material.
+Displays a compact startup context-budget card showing total request/harness usage and the system, AGENTS.md, skill-index, and active-tool contributions. Detailed audit views expose session material and per-resource estimates.
 
 ## Use
 

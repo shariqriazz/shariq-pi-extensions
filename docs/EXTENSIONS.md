@@ -62,7 +62,11 @@ Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_termina
 
 ### [Context Usage](../extensions/context-usage/README.md)
 
-Displays the estimated prompt and session contribution to the active context window. Use `Ctrl+O` or `/context-usage` to cycle summary, compact, and expanded views.
+Displays the estimated prompt and session contribution to the active context window. The default summary is a compact context-budget card; use `Ctrl+O` or `/context-usage` to cycle to compact and expanded audit views.
+
+### [Performance status](../extensions/performance-status/README.md)
+
+Adds a responsive footer-area status row for each assistant message. Live TPS/output are marked as estimates; final TPS uses provider-reported output tokens divided by complete request-to-message time so provider latency, prefill, and hidden reasoning are included. TTFT, elapsed time, output tokens, and active tools remain separate.
 
 ### [Git info](../extensions/git-info/README.md)
 

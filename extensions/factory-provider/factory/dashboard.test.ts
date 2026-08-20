@@ -55,7 +55,7 @@ test("Factory dashboard labels percentages as used and stays within the viewport
   for (const width of [32, 72, 120]) {
     const lines = component.render(width);
     assert.ok(lines.every((line) => visibleWidth(line) <= width));
-    assert.match(lines.join("\n"), /Standard.*used/);
+    assert.match(lines.join("\n"), /Standard used|STANDARD.*CONSUMED/);
   }
   component.handleInput("down");
   assert.ok(component.render(120).every((line) => visibleWidth(line) <= 120));

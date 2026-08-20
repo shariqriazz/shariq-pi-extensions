@@ -1501,24 +1501,53 @@ function summaryTokenLayout(snapshot: PrefixSnapshot): TokenLabelLayout {
   return tokenLabelLayout(values);
 }
 
+function summarySectionLabel(title: string) {
+  if (/runtime system/i.test(title)) return "System";
+  if (/agents/i.test(title)) return "Rules";
+  if (/skill/i.test(title)) return "Skills";
+  if (/tools/i.test(title)) return "Tools";
+  return title.replace(/\s*\(.+\)$/, "").split(/\s+/)[0] || "Other";
+}
+
+function contextSummaryFrame(theme: Theme, title: string, rows: string[], width: number) {
+  const safeWidth = Math.max(8, width);
+  const inner = Math.max(0, safeWidth - 2);
+  const label = truncateToWidth(` ${title} `, Math.max(0, inner - 1), "…");
+  const top = theme.fg("border", "╭") +
+    accent(theme, label) +
+    theme.fg("border", "─".repeat(Math.max(0, inner - stripAnsi(label).length)) + "╮");
+  const body = rows.map((row) => {
+    const clipped = truncateToWidth(row, inner, "…");
+    return theme.fg("border", "│") +
+      clipped +
+      " ".repeat(Math.max(0, inner - stripAnsi(clipped).length)) +
+      theme.fg("border", "│");
+  });
+  return [top, ...body, theme.fg("border", `╰${"─".repeat(inner)}╯`)];
+}
+
 function renderSummary(snapshot: PrefixSnapshot, theme: Theme, width = 80): string[] {
-  const lines = renderHeader(snapshot, "summary", theme);
-  const layout = summaryTokenLayout(snapshot);
-  lines.push("");
-  for (const section of snapshot.sections) {
-    lines.push(renderMetricRow({
-      label: section.title,
-      tokens: sectionTokens(section),
-      detail: countDetail(sectionChars(section)),
-      section: true,
-    }, theme, layout));
-  }
-  lines.push(
-    renderMetricRow({ label: "Total harness", tokens: totalTokens(snapshot), emphasis: true, detail: harnessDetail(snapshot) }, theme, layout),
-    ...renderSessionRows(snapshot, theme, width, layout),
-  );
-  lines.push(""); // panel tail spacer (design language §8)
-  return lines;
+  const usage = snapshot.contextUsage;
+  const harness = totalTokens(snapshot);
+  const request = usage?.tokens;
+  const window = usage?.contextWindow;
+  const percent = formatPercent(usage?.percent ?? null);
+  const budgetParts = [
+    `Harness ~${compactCount(harness)}`,
+    typeof request === "number" ? `Request ${compactCount(request)}` : undefined,
+    window && window > 0 ? `/ ${contextWindowLabel(window)}` : undefined,
+    percent ? `· ${percent}` : undefined,
+  ].filter(Boolean).join(" ");
+  const breakdown = snapshot.sections
+    .map((section) => `${summarySectionLabel(section.title)} ~${compactCount(sectionTokens(section))}`)
+    .join(SEP);
+  const ctrlO = keyText("app.tools.expand") || "Ctrl+O";
+  const rows = [
+    ` ${theme.fg("text", budgetParts)}`,
+    ` ${theme.fg("muted", breakdown || "No harness sections detected")}`,
+    ` ${theme.fg("dim", `${modelLabel(snapshot.model)}${SEP}${ctrlO} details`)}`,
+  ];
+  return ["", ...contextSummaryFrame(theme, "CONTEXT BUDGET", rows, width), ""];
 }
 
 type CompactLayout = { labelWidth: number; tokenLayout: TokenLabelLayout };

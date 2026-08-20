@@ -21,6 +21,7 @@ import {
   type FactoryLimitRecord,
   type FactoryPoolLimits,
 } from "./limits.ts";
+import { factoryWarmTheme } from "./warm-theme.ts";
 
 export interface FactoryDashboardAccount {
   id: string;
@@ -132,7 +133,7 @@ export class FactoryDashboard implements Component {
     done: () => void,
   ) {
     this.tui = tui;
-    this.theme = theme;
+    this.theme = factoryWarmTheme(theme);
     this.keys = keys;
     this.snapshot = snapshot;
     this.refreshData = refreshData;
@@ -206,12 +207,12 @@ export class FactoryDashboard implements Component {
       : this.snapshot.warning
         ? this.theme.fg("warning", oneLine(this.snapshot.warning))
         : this.theme.fg("muted", `${ready} · ${this.snapshot.modelCount} models · Droid ${this.snapshot.version}`);
-    const title = `  ${this.theme.fg("accent", this.theme.bold("Factory"))} ${this.theme.fg("dim", `· ${this.snapshot.authentication}`)}`;
+    const title = `  ${this.theme.fg("accent", this.theme.bold("◆ FACTORY"))} ${this.theme.fg("dim", `· ${this.snapshot.authentication}`)}`;
     const lines = width >= 60
       ? [joinSides(title, `${headerRight}  `, width)]
       : [truncateToWidth(title, width, ""), truncateToWidth(`  ${headerRight}`, width, "")];
     lines.push(
-      frameTop(this.theme, width, `${accounts.length} account${accounts.length === 1 ? "" : "s"} · percentages are used`),
+      frameTop(this.theme, width, `ACCOUNTS ${accounts.length} · USAGE CONSUMED`),
     );
     const innerWidth = Math.max(1, width - 2);
     if (width >= 104 && selected) {
@@ -241,7 +242,7 @@ export class FactoryDashboard implements Component {
     lines.push(frameBottom(this.theme, width));
     lines.push(
       truncateToWidth(
-        this.theme.fg("dim", "  ↑↓/jk select · r refresh all accounts · esc close"),
+        `${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh all")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`,
         width,
         "",
       ),
@@ -269,7 +270,7 @@ export class FactoryDashboard implements Component {
       const index = start + offset;
       const selected = index === this.selected;
       const state = accountState(account);
-      const marker = selected ? this.theme.fg("accent", "❯") : " ";
+      const marker = selected ? this.theme.fg("accent", "◆") : " ";
       const title = this.theme.fg(selected ? "accent" : "text", oneLine(account.label));
       const status = stateLabel(this.theme, stateColor(state), state);
       const first = joinSides(` ${marker} ${title}`, `${status} `, width);
@@ -314,7 +315,7 @@ export class FactoryDashboard implements Component {
     width: number,
     observedAt = Date.now(),
   ) {
-    const lines = [` ${this.theme.fg("accent", this.theme.bold(`${name} · used`))}`];
+    const lines = [` ${this.theme.fg("accent", this.theme.bold(`${name.toUpperCase()} · CONSUMED`))}`];
     if (!limits) return [...lines, ` ${this.theme.fg("muted", "Unavailable")}`];
     const exhausted = exhaustedBucket(limits, Date.now(), observedAt);
     const windows = [
