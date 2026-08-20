@@ -233,19 +233,29 @@ async function factoryApiKeyOrganizationId(key: FactoryApiKeyEntry, version: str
   return pending;
 }
 
+export function factoryProviderRoutingSource(apiProvider: string | undefined) {
+  return apiProvider === "xai" || apiProvider === "google" ? "session_lock" : "configured_order";
+}
+
+export function factoryResponsesUsesWebSocket(api: string, headers: Record<string, string>) {
+  const apiProvider = Object.entries(headers).find(([name]) => name.toLowerCase() === "x-api-provider")?.[1];
+  return api === "openai-responses" && apiProvider === "openai";
+}
+
 async function streamAttempt(model: any, context: any, options: any, key: FactoryApiKeyEntry) {
   const api = factoryApiForModel(model.id);
   const version = droidVersion();
   const sessionId = options?.sessionId || randomUUID();
   const assistantMessageId = randomUUID();
   const organizationId = await factoryApiKeyOrganizationId(key, version);
+  const modelApiProvider = Object.entries(model.headers || {}).find(([name]) => name.toLowerCase() === "x-api-provider")?.[1] as string | undefined;
   const headers: Record<string, string> = {
     ...(model.headers || {}),
     ...(options?.headers || {}),
     "User-Agent": `factory-cli/${version}`,
     "X-Client-Version": version,
     "X-Factory-Client": "cli",
-    "X-Provider-Routing-Source": "configured_order",
+    "X-Provider-Routing-Source": factoryProviderRoutingSource(modelApiProvider),
     "X-Session-Id": sessionId,
     "X-Assistant-Message-Id": assistantMessageId,
     ...(organizationId ? { "X-Factory-Org-Id": organizationId } : {}),
@@ -255,11 +265,12 @@ async function streamAttempt(model: any, context: any, options: any, key: Factor
   headers.Authorization = `Bearer ${key.key}`;
   if (api === "anthropic-messages") headers["X-Api-Key"] = "placeholder";
 
+  const useResponsesWebSocket = factoryResponsesUsesWebSocket(api, headers);
   return streamSimpleFactoryResponses(model, context, {
     ...options,
     sessionId,
     headers,
-    ...(api === "openai-responses"
+    ...(useResponsesWebSocket
       ? { fetch: createFactoryResponsesWebSocketFetch({ apiKey: key.key, assistantMessageId, headers }) }
       : {}),
   });

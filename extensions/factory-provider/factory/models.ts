@@ -105,12 +105,8 @@ const FALLBACK_REASONING: Record<string, { supported: string[]; default: string 
   "kimi-k3": { supported: ["off", "low", "high", "max"], default: "high" },
   // Live Factory streaming rejects reasoning_effort="off" for Nemotron and reports
   // the accepted disable token as `none`; keep this as an API-truth override.
-  "nemotron-3-ultra": { supported: ["none", "low", "medium", "high", "xhigh", "max"], default: "max" },
+  "nemotron-3-ultra": { supported: ["off", "high"], default: "high" },
 };
-
-// The live Factory API accepts a broader Nemotron effort set than Droid's
-// current help advertises. All other models follow refreshed Droid metadata.
-const FORCE_REASONING_OVERRIDES = new Set(["nemotron-3-ultra"]);
 
 export const DROID_MODELS_FALLBACK: FactoryModel[] = Object.entries(BINARY_CAPABILITIES).filter(([id]) => ACTIVE_MODEL_IDS.has(id)).map(([id, capability]) => {
   const reasoning = FALLBACK_REASONING[id] || fallbackReasoning(id);
@@ -226,7 +222,7 @@ export function parseModelsFromDroidHelp(): FactoryModel[] {
       if (!match) continue;
       const detailName = comparableDisplayName(match[1]);
       const byName = [...models.values()].find((model) => comparableDisplayName(model.name) === detailName);
-      if (!byName || FORCE_REASONING_OVERRIDES.has(byName.id)) continue;
+      if (!byName) continue;
       byName.supportedReasoningEfforts = match[3].split(",").map((effort) => effort.trim()).filter(Boolean);
       byName.defaultReasoningEffort = match[4];
       byName.reasoning = match[2] === "Yes";
@@ -244,8 +240,17 @@ export function parseModelsFromDroidHelp(): FactoryModel[] {
 function thinkingMap(model: FactoryModel) {
   const supported = model.supportedReasoningEfforts;
   const levels = ["off", "none", "minimal", "low", "medium", "high", "xhigh", "max"];
-  const disableLevel = supported.includes("none") ? "none" : supported.includes("off") ? "off" : null;
+  // Droid exposes Nemotron's disabled effort as `off`, while Factory's
+  // Baseten wire endpoint accepts the equivalent token `none`.
+  const disableLevel = model.id === "nemotron-3-ultra"
+    ? "none"
+    : supported.includes("none")
+      ? "none"
+      : supported.includes("off")
+        ? "off"
+        : null;
   return Object.fromEntries(levels.map((level) => {
+    if (model.id === "nemotron-3-ultra" && (level === "off" || level === "none")) return [level, "none"];
     const providerLevel = level === "off" || level === "none" ? disableLevel : level;
     return [level, providerLevel && supported.includes(providerLevel) ? providerLevel : null];
   }));

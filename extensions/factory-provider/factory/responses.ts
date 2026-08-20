@@ -1,3 +1,4 @@
+import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import {
   createAssistantMessageEventStream,
   stream,
@@ -44,11 +45,44 @@ export function sanitizeFactoryContext(context: any) {
   return { ...context, systemPrompt, messages };
 }
 
-function optionsWithDirectReasoningEffort(options: any) {
-  const reasoning = options?.reasoning;
+export function resolvedFactoryReasoning(model: any, reasoning: string | undefined) {
+  if (!reasoning) return undefined;
+  const clamped = clampThinkingLevel(model, reasoning as any);
+  const mapped = model.thinkingLevelMap?.[clamped];
+  return typeof mapped === "string" ? mapped : clamped;
+}
+
+function optionsWithDirectReasoningEffort(options: any, model: any) {
+  const reasoningEffort = resolvedFactoryReasoning(model, options?.reasoning);
   return {
     ...options,
-    reasoningEffort: reasoning && reasoning !== "off" ? reasoning : undefined,
+    reasoningEffort: reasoningEffort && reasoningEffort !== "off" && reasoningEffort !== "none" ? reasoningEffort : undefined,
+  };
+}
+
+function optionsWithFactoryResponsesPayload(options: any, model: any) {
+  const apiProvider = Object.entries(model.headers || {}).find(([name]) => name.toLowerCase() === "x-api-provider")?.[1];
+  return {
+    ...options,
+    onPayload: async (payload: any, payloadModel: any) => {
+      const input = Array.isArray(payload?.input) ? [...payload.input] : [];
+      const first = input[0];
+      if (
+        first &&
+        (first.role === "system" || first.role === "developer") &&
+        typeof first.content === "string" &&
+        first.content.includes(FACTORY_SYSTEM_MARKER)
+      ) {
+        payload.instructions = first.content;
+        input.shift();
+        payload.input = input;
+      }
+      payload.parallel_tool_calls ??= true;
+      if (apiProvider === "xai" && payload.reasoning && typeof payload.reasoning === "object") {
+        delete payload.reasoning.summary;
+      }
+      return options?.onPayload ? options.onPayload(payload, payloadModel) : payload;
+    },
   };
 }
 
@@ -171,13 +205,17 @@ export function streamFactoryGemini(model: any, context: any, options?: any) {
       currentBlock = undefined;
     };
     try {
+      const reasoningEffort = resolvedFactoryReasoning(model, options?.reasoning);
       let payload: any = {
         model: model.id,
         contents: convertFactoryGeminiMessages(context),
         ...(context.systemPrompt ? { systemInstruction: { parts: [{ text: context.systemPrompt }] } } : {}),
         ...(context.tools?.length ? { tools: factoryGeminiTools(context.tools) } : {}),
         generationConfig: {
-          ...(options?.temperature !== undefined ? { temperature: options.temperature } : {}),
+          temperature: options?.temperature ?? 1,
+          topP: 0.95,
+          topK: 64,
+          ...(reasoningEffort ? { thinkingConfig: { includeThoughts: true, thinkingLevel: reasoningEffort.toUpperCase() } } : {}),
           ...(options?.maxTokens !== undefined ? { maxOutputTokens: options.maxTokens } : {}),
         },
       };
@@ -285,9 +323,9 @@ export function streamSimpleFactoryResponses(model: any, context: any, options?:
     case "google-generative-ai":
       return streamFactoryGemini(routedModel, sanitizedContext, options);
     case "openai-completions":
-      return stream(routedModel, sanitizedContext, optionsWithDirectReasoningEffort(options));
+      return stream(routedModel, sanitizedContext, optionsWithDirectReasoningEffort(options, routedModel));
     case "openai-responses":
     default:
-      return streamSimple(routedModel, sanitizedContext, options);
+      return streamSimple(routedModel, sanitizedContext, optionsWithFactoryResponsesPayload(options, routedModel));
   }
 }

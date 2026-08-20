@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import factoryExtension from "./index.ts";
-import { FACTORY_API_KEY_FILE_SENTINEL, classifyFactoryKeyCooldown, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, classifyFactoryKeyCooldown, factoryApiKeyStatus, factoryAuthModeFromHeaders, factoryProviderRoutingSource, factoryResponsesUsesWebSocket, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
-import { factoryApiForModel } from "./factory/models.ts";
-import { FACTORY_SYSTEM_MARKER, sanitizeFactoryContext, streamFactoryGemini } from "./factory/responses.ts";
+import { DROID_MODELS_FALLBACK, factoryApiForModel, toPiModel } from "./factory/models.ts";
+import { FACTORY_SYSTEM_MARKER, resolvedFactoryReasoning, sanitizeFactoryContext, streamFactoryGemini } from "./factory/responses.ts";
 
 async function registeredFactory() {
   const providers = new Map<string, any>();
@@ -19,6 +19,46 @@ async function registeredFactory() {
   await factoryExtension(pi as never);
   return { providers, commands, handlers, config: providers.get(PROVIDER_ID) };
 }
+
+test("Pi reasoning levels clamp to each Factory model's Droid-advertised efforts", () => {
+  const model = (id: string) => toPiModel(DROID_MODELS_FALLBACK.find((entry) => entry.id === id)!);
+  assert.equal(resolvedFactoryReasoning(model("grok-4.6"), "max"), "xhigh");
+  assert.equal(resolvedFactoryReasoning(model("gemini-3.7-flash"), "max"), "high");
+  assert.equal(resolvedFactoryReasoning(model("deepseek-v4-flash-0731"), "medium"), "high");
+  assert.equal(resolvedFactoryReasoning(model("glm-5.2"), "low"), "high");
+  assert.equal(resolvedFactoryReasoning(model("gpt-5.6-luna"), "off"), "none");
+  assert.equal(resolvedFactoryReasoning(model("gpt-5.5-pro"), "off"), "medium");
+  const nemotron = toPiModel({
+    id: "nemotron-3-ultra",
+    name: "Nemotron 3 Ultra",
+    reasoning: true,
+    supportedReasoningEfforts: ["off", "high"],
+    defaultReasoningEffort: "high",
+    contextWindow: 202_000,
+    maxTokens: 65_536,
+    images: false,
+    pdf: false,
+    api: "openai-completions",
+    baseUrl: "https://factory.example/api/llm/o/v1",
+    apiProvider: "baseten",
+    billingPool: "core",
+  });
+  assert.equal(resolvedFactoryReasoning(nemotron, "off"), "none");
+});
+
+test("Factory routing sources match current Droid provider families", () => {
+  assert.equal(factoryProviderRoutingSource("openai"), "configured_order");
+  assert.equal(factoryProviderRoutingSource("bedrock_anthropic"), "configured_order");
+  assert.equal(factoryProviderRoutingSource("fireworks"), "configured_order");
+  assert.equal(factoryProviderRoutingSource("xai"), "session_lock");
+  assert.equal(factoryProviderRoutingSource("google"), "session_lock");
+});
+
+test("Factory uses Responses WebSocket only for OpenAI-routed models", () => {
+  assert.equal(factoryResponsesUsesWebSocket("openai-responses", { "x-api-provider": "openai" }), true);
+  assert.equal(factoryResponsesUsesWebSocket("openai-responses", { "x-api-provider": "xai" }), false);
+  assert.equal(factoryResponsesUsesWebSocket("openai-completions", { "x-api-provider": "openai" }), false);
+});
 
 test("generic Factory authorization responses do not disable valid rotating keys", () => {
   assert.equal(classifyFactoryKeyCooldown('401 {"detail":"Missing authorization token"}'), null);
@@ -59,7 +99,14 @@ test("Factory Gemini preserves guidance, multimodal/tool context, and every stre
   }) as typeof fetch;
   try {
     const stream = streamFactoryGemini(
-      { id: "gemini-3.7-flash", provider: "factory", api: "google-generative-ai", baseUrl: "https://factory.example/api/llm/g/v1" },
+      {
+        id: "gemini-3.7-flash",
+        provider: "factory",
+        api: "google-generative-ai",
+        baseUrl: "https://factory.example/api/llm/g/v1",
+        reasoning: true,
+        thinkingLevelMap: { off: null, minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null },
+      },
       {
         systemPrompt: "System guidance",
         messages: [
@@ -69,7 +116,7 @@ test("Factory Gemini preserves guidance, multimodal/tool context, and every stre
         ],
         tools: [{ name: "read", description: "Read a file", parameters: { type: "object" } }],
       },
-      { headers: { Authorization: "Bearer test" } },
+      { headers: { Authorization: "Bearer test" }, reasoning: "max" },
     );
     const emitted: any[] = [];
     for await (const event of stream) emitted.push(event);
@@ -79,6 +126,7 @@ test("Factory Gemini preserves guidance, multimodal/tool context, and every stre
     assert.equal(requestBody.contents[0].parts[1].inlineData.mimeType, "image/png");
     assert.equal(requestBody.contents[2].parts[0].functionResponse.response.output, "source");
     assert.equal(requestBody.tools[0].functionDeclarations[0].name, "read");
+    assert.equal(requestBody.generationConfig.thinkingConfig.thinkingLevel, "HIGH");
     assert.equal(done.message.content[0].text, "first second");
     assert.equal(done.message.content[1].type, "toolCall");
     assert.equal(done.message.stopReason, "toolUse");
