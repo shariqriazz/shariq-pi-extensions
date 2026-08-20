@@ -7,6 +7,7 @@ export interface TerminalOutputView {
   readonly cursor: number;
   readonly version: number;
   readonly spillPath?: string;
+  readonly spillTruncated: boolean;
 }
 
 export interface TerminalSnapshot {

@@ -10,11 +10,8 @@
     "pi-extension"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
-  "workspaces": [
-    "packages/pi-memory"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/shariqriazz/shariq-pi-extensions.git"
@@ -25,20 +22,20 @@
     "!extensions/subagents/test-support",
     "skills",
     "docs",
-    "README.md",
-    "THIRD_PARTY_NOTICES.md"
+    "README.md"
   ],
   "pi": {
     "extensions": [
-      "./extensions/antigravity-oauth/index.ts",
+      "./extensions/antigravity-provider/index.ts",
       "./extensions/ask-user/index.ts",
       "./extensions/background-terminals/index.ts",
+      "./extensions/context-usage/index.ts",
       "./extensions/copy-all/index.ts",
       "./extensions/factory-provider/index.ts",
       "./extensions/firecrawl-web/index.ts",
       "./extensions/git-info/index.ts",
       "./extensions/goal/index.ts",
-      "./extensions/context-scope/index.ts",
+      "./extensions/pi-memory/index.ts",
       "./extensions/shell-shortcuts/index.ts",
       "./extensions/subagents/index.ts",
       "./extensions/web-fetch/index.ts"
@@ -50,7 +47,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test --experimental-strip-types extensions/shared/*.test.ts extensions/ask-user/*.test.ts extensions/background-terminals/*.test.ts extensions/copy-all/*.test.ts extensions/factory-provider/*.test.ts extensions/firecrawl-web/*.test.ts extensions/git-info/*.test.ts extensions/goal/*.test.ts extensions/context-scope/*.test.ts extensions/subagents/*.test.ts extensions/web-fetch/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "validate:package": "node scripts/validate-package.mjs",
     "validate": "npm run check && npm test && npm run validate:package",
     "pack:inspect": "npm pack --dry-run"

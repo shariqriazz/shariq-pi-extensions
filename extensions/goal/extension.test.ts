@@ -162,6 +162,39 @@ test("supports blocked goals, usage-limit stops, and replacing completed goals",
   await completed.shutdown();
 });
 
+test("changing a blocked item's meaning resets the persistence gate", async () => {
+  const h = harness();
+  await h.emit("session_start", { reason: "startup" });
+  await h.tools.get("create_goal").execute("c1", { objective: "Track one real blocker" }, undefined, undefined, h.ctx);
+  await h.tools.get("update_goal_progress").execute(
+    "p1",
+    { items: [{ id: "dependency", title: "Wait for account access", status: "blocked" }] },
+    undefined,
+    undefined,
+    h.ctx,
+  );
+  for (let turn = 0; turn < 2; turn++) {
+    await h.emit("agent_start");
+    await h.emit("tool_execution_start", { toolName: "read" });
+    await h.emit("agent_end", { messages: [] });
+  }
+  await h.tools.get("update_goal_progress").execute(
+    "p2",
+    { items: [{ id: "dependency", title: "Wait for vendor deployment", status: "blocked" }] },
+    undefined,
+    undefined,
+    h.ctx,
+  );
+  await h.emit("agent_start");
+  await h.emit("tool_execution_start", { toolName: "read" });
+  await h.emit("agent_end", { messages: [] });
+  await assert.rejects(
+    h.tools.get("update_goal").execute("u1", { status: "blocked" }, undefined, undefined, h.ctx),
+    /1\/3 goal turns/,
+  );
+  await h.shutdown();
+});
+
 test("checklist completion requires evidence and blocks premature goal completion", async () => {
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
@@ -236,6 +269,20 @@ test("a narration-only run suppresses automatic continuation until resumed", asy
   await h.commands.get("goal").handler("resume", h.ctx);
   assert.equal((await h.tools.get("get_goal").execute("g2", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed, null);
   assert.equal(h.sent.length, sentBefore + 1);
+  await h.shutdown();
+});
+
+test("status-only tool calls do not count as progress", async () => {
+  const h = harness();
+  await h.emit("session_start", { reason: "startup" });
+  await h.tools.get("create_goal").execute("c1", { objective: "Avoid polling loops" }, undefined, undefined, h.ctx);
+  const sentBefore = h.sent.length;
+  await h.emit("agent_start");
+  await h.emit("tool_execution_start", { toolName: "get_goal" });
+  await h.emit("agent_end", { messages: [] });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(h.sent.length, sentBefore);
+  assert.equal((await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed.reason, "no_tool_progress");
   await h.shutdown();
 });
 

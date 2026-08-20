@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { parseChangedPaths, parseNumstat, type ChangedFile } from "./src/git.ts";
+import { loadGitSummary, parseChangedPaths, parseNumstat, type ChangedFile } from "./src/git.ts";
 import { GitChangesView } from "./src/ui.ts";
 
 const theme = {
@@ -41,6 +41,22 @@ test("parses NUL-delimited status including rename records", () => {
   );
   assert.deepEqual(parseNumstat("12\t3\tsrc/a.ts\n"), { additions: 12, deletions: 3 });
   assert.deepEqual(parseNumstat("-\t-\timage.png\n"), { additions: null, deletions: null });
+});
+
+test("Git summary preserves repository paths ending in whitespace", async () => {
+  const calls: Array<{ command: string; args: string[]; options: any }> = [];
+  const pi = {
+    async exec(command: string, args: string[], options: any) {
+      calls.push({ command, args, options });
+      if (args.includes("--show-toplevel")) return { code: 0, stdout: "/tmp/repo \n", stderr: "" };
+      if (args.includes("--show-current")) return { code: 0, stdout: "main\n", stderr: "" };
+      if (args.includes("--short")) return { code: 0, stdout: "abc123\n", stderr: "" };
+      return { code: 0, stdout: "", stderr: "" };
+    },
+  };
+  const summary = await loadGitSummary(pi as never, "/tmp");
+  assert.equal(summary.root, "/tmp/repo ");
+  assert.ok(calls.slice(1).every((call) => call.options.cwd === "/tmp/repo "));
 });
 
 test("Git changes dashboard stays within narrow and wide viewports", () => {

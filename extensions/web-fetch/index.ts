@@ -267,7 +267,7 @@ function readNodeResponseBounded(res: http.IncomingMessage, maxBytes: number): P
   });
 }
 
-function fetchWithNodeIpv4(requestedUrl: string, headers: Record<string, string>, timeoutMs: number, maxBytes: number, redirects = 0): Promise<RawFetchResponse> {
+function fetchWithNodeIpv4(requestedUrl: string, headers: Record<string, string>, timeoutMs: number, maxBytes: number, signal?: AbortSignal, redirects = 0): Promise<RawFetchResponse> {
   const url = validateUrl(requestedUrl);
   const transport = url.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
@@ -286,7 +286,7 @@ function fetchWithNodeIpv4(requestedUrl: string, headers: Record<string, string>
       if ([301, 302, 303, 307, 308].includes(status) && location && redirects < 10) {
         res.resume();
         try {
-          resolve(await fetchWithNodeIpv4(new URL(location, url).toString(), headers, timeoutMs, maxBytes, redirects + 1));
+          resolve(await fetchWithNodeIpv4(new URL(location, url).toString(), headers, timeoutMs, maxBytes, signal, redirects + 1));
         } catch (error) {
           reject(error);
         }
@@ -309,10 +309,25 @@ function fetchWithNodeIpv4(requestedUrl: string, headers: Record<string, string>
         reject(error);
       }
     });
+    const onAbort = () => req.destroy(signal?.reason instanceof Error ? signal.reason : new Error("Request aborted"));
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+    req.on("close", () => signal?.removeEventListener("abort", onAbort));
     req.on("timeout", () => req.destroy(new Error("Request timed out")));
     req.on("error", reject);
     req.end();
   });
+}
+
+function shouldUseIpv4Fallback(error: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted) return false;
+  const candidate = error as { code?: unknown; cause?: { code?: unknown } };
+  const code = typeof candidate?.cause?.code === "string"
+    ? candidate.cause.code
+    : typeof candidate?.code === "string"
+      ? candidate.code
+      : "";
+  return ["ENETUNREACH", "EHOSTUNREACH", "EADDRNOTAVAIL", "EAI_AGAIN"].includes(code);
 }
 
 async function fetchUrl(params: WebFetchParams, signal?: AbortSignal): Promise<FetchResult> {
@@ -339,15 +354,17 @@ async function fetchUrl(params: WebFetchParams, signal?: AbortSignal): Promise<F
     let response: RawFetchResponse;
     try {
       response = await fetchWithFetch(requestedUrl, headers, controller.signal, maxBytes);
-    } catch {
-      response = await fetchWithNodeIpv4(requestedUrl, headers, timeoutMs, maxBytes);
+    } catch (error) {
+      if (!shouldUseIpv4Fallback(error, controller.signal)) throw error;
+      response = await fetchWithNodeIpv4(requestedUrl, headers, timeoutMs, maxBytes, controller.signal);
     }
     if (response.status === 403 && response.cfMitigated === "challenge" && !params.userAgent) {
       const honestHeaders = { ...headers, "User-Agent": "pi-web-fetch" };
       try {
         response = await fetchWithFetch(requestedUrl, honestHeaders, controller.signal, maxBytes);
-      } catch {
-        response = await fetchWithNodeIpv4(requestedUrl, honestHeaders, timeoutMs, maxBytes);
+      } catch (error) {
+        if (!shouldUseIpv4Fallback(error, controller.signal)) throw error;
+        response = await fetchWithNodeIpv4(requestedUrl, honestHeaders, timeoutMs, maxBytes, controller.signal);
       }
     }
     if (response.status < 200 || response.status >= 300) throw new Error(`HTTP ${response.status} ${response.statusText}`);
@@ -398,8 +415,7 @@ export default function webFetchExtension(pi: ExtensionAPI) {
       required: ["url"],
     },
     async execute(_toolCallId: string, params: WebFetchParams, signal?: AbortSignal) {
-      try {
-        const result = await fetchUrl(params, signal);
+      const result = await fetchUrl(params, signal);
         const header = [
           `URL: ${result.url}`,
           result.finalUrl !== result.url ? `Final URL: ${result.finalUrl}` : undefined,
@@ -408,25 +424,18 @@ export default function webFetchExtension(pi: ExtensionAPI) {
           `Format: ${result.format}`,
           `Bytes read: ${result.bytes}${result.truncated ? " (truncated)" : ""}`,
         ].filter(Boolean).join("\n");
-        return {
-          content: [{ type: "text", text: `${header}\n\n${result.text}` }],
-          details: {
-            url: result.url,
-            finalUrl: result.finalUrl,
-            status: result.status,
-            contentType: result.contentType,
-            format: result.format,
-            bytes: result.bytes,
-            truncated: result.truncated,
-          },
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: "text", text: `Unable to fetch ${params?.url ?? "URL"}: ${message}` }],
-          details: { error: true, url: params?.url, message },
-        };
-      }
+      return {
+        content: [{ type: "text", text: `${header}\n\n${result.text}` }],
+        details: {
+          url: result.url,
+          finalUrl: result.finalUrl,
+          status: result.status,
+          contentType: result.contentType,
+          format: result.format,
+          bytes: result.bytes,
+          truncated: result.truncated,
+        },
+      };
     },
   } as any);
 }

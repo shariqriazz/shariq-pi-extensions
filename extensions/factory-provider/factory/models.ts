@@ -18,7 +18,7 @@ export type FactoryModel = {
 
 type BinaryCapability = Omit<FactoryModel, "id" | "name" | "reasoning" | "supportedReasoningEfforts" | "defaultReasoningEffort" | "api" | "baseUrl" | "apiProvider"> & Partial<Pick<FactoryModel, "api" | "baseUrl" | "apiProvider">>;
 
-// Derived from the current Droid embedded registry; re-check the active binary after Droid upgrades.
+// Tracks the current Droid embedded registry; re-check the active binary after Droid upgrades.
 // Re-check with UPDATING.md when Droid changes. Keep only the latest/current model per
 // family to avoid cluttering Pi's model picker with older Factory models.
 const BINARY_CAPABILITIES: Record<string, BinaryCapability> = {

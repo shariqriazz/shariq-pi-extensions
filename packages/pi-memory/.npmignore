@@ -1,6 +1,0 @@
-**/*.test.ts
-**/test/
-**/.cache/
-**/node_modules/
-**/*.sqlite
-**/*.sqlite-*

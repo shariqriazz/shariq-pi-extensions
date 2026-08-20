@@ -1,6 +1,6 @@
 # Web Fetch
 
-Pi local extension that registers `web_fetch`, a read-only exact-URL retrieval tool inspired by OpenCode's `webfetch`.
+Pi local extension that registers `web_fetch`, a read-only exact-URL retrieval tool.
 
 Use `web_search` for discovery and `web_fetch` for retrieval from a specific URL.
 

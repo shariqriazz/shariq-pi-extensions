@@ -27,6 +27,7 @@ type KeyRuntimeState = {
 };
 
 const state = new Map<string, KeyRuntimeState>();
+let lastConfigurationWarning: string | undefined;
 
 function keyId(entry: FactoryApiKeyEntry) {
   return entry.label || maskKey(entry.key);
@@ -48,6 +49,16 @@ function normalizeEntry(raw: string | Partial<FactoryApiKeyEntry>, index: number
   return { label: raw.label?.trim() || `key-${index + 1}`, key, disabled: Boolean(raw.disabled) };
 }
 
+export function parseFactoryApiKeyFile(raw: string): { entries: FactoryApiKeyEntry[]; warning?: string } {
+  try {
+    const parsed = JSON.parse(raw) as FactoryApiKeyConfig | string[];
+    const keys = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.keys) ? parsed.keys : [];
+    return { entries: keys.map(normalizeEntry).filter((entry): entry is FactoryApiKeyEntry => Boolean(entry)) };
+  } catch {
+    return { entries: [], warning: "Factory rotating-key configuration contains invalid JSON." };
+  }
+}
+
 export function loadFactoryApiKeys(): FactoryApiKeyEntry[] {
   const entries: FactoryApiKeyEntry[] = [];
   const envKeys = (process.env.FACTORY_API_KEYS || process.env.FACTORY_API_KEY || "")
@@ -56,14 +67,15 @@ export function loadFactoryApiKeys(): FactoryApiKeyEntry[] {
     .filter(Boolean);
   envKeys.forEach((key, index) => entries.push({ label: `env-${index + 1}`, key }));
 
+  lastConfigurationWarning = undefined;
   if (existsSync(FACTORY_API_KEYS_PATH)) {
-    const raw = readFileSync(FACTORY_API_KEYS_PATH, "utf8");
-    const parsed = JSON.parse(raw) as FactoryApiKeyConfig | string[];
-    const keys = Array.isArray(parsed) ? parsed : parsed.keys || [];
-    keys.forEach((entry, index) => {
-      const normalized = normalizeEntry(entry, index);
-      if (normalized) entries.push(normalized);
-    });
+    try {
+      const parsed = parseFactoryApiKeyFile(readFileSync(FACTORY_API_KEYS_PATH, "utf8"));
+      entries.push(...parsed.entries);
+      lastConfigurationWarning = parsed.warning;
+    } catch {
+      lastConfigurationWarning = "Factory rotating-key configuration could not be read.";
+    }
   }
 
   const seen = new Set<string>();
@@ -219,6 +231,7 @@ export function factoryApiKeyStatus() {
     configured: keys.length,
     active: activeKeyEntries().length,
     path: FACTORY_API_KEYS_PATH,
+    warning: lastConfigurationWarning,
     keys: keys.map((entry) => {
       const runtime = state.get(keyId(entry));
       return {

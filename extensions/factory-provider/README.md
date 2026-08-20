@@ -83,4 +83,4 @@ FACTORY_DROID_REFRESH=1 pi --list-models factory
 
 Normal Pi startup and `/reload` do not invoke Droid. After extension changes, run `/reload`, then `/login factory` if no unified credential is stored.
 
-From the repository root, run `npm run validate` to typecheck and test this extension with the rest of the default suite.
+From the repository root, run `npm run validate` to typecheck and test this extension with the complete suite.

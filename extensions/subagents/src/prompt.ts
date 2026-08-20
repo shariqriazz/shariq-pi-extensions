@@ -7,14 +7,14 @@ export const SUBAGENT_SPAWN_PROMPT_SNIPPET =
   "Start an independent background worker with optional context or a configured profile";
 
 export const WORKTREE_ISOLATION_DESCRIPTION =
-  "Workspace isolation. Default none. Use worktree only when the user requests it, a configured profile requires it, or concurrent write tasks are likely to overlap or interfere. Read-only work and clearly separate edits should share the workspace.";
+  "Workspace isolation. Default none. Use worktree only with a clean source checkout when the user requests it, a configured profile requires it, or concurrent write tasks are likely to overlap or interfere. Read-only work and clearly separate edits should share the workspace.";
 
 export const SUBAGENT_SPAWN_PROMPT_GUIDELINES = [
   "Use spawn_agent for work that can proceed independently. Children may coordinate with existing peers but cannot spawn agents.",
   "Give spawn_agent a complete task when fork_turns is none. Use fork_turns only when prior conversation is materially required.",
   "Use list_agent_profiles when a task needs a configured profile or persona whose name or defaults are unknown.",
   "Use agent_type explore or capability read-only for investigation that must not modify files.",
-  "Keep isolation none by default. Use worktree only when the user requests it, a configured profile requires it, or concurrent write tasks are likely to overlap or interfere. Do not isolate read-only work or clearly separate edits.",
+  "Keep isolation none by default. Use worktree only with a clean source checkout when the user requests it, a configured profile requires it, or concurrent write tasks are likely to overlap or interfere. Do not isolate read-only work or clearly separate edits.",
   "After isolated work finishes, inspect it and use apply_agent_changes only when its changes should enter the source repository.",
   "Use resume_from to continue a completed child's existing context instead of restating its original task.",
   "After spawn_agent or task starts background work, continue useful parent work; otherwise end the turn so Pi remains available to the user.",

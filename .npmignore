@@ -8,7 +8,16 @@ AGENTS.md
 .env.*
 **/.cache/
 **/node_modules/
+**/__pycache__/
+**/*.pyc
 **/factory-api-keys.json
 **/api-keys.json
 **/*.sqlite
 **/*.sqlite-*
+**/*.db
+**/*.db-*
+**/*.log
+**/*.jsonl
+**/logs/
+**/sessions/
+**/tmp/

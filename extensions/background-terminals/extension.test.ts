@@ -47,6 +47,37 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   assert.match(JSON.stringify(write.parameters), /press_enter/);
 });
 
+test("aborting startup stops the newly created terminal instead of orphaning it", async () => {
+  const tools = new Map<string, any>();
+  const hooks = new Map<string, (...args: any[]) => any>();
+  const messages: any[] = [];
+  extension({
+    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerCommand() {},
+    registerMessageRenderer() {},
+    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
+    sendMessage(message: any) { messages.push(message); },
+  } as never);
+  const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
+  hooks.get("session_start")?.({}, context);
+  const controller = new AbortController();
+  const starting = tools.get("start_terminal").execute(
+    "call-abort",
+    { command: "sleep 30", title: "abort fixture", wait_ms: 5_000 },
+    controller.signal,
+    undefined,
+    context,
+  );
+  setTimeout(() => controller.abort(), 50);
+  await assert.rejects(starting, /aborted/);
+
+  const listed = await tools.get("list_terminals").execute();
+  assert.equal(listed.details.terminals.length, 1);
+  assert.equal(listed.details.terminals[0].status, "killed");
+  assert.equal(messages.length, 0);
+  await hooks.get("session_shutdown")?.();
+});
+
 test("reading a settled terminal does not suppress automatic completion delivery", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();

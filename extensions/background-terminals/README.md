@@ -1,6 +1,6 @@
 # Pi background terminals
 
-Session-scoped background pseudo-terminals for Pi. The extension combines Codex-style PTY input and cursor reads with bounded capture, private full logs, automatic completion delivery, process-group shutdown, and a live Pi control center.
+Session-scoped background pseudo-terminals for Pi. The extension combines Codex-style PTY input and cursor reads with bounded capture, size-limited private logs, automatic completion delivery, process-group shutdown, and a live Pi control center.
 
 ## Model tools
 
@@ -28,7 +28,9 @@ Each output response carries a byte cursor. Pass it to the next read/write opera
 
 - Maximum eight concurrent terminals and 32 tracked entries.
 - Newest 2 MiB retained in memory per terminal.
-- Complete raw output spills to a mode-`0600` file under a mode-`0700` temporary session directory.
+- Raw output spills to a mode-`0600` file under a mode-`0700` temporary session directory, capped at 64 MiB per terminal.
+- Spill backpressure pauses and resumes the PTY; reaching the cap stops log growth while retaining the newest live-output tail.
+- Pruning an old settled terminal deletes its spill file immediately; session shutdown removes the complete temporary directory.
 - Output is sanitized before TUI or model rendering.
 - Processes run in their own PTY process group and are stopped on session shutdown, replacement, or reload.
 - Shutdown and stop operations are bounded and escalate from SIGTERM to SIGKILL.

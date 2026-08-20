@@ -97,6 +97,28 @@ test("sends authenticated API requests without returning the credential", async 
   assert.doesNotMatch(JSON.stringify(payload), /fc-private-test/);
 });
 
+test("rejects oversized streaming responses before buffering beyond 25 MiB", async () => {
+  let cancelled = false;
+  const chunk = new Uint8Array(1024 * 1024);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let index = 0; index < 26; index++) controller.enqueue(chunk);
+    },
+    cancel() { cancelled = true; },
+  });
+  await assert.rejects(
+    firecrawlRequest(
+      "search",
+      { query: "test", timeout: 5_000 },
+      { apiKey: "fc-private-test", apiUrl: "https://api.firecrawl.dev", source: "environment" },
+      undefined,
+      async () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    ),
+    /exceeded 25 MiB/,
+  );
+  assert.equal(cancelled, true);
+});
+
 test("formats compact untrusted search and scrape output", async () => {
   const search = await formatSearchOutput({ creditsUsed: 2, data: { web: [{ title: "Example", url: "https://example.com", description: "Result" }] } });
   assert.match(search, /untrusted web content/);

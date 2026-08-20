@@ -13,18 +13,20 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+def agent_dir():
+    configured = os.environ.get("PI_CODING_AGENT_DIR", "").strip()
+    return Path(configured).expanduser() if configured else Path.home() / ".pi" / "agent"
 
 
 def load_key():
     if key := os.environ.get("FACTORY_API_KEY", "").strip():
         return key
-    auth_path = Path.home() / ".pi" / "agent" / "auth.json"
+    auth_path = agent_dir() / "auth.json"
     if auth_path.exists():
         factory = json.loads(auth_path.read_text()).get("factory", {})
         if factory.get("type") == "api_key" and factory.get("key"):
             return factory["key"]
-    key_path = ROOT / "factory-api-keys.json"
+    key_path = agent_dir() / "factory" / "api-keys.json"
     if key_path.exists():
         entries = json.loads(key_path.read_text()).get("keys", [])
         if entries:

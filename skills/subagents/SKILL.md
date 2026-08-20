@@ -55,14 +55,16 @@ Even with `fork_turns`, keep the assignment explicit. Fork only the conversation
 
 Choose the narrowest capability that can complete the assignment:
 
-- `read-only` for inspection without command execution;
-- `execute` for investigation and diagnostics without edits;
-- `read-write` for file changes without command execution;
-- `all` only when implementation and validation both require it.
+- `read-only` for allowlisted inspection tools without command execution;
+- `execute` for allowlisted inspection plus shell/background-terminal diagnostics without direct edit tools;
+- `read-write` for allowlisted inspection plus direct file edits without command execution;
+- `all` only when implementation and validation require unclassified extension tools or unrestricted access.
+
+Restrictive capabilities fail closed for unclassified extension tools; use `all` only when that broader authority is actually required.
 
 Use an established profile or persona when it matches; do not invent names without checking the catalog. Omit model and thinking overrides unless the task needs a deliberate choice, so the child inherits the parent defaults. When an override is necessary, use only an exact model/provider exposed by the current Pi registry or profile—never copy provider examples from another harness or assume one is installed.
 
-Keep `isolation=none` for read-only work and shared-checkout work with clear ownership. Use a worktree only when concurrent writes could overlap or interfere. Worktree isolation is not a reason to delegate, and it does not authorize publication.
+Keep `isolation=none` for read-only work and shared-checkout work with clear ownership. Use a worktree only when concurrent writes could overlap or interfere. Worktree isolation requires a clean source checkout because the child branch starts from `HEAD`; if the source is dirty, commit or stash first or use the shared workspace. Worktree isolation is not a reason to delegate, and it does not authorize publication.
 
 ## Coordinate without losing ownership
 

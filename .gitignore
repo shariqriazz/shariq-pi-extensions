@@ -16,6 +16,9 @@ factory-api-keys.json
 api-keys.json
 *.sqlite
 *.sqlite-*
+*.db
+*.db-*
+*.jsonl
 .cache/
 
 # Local test artifacts.

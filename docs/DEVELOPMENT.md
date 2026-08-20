@@ -8,7 +8,7 @@ Last verified: 2026-08-20
 - Pi matching the pinned development dependency version
 - platform build support required by `@lydell/node-pty`
 
-Install the exact Node toolchain and workspace dependencies:
+Install the exact Node toolchain and dependencies:
 
 ```bash
 mise install --locked
@@ -17,11 +17,10 @@ mise exec --locked -- npm ci
 
 ## Validation
 
-Run the default suite and optional memory package separately:
+Validate the complete suite and inspect the package payload:
 
 ```bash
 mise exec --locked -- npm run validate
-mise exec --locked -- npm run validate --workspace packages/pi-memory
 mise exec --locked -- npm pack --dry-run
 ```
 
@@ -50,9 +49,9 @@ The root manifest declares `skills/background-terminals` and `skills/subagents`.
 
 When either skill changes, validate its structure and keep its behavior aligned with the corresponding extension tools.
 
-## Optional memory
+## Pi Memory
 
-`packages/pi-memory` remains source-controlled in this repository but is absent from the root Pi manifest. It can be installed explicitly as a local subpackage from a trusted clone. Removing that local package disables memory without deleting its database.
+Pi Memory is a normal root-package resource at `extensions/pi-memory`. It is declared separately in `package.json#pi.extensions`, so `pi config` can enable or disable it without affecting the other extensions. Its database stays under `<agent-dir>/pi-memory/` and must never be stored in the managed Git checkout.
 
 ## Current-machine cutover
 
@@ -62,7 +61,7 @@ Do not remove a working local extension set before the managed Git package is av
 2. Run `pi install git:https://github.com/shariqriazz/shariq-pi-extensions`; do not reload yet.
 3. Move old auto-discovered extension directories out of the active Pi extension directory so package and local copies cannot load together.
 4. Move the old paired skill directories out of active discovery; the Git package supplies them.
-5. Keep optional memory uninstalled and preserve its archived source and data.
+5. Keep Pi Memory disabled through the package resource filter when memory should remain inactive; preserve its data under `<agent-dir>/pi-memory/`.
 6. Preserve Factory keys and Droid cache under `<agent-dir>/factory/` with restrictive permissions.
 7. Run `/reload` once.
 8. Verify package provenance through `pi list`, then check representative commands, tools, providers, and both packaged skills.

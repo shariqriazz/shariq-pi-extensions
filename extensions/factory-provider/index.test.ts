@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import factoryExtension from "./index.ts";
-import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders } from "./factory/api-keys.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, factoryApiKeyStatus, factoryAuthModeFromHeaders, parseFactoryApiKeyFile } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
 import { factoryApiForModel } from "./factory/models.ts";
-import { FACTORY_SYSTEM_MARKER, sanitizeFactoryContext } from "./factory/responses.ts";
+import { FACTORY_SYSTEM_MARKER, sanitizeFactoryContext, streamFactoryGemini } from "./factory/responses.ts";
 
 async function registeredFactory() {
   const providers = new Map<string, any>();
@@ -29,6 +29,57 @@ test("Factory requests preserve Pi guidance behind the required Factory system m
   assert.match(context.systemPrompt, /running in Pi/);
   assert.doesNotMatch(context.systemPrompt, /operating inside pi/);
   assert.equal(sanitizeFactoryContext(context).systemPrompt.split(FACTORY_SYSTEM_MARKER).length - 1, 1);
+});
+
+test("Factory Gemini preserves guidance, multimodal/tool context, and every streamed event", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  let requestBody: any;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    requestUrl = String(url);
+    requestBody = JSON.parse(String(init?.body));
+    const events = [
+      { candidates: [{ content: { parts: [{ text: "first" }] } }] },
+      { candidates: [{ content: { parts: [{ text: " second" }] } }] },
+      {
+        candidates: [{ content: { parts: [{ functionCall: { id: "call-1", name: "read", args: { path: "README.md" } } }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 4, totalTokenCount: 15 },
+      },
+    ];
+    return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }) as typeof fetch;
+  try {
+    const stream = streamFactoryGemini(
+      { id: "gemini-3.7-flash", provider: "factory", api: "google-generative-ai", baseUrl: "https://factory.example/api/llm/g/v1" },
+      {
+        systemPrompt: "System guidance",
+        messages: [
+          { role: "user", content: [{ type: "text", text: "look" }, { type: "image", mimeType: "image/png", data: "aW1hZ2U=" }] },
+          { role: "assistant", provider: "factory", model: "gemini-3.7-flash", content: [{ type: "toolCall", id: "prior", name: "read", arguments: { path: "a.ts" } }] },
+          { role: "toolResult", toolCallId: "prior", toolName: "read", isError: false, content: [{ type: "text", text: "source" }] },
+        ],
+        tools: [{ name: "read", description: "Read a file", parameters: { type: "object" } }],
+      },
+      { headers: { Authorization: "Bearer test" } },
+    );
+    const emitted: any[] = [];
+    for await (const event of stream) emitted.push(event);
+    const done = emitted.find((event) => event.type === "done");
+    assert.equal(requestUrl, "https://factory.example/api/llm/g/v1/generate");
+    assert.equal(requestBody.systemInstruction.parts[0].text, "System guidance");
+    assert.equal(requestBody.contents[0].parts[1].inlineData.mimeType, "image/png");
+    assert.equal(requestBody.contents[2].parts[0].functionResponse.response.output, "source");
+    assert.equal(requestBody.tools[0].functionDeclarations[0].name, "read");
+    assert.equal(done.message.content[0].text, "first second");
+    assert.equal(done.message.content[1].type, "toolCall");
+    assert.equal(done.message.stopReason, "toolUse");
+    assert.equal(done.message.usage.totalTokens, 15);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("routes selected models through their Factory API families", () => {
@@ -113,6 +164,13 @@ test("registers native API-key auth alongside Factory account OAuth", async () =
   const { config } = await registeredFactory();
   assert.equal(config.apiKey, "$FACTORY_API_KEY");
   assert.ok(config.oauth);
+});
+
+test("malformed rotating-key configuration becomes a warning instead of an exception", () => {
+  assert.deepEqual(parseFactoryApiKeyFile("{"), {
+    entries: [],
+    warning: "Factory rotating-key configuration contains invalid JSON.",
+  });
 });
 
 test("configured key login stores a non-secret file selector", async () => {

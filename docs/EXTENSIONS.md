@@ -4,11 +4,11 @@ Last verified: 2026-08-20
 
 ## Providers
 
-### Antigravity OAuth
+### [Antigravity Provider](../extensions/antigravity-provider/README.md)
 
 Registers the `antigravity` provider and `/login antigravity` flow for supported Google Antigravity models. Use `/antigravity.doctor` to inspect non-secret provider status. Credentials remain in Pi auth storage.
 
-### Factory provider
+### [Factory provider](../extensions/factory-provider/README.md)
 
 Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory-status` reports catalog and authentication state without exposing keys.
 
@@ -22,21 +22,21 @@ The curated catalog intentionally excludes `-fast` variants and the removals doc
 
 ## Agent workflow
 
-### Structured questions
+### [Structured questions](../extensions/ask-user/README.md)
 
 `ask_user` presents one blocking multiple-choice decision with an optional custom answer. It is intended for decisions that cannot be resolved safely from available context.
 
-### Goals
+### [Goals](../extensions/goal/README.md)
 
 The goal extension adds persistent, branch-safe objectives, progress evidence, budgets, pause/resume controls, and strict completion/blocker gates. Use `/goal` for the operator UI and the `create_goal`, `get_goal`, `update_goal_progress`, and `update_goal` tools for agent-controlled state.
 
-### Subagents
+### [Subagents](../extensions/subagents/README.md)
 
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
 The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. Child settlement automatically sends a follow-up that starts the next parent turn; status tools are for explicit inspection, not waiting.
 
-### Background terminals
+### [Background terminals](../extensions/background-terminals/README.md)
 
 Managed PTYs support servers, watchers, long builds, downloads, and interactive processes. The extension tracks up to eight concurrent terminals, retains bounded output, stores full logs in restrictive temporary directories, and stops process groups during shutdown or reload.
 
@@ -44,37 +44,35 @@ Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_termina
 
 ## Web access
 
-### Firecrawl web
+### [Firecrawl web](../extensions/firecrawl-web/README.md)
 
 `web_search` discovers current web, news, images, GitHub, research, and PDF sources. `web_scrape` renders difficult or JavaScript-heavy pages. Authentication resolves from environment variables, the active Pi agent `.env`, or Firecrawl CLI credentials.
 
-### Web fetch
+### [Web fetch](../extensions/web-fetch/README.md)
 
 `web_fetch` retrieves a known HTTP or HTTPS URL without spending Firecrawl credits. It supports Markdown, text, and HTML output with bounded time and response size.
 
 ## Interface and quality of life
 
-### Context Scope
+### [Context Usage](../extensions/context-usage/README.md)
 
-Displays the estimated prompt and session contribution to the active context window. Use `Ctrl+O` or `/contextscope` to cycle summary, compact, and expanded views.
+Displays the estimated prompt and session contribution to the active context window. Use `Ctrl+O` or `/context-usage` to cycle summary, compact, and expanded views.
 
-### Git info
+### [Git info](../extensions/git-info/README.md)
 
 Adds repository state to Pi's interface. `/lg` opens the local Git view and `/pr` exposes pull-request context when available.
 
-### Copy all
+### [Copy all](../extensions/copy-all/README.md)
 
 `/copy-all` copies the current conversation in a readable form while omitting tool protocol noise that does not belong in the transcript.
 
-### Shell shortcuts
+### [Shell shortcuts](../extensions/shell-shortcuts/README.md)
 
 Adds `/exit` as an alias for Pi's normal quit command. Keep this extension limited to small, low-risk conveniences.
 
-## Optional persistent memory
+## [Persistent memory](../extensions/pi-memory/README.md)
 
-Pi Memory is maintained under `packages/pi-memory` as an optional local subpackage. It injects bounded relevant memories, queues asynchronous extraction, and stores durable state in SQLite under `<agent-dir>/pi-memory/`.
-
-It is not part of the root package manifest. Installing or updating the default suite cannot activate memory.
+Pi Memory lives at `extensions/pi-memory` as an individually toggleable resource in the main package. It injects bounded relevant memories, queues asynchronous extraction, and stores durable state in SQLite under `<agent-dir>/pi-memory/`. Enable or disable it through `pi config`; disabling it does not delete its data.
 
 ## Per-extension details
 

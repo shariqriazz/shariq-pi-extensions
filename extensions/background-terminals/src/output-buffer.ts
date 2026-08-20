@@ -15,6 +15,7 @@ export class OutputBuffer {
   private _truncatedBytes = 0;
   private _version = 0;
   spillPath?: string;
+  spillTruncated = false;
   private readonly maxRetainedBytes: number;
   private readonly spill?: (chunk: string) => void;
 
@@ -103,6 +104,7 @@ export class OutputBuffer {
       cursor: this._totalBytes,
       version: this._version,
       spillPath: this.spillPath,
+      spillTruncated: this.spillTruncated,
     };
   }
 }

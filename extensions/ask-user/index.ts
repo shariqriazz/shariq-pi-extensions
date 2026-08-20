@@ -77,6 +77,30 @@ function cleanMultiline(text: string): string {
   return sanitizeTerminalText(text).trim();
 }
 
+function normalizedChoiceKey(label: string): string {
+  return label.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function normalizeQuestionInput(
+  question: string,
+  options: ReadonlyArray<{ label: string; description?: string }>,
+): { question: string; options: DisplayOption[] } {
+  const cleanQuestion = cleanMultiline(question);
+  if (!cleanQuestion) throw new Error("question must contain visible text.");
+  const cleanOptions = options.map((option) => ({
+    label: cleanMultiline(option.label),
+    description: option.description ? cleanMultiline(option.description) || undefined : undefined,
+  }));
+  if (cleanOptions.some((option) => !option.label)) {
+    throw new Error("option labels must contain visible text.");
+  }
+  const keys = cleanOptions.map((option) => normalizedChoiceKey(option.label));
+  if (new Set(keys).size !== keys.length) {
+    throw new Error("option labels must be distinct after normalization.");
+  }
+  return { question: cleanQuestion, options: cleanOptions };
+}
+
 export function answerMessage(selection: Selection | null): string {
   if (!selection) return "The user dismissed the question. Do not guess repeatedly; continue only if a safe path remains, otherwise explain what is blocked.";
   return selection.custom
@@ -331,6 +355,7 @@ export default function askUserExtension(pi: ExtensionAPI) {
     ],
     parameters: AskUserParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const normalized = normalizeQuestionInput(params.question, params.options);
       if (ctx.mode !== "tui") {
         return {
           content: [{
@@ -338,8 +363,8 @@ export default function askUserExtension(pi: ExtensionAPI) {
             text: "Interactive choices are unavailable in this mode. Ask the user plainly in the final response only if the decision still blocks progress.",
           }],
           details: {
-            question: cleanMultiline(params.question),
-            options: params.options.map((option) => cleanMultiline(option.label)),
+            question: normalized.question,
+            options: normalized.options.map((option) => option.label),
             answer: null,
             custom: false,
             cancelled: true,
@@ -348,20 +373,17 @@ export default function askUserExtension(pi: ExtensionAPI) {
         };
       }
       const choices: DisplayOption[] = [
-        ...params.options.map((option) => ({
-          label: cleanMultiline(option.label),
-          description: option.description ? cleanMultiline(option.description) : undefined,
-        })),
+        ...normalized.options,
         { label: "Write my own answer…", custom: true },
       ];
       const selection = await openQuestion(
         ctx,
-        cleanMultiline(params.question),
+        normalized.question,
         choices,
         signal,
       );
       const details: AskUserDetails = {
-        question: cleanMultiline(params.question),
+        question: normalized.question,
         options: choices.filter((option) => !option.custom).map((option) => option.label),
         answer: selection?.answer ?? null,
         custom: selection?.custom ?? false,

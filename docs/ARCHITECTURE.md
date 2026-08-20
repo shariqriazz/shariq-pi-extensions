@@ -4,21 +4,15 @@ Last verified: 2026-08-20
 
 ## Package boundary
 
-The repository has two Pi package boundaries:
-
-- the repository root contains the default Git-installed suite;
-- `packages/pi-memory` contains optional persistent memory and is never loaded by the root manifest.
-
-Both packages declare exact entrypoints through `package.json#pi.extensions`. Pi therefore loads only intentional extension factories instead of scanning every TypeScript file.
+The repository has one Pi package boundary at its root. Every extension, including Pi Memory, is an independently declared resource in `package.json#pi.extensions`. Pi therefore loads only intentional extension factories, and `pi config` can toggle each one without separate installation.
 
 ## Source layout
 
 ```text
-extensions/<name>/index.ts       default-suite entrypoints
+extensions/<name>/index.ts       suite extension entrypoints
 extensions/<name>/src/           extension-owned implementation
 extensions/shared/               runtime helpers shared across extensions
 skills/                          operating guidance paired with async extensions
-packages/pi-memory/              independent optional Pi package
 docs/                            package-level maintenance documentation
 scripts/                         repository validation helpers
 ```
@@ -34,7 +28,7 @@ Third-party runtime dependencies are normal package dependencies:
 - `@lydell/node-pty` powers managed background terminals;
 - `effect` powers subagent lifecycle and coordination.
 
-The repository uses npm workspaces so the optional memory package shares one development lockfile without entering the default Pi manifest.
+The repository uses one root manifest and lockfile for the full extension suite.
 
 ## Runtime state
 
@@ -55,4 +49,4 @@ Runtime paths use `node:path`, `getAgentDir()`, `CONFIG_DIR_NAME`, `os.homedir()
 
 Pi installs this package under its managed Git directory. Updates can reset and clean that checkout, so user state must never be written beside extension source.
 
-`pi config` controls individual resources in the default package. Pi Memory uses a separate package boundary because persistent memory should require an explicit installation rather than a default resource toggle.
+`pi config` controls every individual package resource, including Pi Memory. Disabling Pi Memory leaves its runtime database intact and prevents its extension factory from loading after reload.

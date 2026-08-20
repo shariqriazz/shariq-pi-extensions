@@ -18,17 +18,18 @@ function snapshot(text: string) {
       cursor: Buffer.byteLength(text),
       version: 1,
       spillPath: "/tmp/full.log",
+      spillTruncated: false,
     },
     cols: 120,
     rows: 30,
   } as const;
 }
 
-test("model-facing terminal output is bounded and points to the full log", () => {
+test("model-facing terminal output is bounded and points to the private log", () => {
   const terminal = snapshot(Array.from({ length: 5_000 }, (_, index) => `line-${index} ${"x".repeat(40)}`).join("\n"));
   const read = formatReadResult({ snapshot: terminal, text: terminal.output.text, cursor: terminal.output.cursor, omittedBytes: 10 });
   assert.ok(Buffer.byteLength(read, "utf8") < MODEL_OUTPUT_MAX_BYTES + 2_000);
-  assert.match(read, /Full log: \/tmp\/full\.log/);
+  assert.match(read, /Private log: \/tmp\/full\.log/);
   assert.match(read, /omitted/);
 
   const completion = formatCompletion({ ...terminal, status: "failed", exitCode: 1, settledAt: Date.now() });

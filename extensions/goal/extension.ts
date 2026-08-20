@@ -15,6 +15,24 @@ import type {
 	GoalUpdateParams,
 } from "./types.ts";
 
+const STATUS_ONLY_TOOL_NAMES = new Set([
+	"get_goal",
+	"check_agent",
+	"list_agents",
+	"list_agent_profiles",
+	"wait_agent",
+	"list_terminals",
+	"pi_memory_status",
+]);
+
+function blockerSignature(progress: ReadonlyArray<GoalProgressItem>): string {
+	return progress
+		.filter((item) => item.status === "blocked")
+		.map((item) => JSON.stringify([item.id, item.title.trim().normalize("NFKC")]))
+		.sort()
+		.join("|");
+}
+
 export default function goalExtension(pi: ExtensionAPI) {
 	let goal: GoalState | null = null;
 	let lastContextText: string | null = null;
@@ -669,9 +687,11 @@ Status is budget_limited. Start no new substantive work; promptly summarize prog
 		runActive = true;
 	});
 
-	pi.on("tool_execution_start", async (_event, ctx) => {
+	pi.on("tool_execution_start", async (event, ctx) => {
 		lastCtx = ctx;
-		if (goal?.status === "active") runMadeToolCall = true;
+		if (goal?.status === "active" && !STATUS_ONLY_TOOL_NAMES.has(event.toolName)) {
+			runMadeToolCall = true;
+		}
 	});
 
 	pi.on("turn_start", async (_event, ctx) => {
@@ -715,11 +735,7 @@ Status is budget_limited. Start no new substantive work; promptly summarize prog
 			return;
 		}
 
-		const blockedSignature = goal.progress
-			.filter((item) => item.status === "blocked")
-			.map((item) => item.id)
-			.sort()
-			.join("|");
+		const blockedSignature = blockerSignature(goal.progress);
 		if (!blockedSignature) {
 			goal.blockedTurnStreak = 0;
 			goal.blockedSignature = null;
@@ -1020,11 +1036,7 @@ Status is budget_limited. Start no new substantive work; promptly summarize prog
 				if (!goal.progress.some((item) => item.status === "blocked")) {
 					throw new Error("Mark the specific blocked checklist item with update_goal_progress before blocking the goal.");
 				}
-				const signature = goal.progress
-					.filter((item) => item.status === "blocked")
-					.map((item) => item.id)
-					.sort()
-					.join("|");
+				const signature = blockerSignature(goal.progress);
 				const effectiveStreak = goal.blockedTurnStreak + (
 					runActive && goal.blockedSignature === signature ? 1 : 0
 				);

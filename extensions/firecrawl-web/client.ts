@@ -148,6 +148,35 @@ function redactSecrets(text: string): string {
   return text.replace(/fc-[A-Za-z0-9_-]{8,}/g, "[redacted]");
 }
 
+async function readResponseBounded(response: Response): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_RESPONSE_BYTES) throw new Error("Firecrawl response exceeded 25 MiB.");
+    return bytes;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel("Firecrawl response exceeded 25 MiB.").catch(() => undefined);
+      throw new Error("Firecrawl response exceeded 25 MiB.");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export async function firecrawlRequest(
   endpoint: "search" | "scrape",
   body: Record<string, unknown>,
@@ -176,8 +205,7 @@ export async function firecrawlRequest(
 
       const contentLength = Number(response.headers.get("content-length") || 0);
       if (contentLength > MAX_RESPONSE_BYTES) throw new Error("Firecrawl response exceeded 25 MiB.");
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength > MAX_RESPONSE_BYTES) throw new Error("Firecrawl response exceeded 25 MiB.");
+      const bytes = await readResponseBounded(response);
       const text = new TextDecoder().decode(bytes);
       let payload: unknown;
       try {

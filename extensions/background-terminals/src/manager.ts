@@ -13,6 +13,7 @@ import type {
 export const MAX_RUNNING_TERMINALS = 8;
 export const MAX_TRACKED_TERMINALS = 32;
 export const RETAINED_OUTPUT_BYTES = 2 * 1024 * 1024;
+export const MAX_FULL_LOG_BYTES = 64 * 1024 * 1024;
 const TERM_GRACE_MS = 2_000;
 const KILL_GRACE_MS = 750;
 const FLUSH_GRACE_MS = 1_000;
@@ -97,11 +98,16 @@ export class TerminalManager {
   private disposed = false;
   private settledListener?: (snapshot: TerminalSnapshot) => void;
   private readonly environment: NodeJS.ProcessEnv;
+  private readonly maxFullLogBytes: number;
 
   readonly view: TerminalManagerView;
 
-  constructor(environment: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    environment: NodeJS.ProcessEnv = process.env,
+    options: { maxFullLogBytes?: number } = {},
+  ) {
     this.environment = environment;
+    this.maxFullLogBytes = Math.max(1, options.maxFullLogBytes ?? MAX_FULL_LOG_BYTES);
     const base = path.join(os.tmpdir(), "pi-background-terminals");
     fs.mkdirSync(base, { recursive: true, mode: 0o700 });
     fs.chmodSync(base, 0o700);
@@ -193,19 +199,59 @@ export class TerminalManager {
       const spillPath = path.join(this.spillDir, `${id}.log`);
       const spill = fs.createWriteStream(spillPath, { flags: "a", mode: 0o600 });
       let spillHealthy = true;
+      let spillBytes = 0;
+      let spillTruncated = false;
+      let pausedForSpill = false;
+      let pty: IPty | undefined;
+      let snapshot: MutableSnapshot | undefined;
+      const markSpillTruncated = () => {
+        if (spillTruncated) return;
+        spillTruncated = true;
+        output.spillTruncated = true;
+      };
       const output = new OutputBuffer(RETAINED_OUTPUT_BYTES, (chunk) => {
-        if (spillHealthy && !spill.writableEnded) spill.write(chunk);
+        if (!spillHealthy || spill.writableEnded || spillTruncated) return;
+        const bytes = Buffer.from(chunk, "utf8");
+        const remaining = this.maxFullLogBytes - spillBytes;
+        if (remaining <= 0) {
+          markSpillTruncated();
+          return;
+        }
+        const payload = bytes.length > remaining ? bytes.subarray(0, remaining) : bytes;
+        spillBytes += payload.length;
+        const accepted = spill.write(payload);
+        if (payload.length < bytes.length || spillBytes >= this.maxFullLogBytes) markSpillTruncated();
+        if (!accepted && pty && !pausedForSpill) {
+          pausedForSpill = true;
+          pty.pause();
+        }
       });
       output.spillPath = spillPath;
+      spill.on("drain", () => {
+        if (!pausedForSpill) return;
+        pausedForSpill = false;
+        try {
+          pty?.resume();
+        } catch {
+          // Exit may have won the drain race.
+        }
+      });
       spill.on("error", (error) => {
         spillHealthy = false;
         output.spillPath = undefined;
+        if (pausedForSpill) {
+          pausedForSpill = false;
+          try {
+            pty?.resume();
+          } catch {
+            // Exit may have won the error race.
+          }
+        }
         const entry = this.entries.get(id);
         if (entry) entry.snapshot.errorText ??= `Full-log capture failed: ${cleanError(error)}`;
       });
 
       const shell = shellInvocation(options.command);
-      let pty: IPty;
       try {
         pty = spawnPty(shell.file, shell.args, {
           name: "xterm-256color",
@@ -223,7 +269,7 @@ export class TerminalManager {
       const settled = new Promise<TerminalSnapshot>((resolve) => {
         resolveSettled = resolve;
       });
-      const snapshot: MutableSnapshot = {
+      snapshot = {
         id,
         title: options.title,
         command: options.command,
@@ -237,18 +283,20 @@ export class TerminalManager {
           return output.view();
         },
       };
+      const activePty = pty!;
+      const activeSnapshot = snapshot!;
       const entry = {} as Entry;
-      const dataSubscription = pty.onData((chunk) => {
+      const dataSubscription = activePty.onData((chunk) => {
         if (entry.settledFinal) return;
         output.push(chunk);
         this.notify(id);
       });
-      const exitSubscription = pty.onExit(({ exitCode, signal }) => {
+      const exitSubscription = activePty.onExit(({ exitCode, signal }) => {
         void this.finalize(entry, exitCode, signal);
       });
       Object.assign(entry, {
-        snapshot,
-        pty,
+        snapshot: activeSnapshot,
+        pty: activePty,
         output,
         spill,
         dataSubscription,
@@ -261,7 +309,7 @@ export class TerminalManager {
       } satisfies Entry);
       this.entries.set(id, entry);
       this.notify(id);
-      return snapshot;
+      return activeSnapshot;
     } finally {
       this.starting--;
     }
@@ -414,6 +462,7 @@ export class TerminalManager {
       if (this.entries.size <= MAX_TRACKED_TERMINALS) break;
       this.entries.delete(entry.snapshot.id);
       this.idListeners.delete(entry.snapshot.id);
+      fs.rmSync(entry.output.spillPath ?? entry.spill.path.toString(), { force: true });
     }
   }
 

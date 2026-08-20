@@ -123,6 +123,23 @@ test("FAIL: prompts settle as errors; unconsumed settles are delivered", async (
   });
 });
 
+test("runtime disposal persists running agents as interrupted without delivering them", async () => {
+  const runtime = createTestRuntime();
+  const manager = await runtime.runPromise(SubagentManager);
+  const settled: Array<{ status: string; consumed: boolean; error?: string }> = [];
+  manager.view.setOnSettled((snap, consumed) => {
+    settled.push({ status: snap.status, consumed, error: snap.errorText });
+  });
+  const snap = await runTool(runtime, manager.spawn("pi", task("Long running shutdown task")));
+  assert.equal(snap.status, "running");
+
+  await runtime.dispose();
+
+  assert.deepEqual(settled, [{ status: "error", consumed: true, error: "Run was aborted" }]);
+  assert.equal(snap.status, "error");
+  assert.equal(snap.errorText, "Run was aborted");
+});
+
 test("cancel interrupts a running stub subagent", async () => {
   await withManager(async (manager, runtime) => {
     const snap = await runTool(

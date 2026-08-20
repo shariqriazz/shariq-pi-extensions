@@ -53,6 +53,50 @@ function capabilityExclusions(capability: SpawnTask["capability"]): string[] {
   }
 }
 
+const READ_CAPABILITY_TOOLS = new Set([
+  "read",
+  "grep",
+  "find",
+  "ls",
+  "web_search",
+  "web_scrape",
+  "web_fetch",
+  "pi_memory_search",
+  "pi_memory_read",
+  "pi_memory_status",
+  "get_goal",
+  "read_terminal",
+  "list_terminals",
+  "message_parent",
+  "ask_parent",
+  "list_peers",
+  "message_peer",
+]);
+
+const WRITE_CAPABILITY_TOOLS = new Set(["write", "edit"]);
+const EXECUTE_CAPABILITY_TOOLS = new Set([
+  "bash",
+  "start_terminal",
+  "read_terminal",
+  "write_terminal",
+  "list_terminals",
+  "stop_terminal",
+]);
+
+/** Restrictive modes fail closed when a newly registered extension tool has no classification. */
+export function filterToolsForCapability(
+  toolNames: ReadonlyArray<string>,
+  capability: SpawnTask["capability"],
+): string[] {
+  if (capability === "all") return [...toolNames];
+  return toolNames.filter((name) => {
+    if (READ_CAPABILITY_TOOLS.has(name)) return true;
+    if (capability === "read-write" && WRITE_CAPABILITY_TOOLS.has(name)) return true;
+    if (capability === "execute" && EXECUTE_CAPABILITY_TOOLS.has(name)) return true;
+    return false;
+  });
+}
+
 /** Tools that headless children must not receive. Everything else stays enabled. */
 const CHILD_EXCLUDED_TOOL_NAMES = [
   "spawn_agent",
@@ -449,6 +493,9 @@ const makePiSession = (
         // the scope finalizer that owns cleanup is only registered later.
         try {
           await session.bindExtensions({ mode: "print" });
+          session.setActiveToolsByName(
+            filterToolsForCapability(session.getActiveToolNames(), task.capability),
+          );
         } catch (error) {
           await shutdownAndDisposeChildSession(session);
           throw error;

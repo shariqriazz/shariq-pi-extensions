@@ -18,6 +18,26 @@ const exec = async (command: string, args: string[]) => {
   }
 };
 
+test("worktree isolation rejects a dirty source instead of hiding uncommitted changes", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "pi-subagent-dirty-worktree-test-"));
+  try {
+    await exec("git", ["-C", repo, "init", "-q"]);
+    await exec("git", ["-C", repo, "config", "user.email", "test@example.invalid"]);
+    await exec("git", ["-C", repo, "config", "user.name", "Pi Test"]);
+    writeFileSync(join(repo, "file.txt"), "committed\n");
+    await exec("git", ["-C", repo, "add", "file.txt"]);
+    await exec("git", ["-C", repo, "commit", "-qm", "initial"]);
+    writeFileSync(join(repo, "file.txt"), "uncommitted\n");
+
+    await assert.rejects(
+      createAgentWorktree(exec, repo, "dirty-test"),
+      /requires a clean source checkout/,
+    );
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 test("isolated worktree changes are preflighted and applied to the source repo", async () => {
   const repo = mkdtempSync(join(tmpdir(), "pi-subagent-worktree-test-"));
   let worktree: Awaited<ReturnType<typeof createAgentWorktree>> | undefined;

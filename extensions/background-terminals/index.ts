@@ -16,7 +16,7 @@ import {
   formatReadResult,
   formatTerminal,
 } from "./src/presentation.ts";
-import type { TerminalSnapshot } from "./src/types.ts";
+import type { TerminalReadResult, TerminalSnapshot } from "./src/types.ts";
 import { openTerminalDashboard } from "./src/ui.ts";
 
 const STATUS_KEY = "background-terminals";
@@ -135,7 +135,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     description:
       "Start a command in a real background pseudo-terminal (PTY) and return its terminal id. " +
       "Use for development servers, watchers, long builds, and commands that need terminal semantics. " +
-      "The PTY accepts later input through write_terminal, captures a bounded live tail in memory, writes the complete output to a private temporary log, and is stopped at session shutdown. " +
+      "The PTY accepts later input through write_terminal, captures a bounded live tail in memory, writes a size-limited private temporary log, and is stopped at session shutdown. " +
       `At most ${MAX_RUNNING_TERMINALS} terminals may run concurrently.`,
     promptSnippet: "Start an interactive or long-running command in a managed background PTY.",
     promptGuidelines: [
@@ -158,11 +158,19 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         cwd: resolveCwd(ctx.cwd, params.working_dir),
       });
       modelOwned.add(terminal.id);
-      const result = await getManager().read(terminal.id, {
-        cursor: 0,
-        waitMs: params.wait_ms ?? 300,
-        signal,
-      });
+      let result: TerminalReadResult;
+      try {
+        result = await getManager().read(terminal.id, {
+          cursor: 0,
+          waitMs: params.wait_ms ?? 300,
+          signal,
+        });
+      } catch (error) {
+        await getManager().kill([terminal.id]).catch(() => undefined);
+        modelOwned.delete(terminal.id);
+        consume(terminal.id);
+        throw error;
+      }
       if (result.snapshot.status !== "running") consume(terminal.id);
       let text = `Started background terminal ${terminal.id} "${oneLine(terminal.title)}" (pid ${terminal.pid}). Use cursor ${result.cursor} for incremental reads.`;
       if (result.text || result.snapshot.status !== "running") {
@@ -203,7 +211,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     description:
       "Read output from a managed background terminal only when the user asks for progress or current output is required for immediate interaction. " +
       "Do not use it to wait for completion: terminal settlement automatically sends a follow-up that starts the next parent turn. " +
-      "Pass the cursor from the previous terminal result to receive only newer output. Output is tail-truncated for model context; the full log path is reported when available.",
+      "Pass the cursor from the previous terminal result to receive only newer output. Output is tail-truncated for model context; the private log path is reported when available.",
     promptSnippet: "Read new output from a managed background terminal by id and cursor.",
     parameters: Type.Object({
       id: Type.String({ description: 'Terminal id, for example "term-1".' }),

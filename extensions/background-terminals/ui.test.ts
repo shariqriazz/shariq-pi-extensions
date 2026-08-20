@@ -18,6 +18,7 @@ const snapshot = {
     cursor: 32,
     version: 1,
     spillPath: "/tmp/private.log",
+    spillTruncated: false,
   },
   cols: 120,
   rows: 30,

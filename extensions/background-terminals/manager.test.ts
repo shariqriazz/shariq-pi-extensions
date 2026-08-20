@@ -39,6 +39,25 @@ test("runs a command in a PTY, captures output, and flushes a private full log",
   assert.equal(logPath ? fs.existsSync(logPath) : true, false);
 });
 
+test("caps private logs while retaining the newest live output", async () => {
+  const manager = new TerminalManager(process.env, { maxFullLogBytes: 128 });
+  try {
+    const terminal = manager.start({
+      title: "bounded-log",
+      command: "yes x | head -c 4096",
+      cwd: process.cwd(),
+    });
+    const settled = await waitForSettlement(manager, terminal.id);
+    const logPath = settled.snapshot.output.spillPath;
+    assert.equal(settled.snapshot.status, "done");
+    assert.equal(settled.snapshot.output.spillTruncated, true);
+    assert.ok(logPath && fs.statSync(logPath).size <= 128);
+    assert.ok(settled.snapshot.output.text.length > 128);
+  } finally {
+    await manager.dispose();
+  }
+});
+
 test("accepts interactive input and supports incremental output cursors", async () => {
   const manager = new TerminalManager();
   try {
@@ -78,6 +97,27 @@ test("stops the PTY process group and settles exactly once as killed", async () 
     assert.deepEqual(settled, [terminal.id]);
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.throws(() => process.kill(childPid, 0));
+  } finally {
+    await manager.dispose();
+  }
+});
+
+test("pruning settled terminals deletes their private logs", async () => {
+  const manager = new TerminalManager();
+  let oldestLog: string | undefined;
+  try {
+    for (let index = 0; index < 33; index++) {
+      const terminal = manager.start({
+        title: `settled-${index}`,
+        command: `printf '${index}\\n'`,
+        cwd: process.cwd(),
+      });
+      if (index === 0) oldestLog = terminal.output.spillPath;
+      await waitForSettlement(manager, terminal.id);
+    }
+    assert.ok(oldestLog);
+    assert.equal(fs.existsSync(oldestLog!), false);
+    assert.equal(manager.list().length, 32);
   } finally {
     await manager.dispose();
   }

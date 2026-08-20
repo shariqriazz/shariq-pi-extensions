@@ -28,6 +28,10 @@ const GH_TIMEOUT_MS = 10_000;
 const MAX_CHANGED_FILES = 250;
 const MAX_DIFF_LINES = 20_000;
 
+function stripFinalLineBreak(value: string): string {
+  return value.replace(/\r?\n$/, "");
+}
+
 function safePath(value: string): string {
   return sanitizeTerminalText(value).replace(/[\r\n\t]/g, " ");
 }
@@ -70,7 +74,7 @@ export async function loadGitSummary(
     timeout: GIT_TIMEOUT_MS,
   });
   if (root.code !== 0) return { isRepository: false, changedFiles: 0 };
-  const repoRoot = root.stdout.trim();
+  const repoRoot = stripFinalLineBreak(root.stdout);
   const [branch, head, status] = await Promise.all([
     pi.exec("git", ["branch", "--show-current"], {
       cwd: repoRoot,
@@ -177,7 +181,7 @@ export async function loadChangedFiles(
     timeout: GIT_TIMEOUT_MS,
   });
   if (root.code !== 0) return null;
-  const repoRoot = root.stdout.trim();
+  const repoRoot = stripFinalLineBreak(root.stdout);
   const [status, head] = await Promise.all([
     pi.exec("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
       cwd: repoRoot,

@@ -7,6 +7,7 @@ import { buildTaskPrompt, forkConversation, parseForkTurns } from "./src/context
 import { loadConfigDocument, resolveProfile, saveConfigDocument, type SubagentConfig } from "./src/config.ts";
 import { SUBAGENT_SPAWN_PROMPT_GUIDELINES, WORKTREE_ISOLATION_DESCRIPTION } from "./src/prompt.ts";
 import { allocateSubagentId } from "./src/catalog.ts";
+import { filterToolsForCapability } from "./src/backends/pi.ts";
 
 const usage = {
   input: 0,
@@ -90,6 +91,34 @@ test("configuration editor validates and saves trusted project documents", () =>
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
+});
+
+test("restrictive capabilities fail closed for extension execution tools", () => {
+  const inventory = [
+    "read",
+    "write",
+    "edit",
+    "bash",
+    "web_fetch",
+    "start_terminal",
+    "write_terminal",
+    "pi_memory_save",
+    "unknown_project_tool",
+    "message_parent",
+  ];
+  assert.deepEqual(
+    filterToolsForCapability(inventory, "read-only"),
+    ["read", "web_fetch", "message_parent"],
+  );
+  assert.deepEqual(
+    filterToolsForCapability(inventory, "read-write"),
+    ["read", "write", "edit", "web_fetch", "message_parent"],
+  );
+  assert.deepEqual(
+    filterToolsForCapability(inventory, "execute"),
+    ["read", "bash", "web_fetch", "start_terminal", "write_terminal", "message_parent"],
+  );
+  assert.deepEqual(filterToolsForCapability(inventory, "all"), inventory);
 });
 
 test("profile resolution applies explicit overrides before profile and persona defaults", () => {

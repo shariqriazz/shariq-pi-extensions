@@ -8,6 +8,7 @@ interface RegisteredTool {
   description: string;
   promptGuidelines: string[];
   parameters: { properties: { options: { minItems: number; maxItems: number } } };
+  execute(id: string, params: any, signal: AbortSignal | undefined, onUpdate: undefined, ctx: any): Promise<any>;
 }
 
 test("registers a narrowly gated ask_user tool", () => {
@@ -24,6 +25,20 @@ test("registers a narrowly gated ask_user tool", () => {
   assert.ok(tool.promptGuidelines.every((line) => line.includes("ask_user")));
   assert.equal(tool.parameters.properties.options.minItems, 2);
   assert.equal(tool.parameters.properties.options.maxItems, 5);
+});
+
+test("rejects blank and duplicate choices after display normalization", async () => {
+  let tool: RegisteredTool | undefined;
+  askUserExtension({ registerTool(definition: RegisteredTool) { tool = definition; } } as unknown as ExtensionAPI);
+  const ctx = { mode: "print" };
+  await assert.rejects(
+    tool!.execute("blank", { question: "Choose", options: [{ label: " \u001b[31m " }, { label: "Valid" }] }, undefined, undefined, ctx),
+    /visible text/,
+  );
+  await assert.rejects(
+    tool!.execute("duplicate", { question: "Choose", options: [{ label: "Keep" }, { label: "  keep  " }] }, undefined, undefined, ctx),
+    /distinct/,
+  );
 });
 
 test("formats selected, custom, and dismissed answers without filler", () => {

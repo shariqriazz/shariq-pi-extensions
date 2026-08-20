@@ -31,10 +31,12 @@ Built-in profiles:
 
 Capability modes:
 
-- `read-only` — read/search only
-- `read-write` — read and edit, without shell execution
-- `execute` — read and execute commands, without direct file edits
+- `read-only` — allowlisted read/search and parent-communication tools only
+- `read-write` — the read-only allowlist plus direct file write/edit tools, without shell execution
+- `execute` — the read-only allowlist plus shell and background-terminal execution, without direct file edit tools
 - `all` — full child tool access
+
+Restrictive modes fail closed: newly registered extension tools remain unavailable until they are explicitly classified. This prevents another extension from silently bypassing the selected capability.
 
 Optional user profiles and personas can be defined in `~/.pi/agent/subagents.json`. Trusted projects may override them in `.pi/subagents.json`:
 
@@ -68,7 +70,7 @@ Every child uses a persistent Pi session file. `resume_from` continues a complet
 
 Children share the requested workspace by default. Use `isolation: "worktree"` only when the user requests it, a configured profile requires it, or concurrent write tasks are likely to overlap or interfere. Read-only work and edits to clearly separate areas should stay in the shared workspace.
 
-`isolation: "worktree"` creates a dedicated branch and persistent git worktree under `~/.pi/agent/subagent-worktrees/`. `apply_agent_changes` supports `inspect`, checked patch application, commit-preserving cherry-pick, merge, and permanent discard. Cherry-pick and merge first run in a temporary worktree; conflicts leave the source checkout unchanged. Discard requires confirmation in interactive mode. A failed spawn removes the worktree it created; completed worktrees remain available for inspection or continuation.
+`isolation: "worktree"` requires a clean source checkout, then creates a dedicated branch and persistent git worktree from `HEAD` under `~/.pi/agent/subagent-worktrees/`. A dirty source is rejected rather than silently giving the child stale code; commit or stash first, or use the shared workspace. `apply_agent_changes` supports `inspect`, checked patch application, commit-preserving cherry-pick, merge, and permanent discard. Cherry-pick and merge first run in a temporary worktree; conflicts leave the source checkout unchanged. Discard requires confirmation in interactive mode. A failed spawn removes the worktree it created; completed worktrees remain available for inspection or continuation.
 
 ## UI
 

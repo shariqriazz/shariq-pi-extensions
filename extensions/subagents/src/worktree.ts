@@ -31,6 +31,12 @@ async function checked(exec: Exec, command: string, args: string[]) {
 
 export async function createAgentWorktree(exec: Exec, cwd: string, label: string): Promise<WorktreeInfo> {
   const repoRoot = await checked(exec, "git", ["-C", cwd, "rev-parse", "--show-toplevel"]);
+  const sourceStatus = await checked(exec, "git", ["-C", repoRoot, "status", "--porcelain", "--untracked-files=all"]);
+  if (sourceStatus) {
+    throw new Error(
+      "Worktree isolation requires a clean source checkout because isolated branches start from HEAD and cannot safely inherit uncommitted changes. Commit or stash the changes, or use the shared workspace.",
+    );
+  }
   const baseCommit = await checked(exec, "git", ["-C", repoRoot, "rev-parse", "HEAD"]);
   const repoHash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 12);
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "agent";

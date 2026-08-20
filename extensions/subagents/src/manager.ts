@@ -39,6 +39,7 @@ import type {
 import {
   BackendUnavailableError,
   ConcurrencyLimitError,
+  latestText,
   SendError,
   SpawnError,
 } from "./domain.ts";
@@ -263,7 +264,7 @@ const makeManager = Effect.gen(function* () {
     }
   };
 
-  const settle = (entry: Entry, outcome: RunOutcome) => {
+  const settle = (entry: Entry, outcome: RunOutcome, persistOnly = false) => {
     const s = entry.snapshot;
     entry.restarting = false;
     if (s.status !== "running") return;
@@ -294,7 +295,7 @@ const makeManager = Effect.gen(function* () {
     notify(s.id);
     try {
       // During teardown, don't queue results into a shutting-down session.
-      if (!disposed && !rollingBack.has(s.id)) onSettled?.(s, consumed);
+      if (!disposed && !rollingBack.has(s.id)) onSettled?.(s, consumed || persistOnly);
     } catch {
       // The parent session may be unavailable; settlement stays final.
     }
@@ -686,8 +687,13 @@ const makeManager = Effect.gen(function* () {
     });
 
   const disposeAll = Effect.gen(function* () {
-    disposed = true;
     const all = [...entries.values()];
+    for (const entry of all) {
+      if (entry.snapshot.status === "running") {
+        settle(entry, { _tag: "Interrupted", partialText: latestText(entry.snapshot) }, true);
+      }
+    }
+    disposed = true;
     entries.clear();
     yield* Effect.forEach(
       all,
