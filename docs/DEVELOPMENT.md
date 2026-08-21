@@ -82,7 +82,7 @@ Before publishing a new npm version:
 1. Update `package.json#version` using semantic versioning.
 2. Run `mise exec --locked -- npm ci` and `mise exec --locked -- npm run validate`.
 3. Inspect `mise exec --locked -- npm run pack:inspect` for secrets, runtime state, and accidental files.
-4. Publish with `npm publish --access public --provenance`, or run the `Publish npm package` workflow with `NPM_TOKEN` configured.
+4. Run the `Publish npm package` workflow. npm trusted publishing authenticates it through GitHub OIDC and records provenance without a long-lived token.
 5. Verify the registry version and install it with `pi install npm:shariq-pi-extensions`.
 
 Use npm for stable versioned installs. Use an unpinned Git source for updates directly from `main`, and a tag or commit when a machine should remain fixed to a known revision.

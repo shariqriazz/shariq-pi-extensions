@@ -19,5 +19,3 @@ jobs:
       - run: mise exec --locked -- npm ci
       - run: mise exec --locked -- npm run validate
       - run: mise exec --locked -- npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
