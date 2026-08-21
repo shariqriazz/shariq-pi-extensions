@@ -2,7 +2,7 @@
 
 ## Project
 
-This private repository packages all of the user's Pi extensions as one Git-installed suite. Every extension, including Pi Memory, lives under `extensions/` and is individually toggleable through `pi config`.
+This public repository packages the user's Pi extensions as one suite distributed through npm and Git. Every extension, including Pi Memory, lives under `extensions/` and is individually toggleable through `pi config`.
 
 ## Commands
 

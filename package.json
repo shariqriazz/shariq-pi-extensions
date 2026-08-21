@@ -1,9 +1,9 @@
 {
   "name": "shariq-pi-extensions",
   "version": "0.1.0",
-  "private": true,
-  "description": "Private cross-platform extension suite for the Pi coding agent.",
-  "license": "UNLICENSED",
+  "description": "Cross-platform extension suite for the Pi coding agent.",
+  "license": "MIT",
+  "author": "Shariq Riaz",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -16,6 +16,14 @@
     "type": "git",
     "url": "git+https://github.com/shariqriazz/shariq-pi-extensions.git"
   },
+  "homepage": "https://github.com/shariqriazz/shariq-pi-extensions#readme",
+  "bugs": {
+    "url": "https://github.com/shariqriazz/shariq-pi-extensions/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "files": [
     "extensions",
     "!extensions/**/*.test.ts",
@@ -23,6 +31,8 @@
     "skills",
     "themes",
     "docs",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "README.md"
   ],
   "pi": {
@@ -57,7 +67,8 @@
     "test": "node scripts/run-tests.mjs",
     "validate:package": "node scripts/validate-package.mjs",
     "validate": "npm run check && npm test && npm run validate:package",
-    "pack:inspect": "npm pack --dry-run"
+    "pack:inspect": "npm pack --dry-run",
+    "prepublishOnly": "npm run validate"
   },
   "dependencies": {
     "@lydell/node-pty": "1.1.0",

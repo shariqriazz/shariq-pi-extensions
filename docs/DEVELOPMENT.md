@@ -1,6 +1,6 @@
 # Development and cutover
 
-Last verified: 2026-08-20
+Last verified: 2026-08-21
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Do not add nested package manifests or lockfiles to default-suite extensions. Th
 
 ## Runtime configuration
 
-Use `getAgentDir()` for user-level state and `CONFIG_DIR_NAME` for project-level Pi configuration. Use `node:path` and explicit platform branches where third-party credential locations differ. Never infer a writable location from `import.meta.url` or the managed Git checkout.
+Use `getAgentDir()` for user-level state and `CONFIG_DIR_NAME` for project-level Pi configuration. Use `node:path` and explicit platform branches where third-party credential locations differ. Never infer a writable location from `import.meta.url` or the installed package directory.
 
 Keep secrets out of examples and fixtures. Tests should inject temporary roots, fake environment objects, or local test servers rather than reading real credentials.
 
@@ -51,13 +51,13 @@ When either skill changes, validate its structure and keep its behavior aligned 
 
 ## Pi Memory
 
-Pi Memory is a normal root-package resource at `extensions/pi-memory`. It is declared separately in `package.json#pi.extensions`, so `pi config` can enable or disable it without affecting the other extensions. Its database stays under `<agent-dir>/pi-memory/` and must never be stored in the managed Git checkout.
+Pi Memory is a normal root-package resource at `extensions/pi-memory`. It is declared separately in `package.json#pi.extensions`, so `pi config` can enable or disable it without affecting the other extensions. Its database stays under `<agent-dir>/pi-memory/` and must never be stored in the installed package directory.
 
 ## Current-machine cutover
 
-Do not remove a working local extension set before the managed Git package is available.
+Do not remove a working local extension set before the managed package is available.
 
-1. Push and validate the private GitHub repository.
+1. Push and validate the public GitHub repository.
 2. Run `pi install git:https://github.com/shariqriazz/shariq-pi-extensions`; do not reload yet.
 3. Move old auto-discovered extension directories out of the active Pi extension directory so package and local copies cannot load together.
 4. Move the old paired skill directories out of active discovery; the Git package supplies them.
@@ -68,13 +68,21 @@ Do not remove a working local extension set before the managed Git package is av
 
 Rollback is the reverse: remove the Git package from Pi settings, restore the local extension and skill directories, and reload. Never delete credentials or databases during rollback.
 
-## GitHub
+## Distribution
 
-GitHub is the only distribution source. Keep the repository private and push validated changes directly to `main` under the repository's normal Git policy.
+GitHub hosts the public source and npm distributes versioned releases. Push validated changes to `main` under the repository's normal Git policy.
 
 ```bash
 git push origin main
 gh repo view shariqriazz/shariq-pi-extensions --json visibility,url
 ```
 
-Use an unpinned source for automatic extension updates. Use a tag or commit only when a machine should remain fixed to a known revision.
+Before publishing a new npm version:
+
+1. Update `package.json#version` using semantic versioning.
+2. Run `mise exec --locked -- npm ci` and `mise exec --locked -- npm run validate`.
+3. Inspect `mise exec --locked -- npm run pack:inspect` for secrets, runtime state, and accidental files.
+4. Publish with `npm publish --access public --provenance`, or run the `Publish npm package` workflow with `NPM_TOKEN` configured.
+5. Verify the registry version and install it with `pi install npm:shariq-pi-extensions`.
+
+Use npm for stable versioned installs. Use an unpinned Git source for updates directly from `main`, and a tag or commit when a machine should remain fixed to a known revision.

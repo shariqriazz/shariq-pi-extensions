@@ -1,6 +1,6 @@
 # Architecture
 
-Last verified: 2026-08-20
+Last verified: 2026-08-21
 
 ## Package boundary
 
@@ -26,13 +26,14 @@ Pi-owned packages and `typebox` are optional peer dependencies at runtime. Pi su
 Third-party runtime dependencies are normal package dependencies:
 
 - `@lydell/node-pty` powers managed background terminals;
-- `effect` powers subagent lifecycle and coordination.
+- `effect` powers subagent lifecycle and coordination;
+- `ws` powers Factory's Responses WebSocket transport.
 
 The repository uses one root manifest and lockfile for the full extension suite.
 
 ## Runtime state
 
-Managed Git checkouts are treated as immutable. Extensions resolve writable state through Pi's APIs:
+Installed package directories are treated as immutable. Extensions resolve writable state through Pi's APIs:
 
 - Factory key selection, Droid metadata, and throttled per-credential limit cache: `<agent-dir>/factory/`
 - Pi Memory state: `<agent-dir>/pi-memory/`
@@ -48,6 +49,6 @@ Runtime paths use `node:path`, `getAgentDir()`, `CONFIG_DIR_NAME`, `os.homedir()
 
 ## Loading and updates
 
-Pi installs this package under its managed Git directory. Updates can reset and clean that checkout, so user state must never be written beside extension source.
+Pi manages npm and Git package installations and may replace their contents during updates, so user state must never be written beside extension source.
 
 `pi config` controls every individual package resource, including Pi Memory. Disabling Pi Memory leaves its runtime database intact and prevents its extension factory from loading after reload.
