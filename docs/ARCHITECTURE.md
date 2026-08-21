@@ -25,7 +25,7 @@ Pi-owned packages and `typebox` are optional peer dependencies at runtime. Pi su
 
 Third-party runtime dependencies are normal package dependencies:
 
-- `@cursor/sdk` powers native Cursor model runs, catalog discovery, images, tools, and usage reporting;
+- `@cursor/sdk` powers native Cursor model runs, catalog discovery, images, tools, and usage reporting. It is bundled with the audited Undici override because npm consumers do not inherit dependency-level overrides; platform helpers remain optional per-OS dependencies;
 - `@lydell/node-pty` powers managed background terminals;
 - `effect` powers subagent lifecycle and coordination;
 - `ws` powers Factory's Responses WebSocket transport.

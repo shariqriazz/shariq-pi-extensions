@@ -24,7 +24,7 @@ mise exec --locked -- npm run validate
 mise exec --locked -- npm pack --dry-run
 ```
 
-The root validation checks TypeScript, runtime tests, declared extension and skill entrypoints, and forbidden runtime files. Inspect the package file list before committing. It must not contain credentials, `.env`, Factory key configuration, caches, databases, sessions, logs, or `node_modules`.
+The root validation checks TypeScript, runtime tests, declared extension and skill entrypoints, and forbidden runtime files. Inspect the package file list before committing. It must not contain credentials, `.env`, Factory key configuration, first-party caches, databases, sessions, logs, or unbundled `node_modules`. The audited Cursor SDK tree is the sole intentional bundled dependency; its upstream implementation directories and tests remain third-party package content.
 
 ## Adding an extension
 

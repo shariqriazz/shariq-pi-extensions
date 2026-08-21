@@ -96,9 +96,13 @@ function forbiddenPackPath(filename) {
   const normalized = filename.replaceAll("\\", "/");
   const parts = normalized.split("/");
   const base = parts.at(-1)?.toLowerCase() ?? "";
-  if (parts.some((part) => forbiddenDirectories.has(part.toLowerCase()))) return true;
   if (forbiddenExactNames.has(base) || base.startsWith(".env.")) return true;
-  return /\.(?:sqlite|sqlite-wal|sqlite-shm|db|db-wal|db-shm|log|jsonl)$/i.test(base);
+  if (/\.(?:sqlite|sqlite-wal|sqlite-shm|db|db-wal|db-shm|log|jsonl)$/i.test(base)) return true;
+  // Bundled npm dependencies may legitimately contain implementation directories
+  // named cache/tmp and upstream tests. The project payload rules below still apply
+  // to every first-party extension, skill, document, and script.
+  if (normalized.startsWith("node_modules/")) return false;
+  return parts.some((part) => forbiddenDirectories.has(part.toLowerCase()));
 }
 
 try {
@@ -117,8 +121,8 @@ try {
     const normalized = entry.replace(/^\.\//, "");
     if (!packedFiles.includes(normalized)) errors.push(`Declared resource missing from package payload: ${normalized}`);
   }
-  if (packedFiles.some((filename) => filename.endsWith(".test.ts"))) {
-    errors.push("Test files must not be included in the package payload");
+  if (packedFiles.some((filename) => !filename.startsWith("node_modules/") && filename.endsWith(".test.ts"))) {
+    errors.push("First-party test files must not be included in the package payload");
   }
 } catch (error) {
   errors.push(`Could not inspect npm package payload: ${error instanceof Error ? error.message : String(error)}`);

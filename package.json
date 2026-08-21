@@ -1,6 +1,6 @@
 {
   "name": "shariq-pi-extensions",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Cross-platform extension suite for the Pi coding agent.",
   "license": "MIT",
   "author": "Shariq Riaz",
@@ -66,9 +66,10 @@
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "node scripts/run-tests.mjs",
-    "validate:package": "node scripts/validate-package.mjs",
+    "validate:package": "npm run prepack && node scripts/validate-package.mjs",
     "validate": "npm run check && npm test && npm run validate:package",
     "pack:inspect": "npm pack --dry-run",
+    "prepack": "node scripts/prepare-cursor-sdk-bundle.mjs",
     "prepublishOnly": "npm run validate"
   },
   "dependencies": {
@@ -77,6 +78,16 @@
     "effect": "4.0.0-beta.98",
     "ws": "8.21.3"
   },
+  "optionalDependencies": {
+    "@cursor/sdk-darwin-arm64": "1.0.28",
+    "@cursor/sdk-darwin-x64": "1.0.28",
+    "@cursor/sdk-linux-arm64": "1.0.28",
+    "@cursor/sdk-linux-x64": "1.0.28",
+    "@cursor/sdk-win32-x64": "1.0.28"
+  },
+  "bundledDependencies": [
+    "@cursor/sdk"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",
     "@earendil-works/pi-ai": "*",
