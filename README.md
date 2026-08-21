@@ -26,6 +26,7 @@ The package contains:
 - structured user questions
 - managed background terminals
 - copy-all transcript support
+- Cursor OAuth/API-key provider with native SDK transport and monthly usage dashboard
 - Factory OAuth and rotating API-key provider
 - Firecrawl search and scraping
 - Git status UI

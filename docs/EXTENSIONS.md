@@ -8,6 +8,10 @@ Last verified: 2026-08-20
 
 Registers the `antigravity` provider and `/login antigravity` flow for supported Google Antigravity models. Use `/antigravity.doctor` to inspect non-secret provider status. Credentials remain in Pi auth storage.
 
+### [Cursor provider](../extensions/cursor-provider/README.md)
+
+Registers one `cursor` provider for Cursor-hosted Composer and Cursor Grok models through the native Cursor SDK. `/login cursor` supports browser-minted or existing user API keys, images and native Pi tool delegation are enabled, and `/cursor` shows Cursor's authoritative current-month total, Auto/Composer and named/API percentages, reset date, plan, and on-demand limits. It does not expose ACP, third-party models, or Factory-style 5-hour/weekly pools. The authenticated catalog cache belongs in `<agent-dir>/cursor/models.json`.
+
 ### [Factory provider](../extensions/factory-provider/README.md)
 
 Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory` opens one full-width dashboard for provider/authentication state, model metadata, rotation status, and authoritative Factory usage across every credential. Standard and Droid Core windows stay separate, percentages are labeled as used, and keys are never aggregated. Rotation applies a monthly → weekly → 5-hour eligibility waterfall, then selects the least recently used eligible key and retains same-request failover for recognized pre-output errors. Background refreshes are throttled to 15 minutes; `r` force-refreshes from the dashboard.

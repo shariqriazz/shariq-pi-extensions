@@ -25,6 +25,7 @@ Pi-owned packages and `typebox` are optional peer dependencies at runtime. Pi su
 
 Third-party runtime dependencies are normal package dependencies:
 
+- `@cursor/sdk` powers native Cursor model runs, catalog discovery, images, tools, and usage reporting;
 - `@lydell/node-pty` powers managed background terminals;
 - `effect` powers subagent lifecycle and coordination;
 - `ws` powers Factory's Responses WebSocket transport.
@@ -35,6 +36,7 @@ The repository uses one root manifest and lockfile for the full extension suite.
 
 Installed package directories are treated as immutable. Extensions resolve writable state through Pi's APIs:
 
+- Cursor's authenticated Composer/Grok catalog cache: `<agent-dir>/cursor/models.json`
 - Factory key selection, Droid metadata, and throttled per-credential limit cache: `<agent-dir>/factory/`
 - Pi Memory state: `<agent-dir>/pi-memory/`
 - Subagent configuration and catalog: paths derived from `getAgentDir()`

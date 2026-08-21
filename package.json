@@ -1,6 +1,6 @@
 {
   "name": "shariq-pi-extensions",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cross-platform extension suite for the Pi coding agent.",
   "license": "MIT",
   "author": "Shariq Riaz",
@@ -42,6 +42,7 @@
       "./extensions/background-terminals/index.ts",
       "./extensions/context-usage/index.ts",
       "./extensions/copy-all/index.ts",
+      "./extensions/cursor-provider/index.ts",
       "./extensions/factory-provider/index.ts",
       "./extensions/firecrawl-web/index.ts",
       "./extensions/git-info/index.ts",
@@ -71,6 +72,7 @@
     "prepublishOnly": "npm run validate"
   },
   "dependencies": {
+    "@cursor/sdk": "1.0.28",
     "@lydell/node-pty": "1.1.0",
     "effect": "4.0.0-beta.98",
     "ws": "8.21.3"
@@ -113,5 +115,8 @@
     "@google/genai": false,
     "protobufjs": false,
     "msgpackr-extract": false
+  },
+  "overrides": {
+    "undici": "6.28.0"
   }
 }
