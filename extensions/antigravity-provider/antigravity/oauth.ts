@@ -320,6 +320,32 @@ function findDynamicModel(value: any, requestedId: string): DynamicModelInfo | u
 	return undefined;
 }
 
+export async function fetchAntigravityQuotaCatalog(token: string, projectId: string, signal?: AbortSignal): Promise<unknown> {
+	let lastFailure = "Antigravity quota catalog is unavailable.";
+	const bodies = [{}, { cloudaicompanionProject: projectId }, { project: projectId }];
+	for (const endpoint of endpointCandidates()) {
+		for (const candidateBody of bodies) {
+			try {
+				const res = await fetch(`${endpoint}/v1internal:fetchAvailableModels`, {
+					method: "POST",
+					headers: antigravityHeaders(token),
+					body: JSON.stringify(candidateBody),
+					signal: boundedFetchSignal(signal),
+				});
+				lastStatus = res.status;
+				lastEndpoint = endpoint;
+				if (res.ok) return await res.json();
+				lastFailure = `HTTP ${res.status}: ${jsonOrTextError(await res.text())}`;
+			} catch (error) {
+				if (signal?.aborted) throw error;
+				lastFailure = safeError(error);
+				lastError = lastFailure;
+			}
+		}
+	}
+	throw new Error(lastFailure);
+}
+
 export async function fetchAvailableRuntimeModel(token: string, projectId: string, requestedRuntimeModel: string, signal?: AbortSignal): Promise<DynamicModelInfo | undefined> {
 	const bodies = [{}, { cloudaicompanionProject: projectId }, { project: projectId }];
 	for (const endpoint of endpointCandidates()) {
@@ -463,13 +489,16 @@ export async function loginAntigravity(callbacks: OAuthCallbacks): Promise<OAuth
 		if (!tokenData.refresh_token) throw new Error("No refresh token received. Re-run /login antigravity and allow offline access.");
 
 		const [email, discoveredProject] = await Promise.all([getUserEmail(tokenData.access_token), loadCodeAssist(tokenData.access_token)]);
-		return {
+		const credentials = {
 			refresh: tokenData.refresh_token,
 			access: tokenData.access_token,
 			expires: Date.now() + tokenData.expires_in * 1000 - 5 * 60 * 1000,
 			projectId: discoveredProject || DEFAULT_PROJECT_ID,
 			email,
 		};
+		const { upsertAntigravityAccount } = await import("./accounts.ts");
+		upsertAntigravityAccount(credentials, { clearCooldown: true });
+		return credentials;
 	} finally {
 		server.close();
 	}
@@ -485,13 +514,16 @@ export async function refreshAntigravityToken(credentials: OAuthCredentials): Pr
 	if (!response.ok) throw new Error(`Antigravity token refresh failed: ${await response.text()}`);
 	const data = (await response.json()) as { access_token: string; expires_in: number; refresh_token?: string };
 	const discoveredProject = await loadCodeAssist(data.access_token);
-	return {
+	const refreshed = {
 		...credentials,
 		refresh: data.refresh_token || credentials.refresh,
 		access: data.access_token,
 		expires: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000,
 		projectId: discoveredProject || credentials.projectId || DEFAULT_PROJECT_ID,
 	};
+	const { upsertAntigravityAccount } = await import("./accounts.ts");
+	upsertAntigravityAccount(refreshed);
+	return refreshed;
 }
 
 export function getApiKey(credentials: OAuthCredentials): string {

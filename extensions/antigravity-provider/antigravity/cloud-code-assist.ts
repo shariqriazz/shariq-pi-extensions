@@ -19,9 +19,20 @@ import {
 	jsonOrTextError,
 	loadCodeAssist,
 	fetchAvailableRuntimeModel,
+	refreshAntigravityToken,
 	DEFAULT_PROJECT_ID,
 } from "./oauth.ts";
 import { getAntigravityRequestModelId, PROVIDER_ID } from "./models.ts";
+import {
+	classifyAntigravityFailure,
+	loadAntigravityAccounts,
+	markAntigravityAccountFailure,
+	markAntigravityAccountUsed,
+	resolveAntigravityAccount,
+	selectAntigravityAccounts,
+	type AntigravityAccount,
+} from "./accounts.ts";
+import { refreshAntigravityQuotas } from "./quotas.ts";
 
 const ANTIGRAVITY_SYSTEM_INSTRUCTION =
 	"You are Antigravity, a powerful agentic AI coding assistant designed by Google DeepMind. " +
@@ -435,7 +446,7 @@ async function streamResponse(response: Response, stream: AssistantMessageEventS
 	return hasContent;
 }
 
-export function streamAntigravity(model: any, context: any, options?: any): any {
+function streamAntigravitySingle(model: any, context: any, options?: any): any {
 	const stream = createAssistantMessageEventStream();
 	void (async () => {
 		const output = createOutput(model);
@@ -515,5 +526,85 @@ export function streamAntigravity(model: any, context: any, options?: any): any 
 			stream.end();
 		}
 	})();
+	return stream;
+}
+
+function antigravityErrorEvent(model: any, message: string) {
+	const output = createOutput(model);
+	output.stopReason = "error";
+	output.errorMessage = message;
+	return { type: "error" as const, reason: "error" as const, error: output };
+}
+
+function antigravityEventError(event: any): string | undefined {
+	if (event?.type !== "error") return undefined;
+	return event.error?.errorMessage || event.error?.message || event.reason;
+}
+
+export function streamAntigravity(model: any, context: any, options?: any): any {
+	const stream = createAssistantMessageEventStream();
+	void (async () => {
+		const stored = loadAntigravityAccounts();
+		const selected = selectAntigravityAccounts(model.id);
+		const candidates: Array<AntigravityAccount | undefined> = stored.length ? selected : [undefined];
+		if (!candidates.length) {
+			stream.push(antigravityErrorEvent(model, `No Antigravity account has available ${model.id} quota. Open /antigravity to refresh quotas or enable an account.`));
+			stream.end();
+			return;
+		}
+
+		let lastError = "No Antigravity account completed the request.";
+		for (const candidate of candidates) {
+			if (options?.signal?.aborted) throw options.signal.reason ?? new Error("Request was aborted");
+			let account = candidate;
+			let apiKey = options?.apiKey;
+			try {
+				if (account) {
+					account = await resolveAntigravityAccount(account, refreshAntigravityToken);
+					apiKey = JSON.stringify({ token: account.access, projectId: account.projectId });
+				}
+			} catch (error) {
+				lastError = safeError(error);
+				if (account) markAntigravityAccountFailure(account.id, model.id, lastError);
+				continue;
+			}
+
+			const inner = streamAntigravitySingle(model, context, { ...options, apiKey });
+			const buffered: any[] = [];
+			let started = false;
+			let rotate = false;
+			for await (const event of inner as AsyncIterable<any>) {
+				const error = antigravityEventError(event);
+				if (error && !started && account) {
+					lastError = error;
+					const retryable = Boolean(classifyAntigravityFailure(error, model.id, account));
+					if (retryable) {
+						markAntigravityAccountFailure(account.id, model.id, error);
+						void refreshAntigravityQuotas({ force: true, signal: options?.signal }).catch(() => {});
+						rotate = true;
+						break;
+					}
+				}
+				if (!started && event?.type === "start") {
+					started = true;
+					if (account) markAntigravityAccountUsed(account.id);
+					for (const pending of buffered) stream.push(pending);
+					buffered.length = 0;
+				}
+				if (started || event?.type === "error") stream.push(event);
+				else buffered.push(event);
+			}
+			if (rotate) continue;
+			for (const pending of buffered) stream.push(pending);
+			stream.end();
+			return;
+		}
+
+		stream.push(antigravityErrorEvent(model, `All configured Antigravity accounts are cooling down, exhausted, or failed. Last error: ${lastError}`));
+		stream.end();
+	})().catch((error) => {
+		stream.push(antigravityErrorEvent(model, safeError(error)));
+		stream.end();
+	});
 	return stream;
 }

@@ -4,10 +4,13 @@ Local persistent Pi provider for Google Antigravity-compatible models.
 
 - Package module: `extensions/antigravity-provider/`
 - Provider id: `antigravity`
-- Login command: `/login antigravity`
+- Login command: `/login antigravity` (repeat once per Google account)
+- Account and quota dashboard: `/antigravity`
 - Doctor command: `/antigravity.doctor`
 
 The provider includes an IPv4 OAuth token-exchange fallback for Node environments where the default request fails. Its deterministic catalog follows Antigravity CLI 1.1.13 model identifiers and runtime behavior.
+
+Successful logins are added to `<agent-dir>/antigravity/accounts.json`, written with owner-only permissions. Existing Pi OAuth credentials are migrated into that pool without exposing token values. Requests select the least recently used eligible account, skip disabled/cooling/exhausted accounts, refresh expiring OAuth tokens, and rotate to another account when an auth, rate, quota, or capacity failure occurs before response streaming begins. Cached per-model remaining quota and reset times guide selection; `/antigravity` refreshes the authoritative catalog and can reversibly enable or disable accounts.
 
 Current public model IDs:
 - `antigravity/gemini-3.7-flash`

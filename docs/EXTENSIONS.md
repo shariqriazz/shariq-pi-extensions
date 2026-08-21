@@ -6,7 +6,7 @@ Last verified: 2026-08-20
 
 ### [Antigravity Provider](../extensions/antigravity-provider/README.md)
 
-Registers the `antigravity` provider and `/login antigravity` flow for supported Google Antigravity models. Use `/antigravity.doctor` to inspect non-secret provider status. Credentials remain in Pi auth storage.
+Registers the `antigravity` provider and `/login antigravity` flow for supported Google Antigravity models. Repeating login adds or updates accounts in the secure `<agent-dir>/antigravity/accounts.json` pool. Requests use quota-aware least-recently-used balancing, rotate before streaming on account-specific auth/rate/quota/capacity failures, honor known reset times, and refresh stored OAuth tokens. `/antigravity` shows account state and live model quotas and can enable or disable accounts; `/antigravity.doctor` reports sanitized provider and rotation diagnostics.
 
 ### [Cursor provider](../extensions/cursor-provider/README.md)
 

@@ -22,7 +22,7 @@ Run `/reload` in an existing Pi session after installation; new sessions load th
 
 The package contains:
 
-- Antigravity provider
+- Antigravity OAuth provider with multi-account quota-aware rotation and `/antigravity` dashboard
 - structured user questions
 - managed background terminals
 - copy-all transcript support
