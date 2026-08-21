@@ -66,7 +66,12 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 		models: ANTIGRAVITY_MODELS,
 		oauth: {
 			name: PROVIDER_NAME,
-			login: loginAntigravity as any,
+			login: ((callbacks: Parameters<typeof loginAntigravity>[0]) => {
+				// Pi replaces its single stored provider credential after login. Archive
+				// the current account first so signing into another account cannot lose it.
+				migrateStoredCredential();
+				return loginAntigravity(callbacks);
+			}) as any,
 			refreshToken: refreshAntigravityToken as any,
 			getApiKey: getApiKey as any,
 		},
