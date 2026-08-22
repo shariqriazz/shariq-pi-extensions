@@ -186,14 +186,17 @@ function createParentBridgeTools(task: SpawnTask): ToolDefinition[] {
  * then must be unambiguous across providers. No hint inherits the parent
  * model; with nothing to inherit, the SDK default applies.
  */
-function resolvePiModel(
+export function resolvePiModel(
   registry: ModelRegistry,
   hint: string | undefined,
-  inherited: { provider: string; id: string } | undefined,
+  inherited: Model<any> | undefined,
 ): Model<any> | undefined {
   if (!hint) {
     if (!inherited) return undefined;
-    return registry.find(inherited.provider, inherited.id) ?? undefined;
+    return registry.find(inherited.provider, inherited.id) ?? inherited;
+  }
+  if (inherited?.id === hint) {
+    return registry.find(inherited.provider, hint) ?? inherited;
   }
   const slash = hint.indexOf("/");
   if (slash > 0) {
@@ -201,11 +204,13 @@ function resolvePiModel(
     const id = hint.slice(slash + 1);
     const found = registry.find(provider, id);
     if (found) return found;
+    if (inherited?.provider === provider && inherited.id === id) return inherited;
     throw new Error(`Unknown model "${hint}".`);
   }
   if (inherited) {
     const found = registry.find(inherited.provider, hint);
     if (found) return found;
+    if (inherited.id === hint) return inherited;
   }
   const matches = registry.getAll().filter((m) => m.id === hint);
   if (matches.length === 1) return matches[0];

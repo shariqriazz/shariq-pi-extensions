@@ -6,7 +6,7 @@
  * `SubagentEvent` union.
  */
 
-import type { Message } from "@earendil-works/pi-ai";
+import type { Message, Model } from "@earendil-works/pi-ai";
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { Data } from "effect";
 import type { CapabilityMode, IsolationMode } from "./config.ts";
@@ -50,7 +50,7 @@ export interface ParentContext {
   /** In-process bridge used by child-only message_parent/ask_parent tools. */
   readonly bridge?: ParentBridge;
   /** Parent pi model, for the pi backend's "inherit" default. */
-  readonly inheritedModel?: { readonly provider: string; readonly id: string };
+  readonly inheritedModel?: Model<any>;
   readonly inheritedThinkingLevel?: string;
   /** Parent model registry; required by the pi backend to resolve models. */
   readonly modelRegistry?: ModelRegistry;

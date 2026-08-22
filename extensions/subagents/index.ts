@@ -480,7 +480,7 @@ export default function (pi: ExtensionAPI) {
             childCwd: cwd,
             parentTrusted: ctx.isProjectTrusted(),
           }),
-          inheritedModel: ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : undefined,
+          inheritedModel: ctx.model ?? undefined,
           inheritedThinkingLevel: pi.getThinkingLevel(),
           inheritedMessages,
           parentSessionFile: ctx.sessionManager.getSessionFile(),
