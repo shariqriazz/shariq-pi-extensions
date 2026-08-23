@@ -8,7 +8,7 @@ Internal runtime utilities used by more than one extension. This directory is no
 - `child-session.ts` owns trust-aware child resources and bounded session shutdown.
 - `context-utilization.ts` formats model-context usage and capacity.
 - `dashboard-state.ts` keeps list selection stable as live rows change.
-- `settlement-delivery.ts` immediately hands asynchronous results to Pi as extension-originated user follow-ups, guaranteeing model-visible settlement context.
+- `settlement-delivery.ts` coordinates asynchronous output in a private package-wide queue and starts one custom-result turn at Pi's safe idle edge, guaranteeing model-visible context without user-authored or follow-up rendering.
 - `tool-call-timeout.ts` applies cancellation-aware execution limits to registered tools.
 - `tui-dashboard.ts` provides bounded, sanitized terminal-dashboard rendering helpers.
 

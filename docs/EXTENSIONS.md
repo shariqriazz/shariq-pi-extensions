@@ -38,7 +38,7 @@ The goal extension adds persistent, branch-safe objectives, progress evidence, b
 
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
-The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. Child settlement is handed to Pi immediately as an extension-originated user follow-up, so Pi queues it while the parent is active or starts a new parent turn when idle with the summary guaranteed in model context; status tools are for explicit inspection, not waiting.
+The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. Child settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with the summary guaranteed in model context and never rendered as user-authored or follow-up input; status tools are for explicit inspection, not waiting.
 
 ### [Orchestration](../extensions/orchestration/README.md)
 
@@ -50,7 +50,7 @@ The model-facing `create_orchestration` tool starts planning only after an expli
 
 Managed PTYs support servers, watchers, long builds, downloads, and interactive processes. The extension tracks up to eight concurrent terminals, retains bounded output, stores full logs in restrictive temporary directories, and stops process groups during shutdown or reload.
 
-Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`. A model-started terminal immediately hands its completion or failure to Pi as an extension-originated user follow-up, which Pi queues while the parent is active or uses to start a new parent turn when idle with the bounded output guaranteed in model context. Reading a terminal does not suppress that delivery; agents should inspect only for explicit progress requests or immediate interaction.
+Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`. A model-started terminal keeps completion or failure in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with bounded output guaranteed in model context and never rendered as user-authored or follow-up input. Reading a terminal does not suppress that delivery; agents should inspect only for explicit progress requests or immediate interaction.
 
 ## Web access
 

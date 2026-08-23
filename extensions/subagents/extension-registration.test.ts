@@ -51,7 +51,8 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   ]);
   assert.deepEqual(commands, ["btw", "subagents"]);
   assert.ok(hooks.includes("session_start"));
-  assert.equal(hooks.includes("agent_settled"), false);
+  assert.ok(hooks.includes("agent_start"));
+  assert.ok(hooks.includes("agent_settled"));
   assert.ok(hooks.includes("session_shutdown"));
 
   const spawnSchema = JSON.stringify(tools.get("spawn_agent")?.parameters);
@@ -81,7 +82,8 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   const guidelines = tools.get("spawn_agent")?.promptGuidelines.join("\n") ?? "";
   assert.match(guidelines, /end the turn so Pi remains available to the user/);
   assert.match(guidelines, /Do not poll background agents/);
-  assert.match(guidelines, /Settlement is handed to Pi immediately/);
+  assert.match(guidelines, /Settlement stays private/);
+  assert.match(guidelines, /custom-result turn/);
   assert.match(guidelines, /continue the original task/);
   assert.doesNotMatch(guidelines, /blocking parallel fan-out/);
   for (const legacy of [

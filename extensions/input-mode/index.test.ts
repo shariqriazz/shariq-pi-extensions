@@ -60,21 +60,40 @@ test("steer, interrupt, and follow-up modes preserve distinct input semantics", 
     const commandContext = { hasUI: true, ui: app.ui };
     await app.commands.get("input-mode").handler("interrupt", commandContext);
     assert.equal(loadInputMode(fixture.file), "interrupt");
-    assert.deepEqual(input(event, context), { action: "continue" });
+    assert.deepEqual(input(event, context), { action: "handled" });
     assert.equal(aborts, 1);
+    assert.equal(app.sent.length, 0);
+    app.hooks.get("agent_settled")?.();
+    assert.deepEqual(app.sent, [{
+      content: "new direction",
+      options: { expandPromptTemplates: true },
+    }]);
+
+    const image = { type: "image", data: "fixture", mimeType: "image/png" };
+    input({ ...event, text: "first", images: [image] }, context);
+    input({ ...event, text: "second" }, context);
+    app.hooks.get("agent_settled")?.();
+    assert.deepEqual(app.sent.at(-1), {
+      content: [
+        { type: "text", text: "first" },
+        image,
+        { type: "text", text: "\n\n---\n\n" },
+        { type: "text", text: "second" },
+      ],
+      options: { expandPromptTemplates: true },
+    });
 
     await app.commands.get("input-mode").handler("follow-up", commandContext);
-    const image = { type: "image", data: "fixture", mimeType: "image/png" };
     assert.deepEqual(input({ ...event, images: [image] }, context), { action: "handled" });
-    assert.deepEqual(app.sent, [{
+    assert.deepEqual(app.sent.at(-1), {
       content: [{ type: "text", text: "new direction" }, image],
       options: { deliverAs: "followUp" },
-    }]);
+    });
 
     assert.deepEqual(input({ ...event, source: "extension" }, context), { action: "continue" });
     assert.deepEqual(input({ ...event, streamingBehavior: "followUp" }, context), { action: "continue" });
     assert.deepEqual(input({ ...event, streamingBehavior: undefined }, context), { action: "continue" });
-    assert.equal(app.sent.length, 1);
+    assert.equal(app.sent.length, 3);
   } finally {
     fs.rmSync(fixture.directory, { recursive: true, force: true });
   }

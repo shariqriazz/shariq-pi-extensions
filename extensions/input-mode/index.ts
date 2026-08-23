@@ -14,20 +14,30 @@ import {
 } from "./config.ts";
 
 const STATUS_KEY = "input-mode";
+type ModelInput = Parameters<ExtensionAPI["sendUserMessage"]>[0];
 
 interface InputModeExtensionOptions {
   configFile?: string;
 }
 
-function modelInput(event: InputEvent) {
+function modelInput(event: InputEvent): ModelInput {
   if (!event.images?.length) return event.text;
   return [{ type: "text" as const, text: event.text }, ...event.images];
+}
+
+function mergeInputs(inputs: ModelInput[]): ModelInput {
+  if (inputs.length === 1) return inputs[0]!;
+  return inputs.flatMap((input, index) => [
+    ...(index === 0 ? [] : [{ type: "text" as const, text: "\n\n---\n\n" }]),
+    ...(typeof input === "string" ? [{ type: "text" as const, text: input }] : input),
+  ]);
 }
 
 export function createInputModeExtension(options: InputModeExtensionOptions = {}) {
   return (pi: ExtensionAPI) => {
     let mode = loadInputMode(options.configFile);
     let ui: ExtensionUIContext | undefined;
+    const pendingInterrupts: ModelInput[] = [];
 
     const updateStatus = () => {
       if (!ui) return;
@@ -74,7 +84,14 @@ export function createInputModeExtension(options: InputModeExtensionOptions = {}
       updateStatus();
     });
 
+    pi.on("agent_settled", () => {
+      if (pendingInterrupts.length === 0) return;
+      const input = mergeInputs(pendingInterrupts.splice(0));
+      pi.sendUserMessage(input, { expandPromptTemplates: true });
+    });
+
     pi.on("session_shutdown", () => {
+      pendingInterrupts.length = 0;
       ui?.setStatus(STATUS_KEY, undefined);
       ui = undefined;
     });
@@ -91,12 +108,12 @@ export function createInputModeExtension(options: InputModeExtensionOptions = {}
         return { action: "handled" };
       }
 
-      // Abort is signalled synchronously. Returning continue preserves Pi's
-      // normal template expansion, image handling, history, and queue logic;
-      // the prompt becomes a fresh turn if abort settlement wins the race, or
-      // a steering message consumed immediately after the aborted run.
+      // Store before signalling abort so even a very fast settlement cannot
+      // race past the replacement input. agent_settled is Pi's safe idle edge;
+      // it starts one fresh turn after model/tool cancellation completes.
+      pendingInterrupts.push(modelInput(event));
       ctx.abort();
-      return { action: "continue" };
+      return { action: "handled" };
     });
   };
 }

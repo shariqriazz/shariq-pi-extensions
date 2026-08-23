@@ -10,7 +10,7 @@ Session-scoped background pseudo-terminals for Pi. The extension combines Codex-
 - `list_terminals` — list running and settled terminals.
 - `stop_terminal` — stop complete process groups with TERM-to-KILL escalation.
 
-Each output response carries a byte cursor. Pass it to the next read/write operation to avoid repeating output. Long or uncertain commands should use `start_terminal` instead of a large blocking `bash` timeout. Settlement is handed to Pi immediately as an extension-originated user follow-up: it queues while the parent is active or starts a new parent turn when idle with bounded output guaranteed in model context, so the parent can continue other work or end its turn rather than poll.
+Each output response carries a byte cursor. Pass it to the next read/write operation to avoid repeating output. Long or uncertain commands should use `start_terminal` instead of a large blocking `bash` timeout. Settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with bounded output guaranteed in model context and never rendered as user-authored or follow-up input, so the parent can continue other work or end its turn rather than poll.
 
 ## User interface
 

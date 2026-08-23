@@ -3,7 +3,7 @@
 Controls what ordinary **Enter** does when the interactive Pi agent is already running:
 
 - `steer` (default) queues the message before the agent's next model step.
-- `interrupt` signals Pi's active abort controller immediately, then preserves the submitted text, images, prompt-template expansion, and normal delivery as the next input.
+- `interrupt` signals Pi's active abort controller immediately, retains the submitted text and images, then starts a fresh turn at Pi's safe `agent_settled` boundary. Multiple inputs received during cancellation are preserved in order in that replacement turn.
 - `follow-up` queues the message until the active run finishes.
 
 Use `/input-mode` for the picker or `/input-mode steer|interrupt|follow-up` for direct selection. The global choice is stored with restrictive permissions in `<agent-dir>/input-mode.json`; non-default modes appear in Pi's status area.

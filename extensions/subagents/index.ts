@@ -26,7 +26,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { deliverSettlement } from "../shared/settlement-delivery.ts";
+import { settlementDelivery } from "../shared/settlement-delivery.ts";
 import {
   formatElapsed,
   latestText,
@@ -195,6 +195,7 @@ function resolveChildProjectTrust(options: {
 }
 
 export default function (pi: ExtensionAPI) {
+  const deliverSettlement = settlementDelivery(pi);
   let runtime: SubagentRuntime | undefined;
   let managerPromise: Promise<SubagentManagerShape> | undefined;
   let ui: ExtensionUIContext | undefined;
@@ -522,7 +523,7 @@ export default function (pi: ExtensionAPI) {
   };
 
   const deliverResult = (snap: SubagentSnapshot) => {
-    deliverSettlement(pi, {
+    deliverSettlement({
       customType: "subagent-result",
       content: buildSubagentResultMessage({
         id: snap.id,
@@ -668,7 +669,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: SUBAGENT_SPAWN_PROMPT_SNIPPET,
     promptGuidelines: [
       ...SUBAGENT_SPAWN_PROMPT_GUIDELINES,
-      "After spawn_agent starts a child, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch it run. Settlement is handed to Pi immediately; when its attached summary invokes the parent, continue the original task without waiting for another user message.",
+      "After spawn_agent starts a child, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch it run. Settlement stays private until it starts a custom-result turn at Pi's safe idle edge; when its attached summary invokes the parent, continue the original task without waiting for another user message.",
     ],
     parameters: Type.Object({
       message: Type.String({
@@ -1096,7 +1097,7 @@ export default function (pi: ExtensionAPI) {
     label: "Start Pi Subagent Tasks",
     description: "Start independent subagent tasks together in the background and return their ids immediately. Completion notices automatically start the next parent turn, so the parent should end its current turn when no independent work remains instead of checking status.",
     promptGuidelines: [
-      "After task starts children, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch them run. Settlements are handed to Pi immediately; when their attached summaries invoke the parent, continue the original task without waiting for another user message.",
+      "After task starts children, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch them run. Settlements stay private until they start a custom-result turn at Pi's safe idle edge; when their attached summaries invoke the parent, continue the original task without waiting for another user message.",
     ],
     parameters: Type.Object({
       tasks: Type.Array(

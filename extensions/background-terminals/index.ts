@@ -8,7 +8,7 @@ import type {
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { deliverSettlement } from "../shared/settlement-delivery.ts";
+import { settlementDelivery } from "../shared/settlement-delivery.ts";
 import { oneLine, sanitizeTerminalText, stateLabel } from "../shared/tui-dashboard.ts";
 import { TerminalManager, MAX_RUNNING_TERMINALS } from "./src/manager.ts";
 import {
@@ -36,6 +36,7 @@ function resolveCwd(base: string, requested?: string): string {
 }
 
 export default function backgroundTerminals(pi: ExtensionAPI) {
+  const deliverSettlement = settlementDelivery(pi);
   let manager: TerminalManager | undefined;
   let ui: ExtensionUIContext | undefined;
   let unsubscribe: (() => void) | undefined;
@@ -89,7 +90,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     const snapshot = pendingResults.get(id);
     if (!snapshot) return;
     pendingResults.delete(id);
-    deliverSettlement(pi, {
+    deliverSettlement({
       customType: "background-terminal-result",
       content: formatCompletion(snapshot),
       display: true,
@@ -131,7 +132,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     promptSnippet: "Start an interactive or long-running command in a managed background PTY.",
     promptGuidelines: [
       "Use start_terminal by default for servers, watchers, downloads, long or uncertain builds and tests, interactive shells, and any command that should not occupy the main turn; reserve bash for short commands whose result is needed immediately. Never use a large bash timeout merely to wait for long work.",
-      "After start_terminal returns, continue only genuinely independent work. If none remains, end the turn immediately. Terminal settlement is handed to Pi immediately: it queues a follow-up while the parent is active or starts the next parent turn when idle. When that result invokes the parent, continue the original task immediately without waiting for the user or rereading the same terminal; do not call read_terminal, list_terminals, or start a timer merely to check whether it finished.",
+      "After start_terminal returns, continue only genuinely independent work. If none remains, end the turn immediately. Terminal settlement stays in a private extension queue while the parent is active and starts one custom-result turn at Pi's safe idle edge. When that result invokes the parent, continue the original task immediately without waiting for the user or rereading the same terminal; do not call read_terminal, list_terminals, or start a timer merely to check whether it finished.",
       "Use stop_terminal when a managed process is no longer needed. Background terminals are session-scoped and are stopped during session shutdown or reload.",
     ],
     parameters: Type.Object({

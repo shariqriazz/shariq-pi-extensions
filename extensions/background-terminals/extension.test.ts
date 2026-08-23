@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import extension from "./index.ts";
 
+function addHook(hooks: Map<string, (...args: any[]) => any>) {
+  return (name: string, handler: (...args: any[]) => any) => {
+    const previous = hooks.get(name);
+    hooks.set(name, previous
+      ? (...args: any[]) => { previous(...args); handler(...args); }
+      : handler);
+  };
+}
+
 test("registers the PTY tool surface, control-center commands, and lifecycle cleanup", () => {
   const tools = new Map<string, any>();
   const commands: string[] = [];
@@ -12,7 +21,8 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
     registerCommand(name: string) { commands.push(name); },
     registerMessageRenderer(name: string) { renderers.push(name); },
     on(name: string) { hooks.push(name); },
-    sendUserMessage() { return Promise.resolve(); },
+    sendMessage() {},
+    sendUserMessage() {},
   } as never);
 
   assert.deepEqual([...tools.keys()], [
@@ -25,7 +35,8 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   assert.deepEqual(commands, ["term", "ps"]);
   assert.deepEqual(renderers, ["background-terminal-result"]);
   assert.ok(hooks.includes("session_start"));
-  assert.equal(hooks.includes("agent_settled"), false);
+  assert.ok(hooks.includes("agent_start"));
+  assert.ok(hooks.includes("agent_settled"));
   assert.ok(hooks.includes("session_shutdown"));
 
   const start = tools.get("start_terminal");
@@ -34,7 +45,8 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   assert.match(guidelines, /Use start_terminal by default/);
   assert.match(guidelines, /Never use a large bash timeout/);
   assert.match(guidelines, /end the turn immediately/);
-  assert.match(guidelines, /settlement is handed to Pi immediately/);
+  assert.match(guidelines, /private extension queue/);
+  assert.match(guidelines, /custom-result turn/);
   assert.match(guidelines, /continue the original task immediately/);
   assert.match(guidelines, /do not call read_terminal, list_terminals, or start a timer/);
   assert.match(JSON.stringify(start.parameters), /working_dir/);
@@ -56,8 +68,9 @@ test("aborting startup stops the newly created terminal instead of orphaning it"
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
-    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendUserMessage(message: any) { messages.push(message); return Promise.resolve(); },
+    on: addHook(hooks),
+    sendMessage(message: any) { messages.push(message); },
+    sendUserMessage(message: any) { messages.push(message); },
   } as never);
   const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
   hooks.get("session_start")?.({}, context);
@@ -79,16 +92,18 @@ test("aborting startup stops the newly created terminal instead of orphaning it"
   await hooks.get("session_shutdown")?.();
 });
 
-test("settlement queues a follow-up immediately even while the parent is active", async () => {
+test("settlement waits locally while the parent is active and flushes at agent_settled", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
-  const messages: Array<{ content: any; options: any }> = [];
+  const custom: Array<{ message: any; options: any }> = [];
+  const user: Array<{ content: any; options: any }> = [];
   extension({
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
-    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendUserMessage(content: any, options: any) { messages.push({ content, options }); return Promise.resolve(); },
+    on: addHook(hooks),
+    sendMessage(message: any, options: any) { custom.push({ message, options }); },
+    sendUserMessage(content: any, options: any) { user.push({ content, options }); },
   } as never);
 
   const context = {
@@ -98,6 +113,7 @@ test("settlement queues a follow-up immediately even while the parent is active"
     ui: {},
   };
   hooks.get("session_start")?.({}, context);
+  hooks.get("agent_start")?.({});
   const started = await tools.get("start_terminal").execute(
     "call-read-settled",
     {
@@ -116,22 +132,26 @@ test("settlement queues a follow-up immediately even while the parent is active"
     undefined,
   );
   assert.equal(read.details.status, "done");
-  assert.equal(messages.length, 1, "settlement must not wait for another parent lifecycle event");
-  assert.match(messages[0]?.content, /read completion fixture.*completed successfully/s);
-  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp" });
+  assert.equal(custom.length, 0, "active-parent settlement must stay out of Pi's visible queues");
+  assert.deepEqual(user, []);
+  hooks.get("agent_settled")?.({});
+  assert.equal(custom.length, 1);
+  assert.match(custom[0]?.message.content, /read completion fixture.*completed successfully/s);
+  assert.deepEqual(custom[0]?.options, { triggerTurn: true });
   await hooks.get("session_shutdown")?.();
 });
 
 test("a terminal that settles during its initial read returns synchronously without a duplicate follow-up", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
-  const messages: Array<{ content: any; options: any }> = [];
+  const messages: any[] = [];
   extension({
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
-    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendUserMessage(content: any, options: any) { messages.push({ content, options }); return Promise.resolve(); },
+    on: addHook(hooks),
+    sendMessage(message: any) { messages.push(message); },
+    sendUserMessage(message: any) { messages.push(message); },
   } as never);
 
   const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
@@ -151,13 +171,15 @@ test("a terminal that settles during its initial read returns synchronously with
 test("a model-started terminal returns immediately and wakes an idle parent on completion", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
-  const messages: Array<{ content: any; options: any }> = [];
+  const custom: Array<{ message: any; options: any }> = [];
+  const user: Array<{ content: any; options: any }> = [];
   extension({
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
-    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendUserMessage(content: any, options: any) { messages.push({ content, options }); return Promise.resolve(); },
+    on: addHook(hooks),
+    sendMessage(message: any, options: any) { custom.push({ message, options }); },
+    sendUserMessage(content: any, options: any) { user.push({ content, options }); },
   } as never);
 
   const context = {
@@ -183,11 +205,12 @@ test("a model-started terminal returns immediately and wakes an idle parent on c
   assert.ok(Date.now() - startedAt < 500, "start_terminal should not wait for process completion");
 
   const deadline = Date.now() + 2_000;
-  while (messages.length === 0 && Date.now() < deadline) {
+  while (custom.length === 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  assert.equal(messages.length, 1);
-  assert.match(messages[0]?.content, /completion fixture.*completed successfully/s);
-  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp" });
+  assert.equal(custom.length, 1);
+  assert.match(custom[0]?.message.content, /completion fixture.*completed successfully/s);
+  assert.deepEqual(custom[0]?.options, { triggerTurn: true });
+  assert.deepEqual(user, []);
   await hooks.get("session_shutdown")?.();
 });
