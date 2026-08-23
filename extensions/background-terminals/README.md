@@ -10,7 +10,7 @@ Session-scoped background pseudo-terminals for Pi. The extension combines Codex-
 - `list_terminals` — list running and settled terminals.
 - `stop_terminal` — stop complete process groups with TERM-to-KILL escalation.
 
-Each output response carries a byte cursor. Pass it to the next read/write operation to avoid repeating output. Long or uncertain commands should use `start_terminal` instead of a large blocking `bash` timeout. Settlement is handed to Pi immediately: it queues a follow-up while the parent is active or starts a new parent turn when idle, so the parent can continue other work or end its turn rather than poll.
+Each output response carries a byte cursor. Pass it to the next read/write operation to avoid repeating output. Long or uncertain commands should use `start_terminal` instead of a large blocking `bash` timeout. Settlement is handed to Pi immediately as an extension-originated user follow-up: it queues while the parent is active or starts a new parent turn when idle with bounded output guaranteed in model context, so the parent can continue other work or end its turn rather than poll.
 
 ## User interface
 
@@ -34,7 +34,7 @@ Each output response carries a byte cursor. Pass it to the next read/write opera
 - Output is sanitized before TUI or model rendering.
 - Processes run in their own PTY process group and are stopped on session shutdown, replacement, or reload.
 - Shutdown and stop operations are bounded and escalate from SIGTERM to SIGKILL.
-- Model-started terminals immediately hand one completion/failure follow-up to Pi; Pi queues it while the parent is active or starts the next parent turn when idle.
+- Model-started terminals immediately hand one model-visible completion/failure follow-up to Pi; Pi queues it while the parent is active or starts the next parent turn when idle.
 - Reading settled output does not consume or suppress the automatic completion delivery.
 - Completion delivery is keyed by terminal id to prevent duplicate follow-ups.
 

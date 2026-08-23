@@ -24,9 +24,9 @@ Provide:
 - the working directory when it differs from the current directory;
 - an initial wait only when startup output is needed for the next decision.
 
-After startup, continue only genuinely useful independent work. If none remains, end the turn immediately. Ending the turn is the waiting mechanism: terminal settlement is handed to Pi immediately, queued as a follow-up if the parent is still active, and otherwise starts the next parent turn with the final status and bounded output. Do not keep the current turn alive to wait, invent monitoring work, or call terminal tools merely to see whether the process finished.
+After startup, continue only genuinely useful independent work. If none remains, end the turn immediately. Ending the turn is the waiting mechanism: terminal settlement is handed to Pi immediately as an extension-originated user follow-up, queued if the parent is still active, and otherwise starts the next parent turn with the final status and bounded output visible in model context. Do not keep the current turn alive to wait, invent monitoring work, or call terminal tools merely to see whether the process finished.
 
-When that completion follow-up invokes the next turn, treat its attached output as the terminal result and continue the original task immediately. Do not wait for another user message, announce that you are still waiting, or call `read_terminal` to retrieve the same result again. If `start_terminal` itself returns a settled result, the output is already synchronous and no second completion notice is needed.
+When that completion follow-up invokes the next turn, treat its model-visible output as the terminal result and continue the original task immediately. Do not wait for another user message, announce that you are still waiting, or call `read_terminal` to retrieve the same result again. If `start_terminal` itself returns a settled result, the output is already synchronous and no second completion notice is needed.
 
 ## Inspect and interact only when necessary
 

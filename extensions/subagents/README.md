@@ -19,7 +19,7 @@ The system is deliberately flat. Only the main Pi thread can spawn subagents. Ch
 - `reply_question` — answer a child’s blocking `ask_parent` request
 - `task` — atomically reserve capacity for up to the configured limit (maximum 50), start the fan-out in the background, and return child ids immediately
 
-Child sessions receive `message_parent`, `ask_parent`, `list_peers`, and `message_peer`. Peer messages are routed through the main-thread manager and can steer a running child or continue a settled one; they cannot create agents. Child settlement is handed to Pi immediately: it queues a follow-up while the parent is active or starts a new parent turn when idle, so the main turn can continue independent work or end and remain available to the user.
+Child sessions receive `message_parent`, `ask_parent`, `list_peers`, and `message_peer`. Peer messages are routed through the main-thread manager and can steer a running child or continue a settled one; they cannot create agents. Child settlement is handed to Pi immediately as an extension-originated user follow-up: it queues while the parent is active or starts a new parent turn when idle with the summary guaranteed in model context, so the main turn can continue independent work or end and remain available to the user.
 
 ## Profiles and capabilities
 

@@ -12,7 +12,7 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
     registerCommand(name: string) { commands.push(name); },
     registerMessageRenderer(name: string) { renderers.push(name); },
     on(name: string) { hooks.push(name); },
-    sendMessage() {},
+    sendUserMessage() { return Promise.resolve(); },
   } as never);
 
   assert.deepEqual([...tools.keys()], [
@@ -57,7 +57,7 @@ test("aborting startup stops the newly created terminal instead of orphaning it"
     registerCommand() {},
     registerMessageRenderer() {},
     on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendMessage(message: any) { messages.push(message); },
+    sendUserMessage(message: any) { messages.push(message); return Promise.resolve(); },
   } as never);
   const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
   hooks.get("session_start")?.({}, context);
@@ -82,13 +82,13 @@ test("aborting startup stops the newly created terminal instead of orphaning it"
 test("settlement queues a follow-up immediately even while the parent is active", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
-  const messages: Array<{ message: any; options: any }> = [];
+  const messages: Array<{ content: any; options: any }> = [];
   extension({
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
     on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendMessage(message: any, options: any) { messages.push({ message, options }); },
+    sendUserMessage(content: any, options: any) { messages.push({ content, options }); return Promise.resolve(); },
   } as never);
 
   const context = {
@@ -117,21 +117,21 @@ test("settlement queues a follow-up immediately even while the parent is active"
   );
   assert.equal(read.details.status, "done");
   assert.equal(messages.length, 1, "settlement must not wait for another parent lifecycle event");
-  assert.equal(messages[0]?.message.customType, "background-terminal-result");
-  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp", triggerTurn: true });
+  assert.match(messages[0]?.content, /read completion fixture.*completed successfully/s);
+  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp" });
   await hooks.get("session_shutdown")?.();
 });
 
 test("a terminal that settles during its initial read returns synchronously without a duplicate follow-up", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
-  const messages: Array<{ message: any; options: any }> = [];
+  const messages: Array<{ content: any; options: any }> = [];
   extension({
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
     on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendMessage(message: any, options: any) { messages.push({ message, options }); },
+    sendUserMessage(content: any, options: any) { messages.push({ content, options }); return Promise.resolve(); },
   } as never);
 
   const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
@@ -151,13 +151,13 @@ test("a terminal that settles during its initial read returns synchronously with
 test("a model-started terminal returns immediately and wakes an idle parent on completion", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
-  const messages: Array<{ message: any; options: any }> = [];
+  const messages: Array<{ content: any; options: any }> = [];
   extension({
     registerTool(definition: any) { tools.set(definition.name, definition); },
     registerCommand() {},
     registerMessageRenderer() {},
     on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendMessage(message: any, options: any) { messages.push({ message, options }); },
+    sendUserMessage(content: any, options: any) { messages.push({ content, options }); return Promise.resolve(); },
   } as never);
 
   const context = {
@@ -187,7 +187,7 @@ test("a model-started terminal returns immediately and wakes an idle parent on c
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   assert.equal(messages.length, 1);
-  assert.equal(messages[0]?.message.customType, "background-terminal-result");
-  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp", triggerTurn: true });
+  assert.match(messages[0]?.content, /completion fixture.*completed successfully/s);
+  assert.deepEqual(messages[0]?.options, { deliverAs: "followUp" });
   await hooks.get("session_shutdown")?.();
 });
