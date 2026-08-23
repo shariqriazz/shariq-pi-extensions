@@ -31,6 +31,7 @@ The package contains:
 - Firecrawl search and scraping
 - Git status UI
 - persistent task goals
+- configurable steer, interrupt, or follow-up input behavior
 - dedicated multi-agent orchestration
 - Pi Memory
 - per-response TPS, TTFT, elapsed-time, and output status

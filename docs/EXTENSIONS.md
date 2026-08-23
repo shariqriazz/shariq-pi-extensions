@@ -80,6 +80,10 @@ Adds repository state to Pi's interface. `/lg` opens the local Git view and `/pr
 
 `/copy-all` copies the current conversation in a readable form while omitting tool protocol noise that does not belong in the transcript.
 
+### [Input mode](../extensions/input-mode/README.md)
+
+`/input-mode` chooses what ordinary Enter does while Pi is running: steer before the next model step, interrupt the active run, or wait as a follow-up. The global selection lives in `<agent-dir>/input-mode.json`; explicit Alt+Enter follow-ups and non-interactive inputs retain native behavior. Pi does not expose extension rows in core `/settings`, so this is a dedicated extension settings picker rather than a private TUI patch.
+
 ### [Shell shortcuts](../extensions/shell-shortcuts/README.md)
 
 Adds `/exit` as an alias for Pi's normal quit command. Keep this extension limited to small, low-risk conveniences.

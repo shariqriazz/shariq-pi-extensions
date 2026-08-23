@@ -1,6 +1,6 @@
 {
   "name": "shariq-pi-extensions",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Cross-platform extension suite for the Pi coding agent.",
   "license": "MIT",
   "author": "Shariq Riaz",
@@ -47,6 +47,7 @@
       "./extensions/firecrawl-web/index.ts",
       "./extensions/git-info/index.ts",
       "./extensions/goal/index.ts",
+      "./extensions/input-mode/index.ts",
       "./extensions/orchestration/index.ts",
       "./extensions/performance-status/index.ts",
       "./extensions/pi-memory/index.ts",
