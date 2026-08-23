@@ -19,6 +19,7 @@ export const SUBAGENT_SPAWN_PROMPT_GUIDELINES = [
   "Use resume_from to continue a completed child's existing context instead of restating its original task.",
   "After spawn_agent or task starts background work, continue useful parent work; otherwise end the turn so Pi remains available to the user.",
   "Do not poll background agents. Completion notices arrive automatically and wake the parent; wait_agent only collects results already available and reports running agents without blocking.",
+  "When a completion notice invokes the parent, use its attached summary and continue the original task immediately; do not wait for another user message or call a status tool for the same result.",
 ];
 
 export const SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS = {
@@ -51,7 +52,7 @@ export function buildSubagentSpawnResult(options: {
   ].filter(Boolean);
   return (
     `Started Pi subagent ${options.id} "${options.title}" (${attributes.join(", ")}).\n` +
-    "It will report and wake the parent when finished. Continue useful work or end the turn instead of polling."
+    "It will report and wake the parent when finished. Continue useful work or end the turn instead of polling; when invoked by the result, continue the original task immediately."
   );
 }
 

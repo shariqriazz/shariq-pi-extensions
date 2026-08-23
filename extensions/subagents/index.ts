@@ -26,6 +26,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { deliverSettlement } from "../shared/settlement-delivery.ts";
 import {
   formatElapsed,
   latestText,
@@ -56,7 +57,6 @@ import {
   SUBAGENT_WAIT_TOOL_DESCRIPTION,
   WORKTREE_ISOLATION_DESCRIPTION,
 } from "./src/prompt.ts";
-import { createDeferredResultDelivery } from "./src/result-delivery.ts";
 import {
   CAPABILITY_MODES,
   ISOLATION_MODES,
@@ -197,10 +197,8 @@ function resolveChildProjectTrust(options: {
 export default function (pi: ExtensionAPI) {
   let runtime: SubagentRuntime | undefined;
   let managerPromise: Promise<SubagentManagerShape> | undefined;
-  let sessionContext: ExtensionContext | undefined;
   let ui: ExtensionUIContext | undefined;
   let unsubStatus: (() => void) | undefined;
-  const resultDelivery = createDeferredResultDelivery<SubagentSnapshot>();
   const archived = new Map<string, ArchivedSubagent>();
   const peerHistory: PeerMessage[] = [];
   const pendingQuestions = new Map<
@@ -524,35 +522,24 @@ export default function (pi: ExtensionAPI) {
   };
 
   const deliverResult = (snap: SubagentSnapshot) => {
-    pi.sendMessage(
-      {
-        customType: "subagent-result",
-        content: buildSubagentResultMessage({
-          id: snap.id,
-          title: snap.title,
-          status: snap.status,
-          errorText: snap.errorText,
-          output: truncatedOutput(snap),
-        }),
-        display: true,
-        details: { id: snap.id, title: snap.title, status: snap.status },
-      },
-      { deliverAs: "followUp", triggerTurn: true },
-    );
-  };
-
-  const flushResults = () => {
-    for (const snap of resultDelivery.drain()) deliverResult(snap);
+    deliverSettlement(pi, {
+      customType: "subagent-result",
+      content: buildSubagentResultMessage({
+        id: snap.id,
+        title: snap.title,
+        status: snap.status,
+        errorText: snap.errorText,
+        output: truncatedOutput(snap),
+      }),
+      display: true,
+      details: { id: snap.id, title: snap.title, status: snap.status },
+    });
   };
 
   const onSettled = (snap: SubagentSnapshot, consumed: boolean) => {
     persistSnapshot(snap);
-    if (snap.meta.origin === "orchestration") {
-      resultDelivery.consume([snap.id]);
-      return;
-    }
+    if (snap.meta.origin === "orchestration") return;
     if (snap.meta.origin === "btw") {
-      resultDelivery.consume([snap.id]);
       pi.appendEntry<BtwEntryData>(BTW_ENTRY_TYPE, {
         id: snap.id,
         title: snap.title,
@@ -562,16 +549,10 @@ export default function (pi: ExtensionAPI) {
       });
       return;
     }
-    if (consumed) {
-      resultDelivery.consume([snap.id]);
-      return;
-    }
-    // Keep the result retractable while the parent is working. A later
-    // wait_agent can consume it before agent_settled flushes follow-ups.
-    // Defer a copy: the live snapshot keeps mutating if the subagent is
-    // restarted before the deferred result flushes.
-    resultDelivery.defer({ ...snap, meta: { ...snap.meta } });
-    if (sessionContext?.isIdle()) flushResults();
+    if (consumed) return;
+    // Hand the immutable settlement to Pi immediately. Pi queues it when the
+    // parent is active and starts a new parent turn when idle.
+    deliverResult({ ...snap, meta: { ...snap.meta } });
   };
 
   const coordinator: SubagentCoordinator = {
@@ -641,7 +622,6 @@ export default function (pi: ExtensionAPI) {
   );
 
   pi.on("session_start", (_event, ctx) => {
-    sessionContext = ctx;
     archived.clear();
     peerHistory.length = 0;
     for (const record of loadSubagentCatalog().values()) archived.set(record.id, record);
@@ -662,12 +642,8 @@ export default function (pi: ExtensionAPI) {
     if (ctx.hasUI) ui = ctx.ui;
   });
 
-  pi.on("agent_settled", flushResults);
-
   pi.on("session_shutdown", async () => {
-    sessionContext = undefined;
     unsubscribeCoordinator();
-    resultDelivery.clear();
     for (const pending of pendingQuestions.values()) {
       pending.reject(new Error("Parent Pi session shut down before replying."));
     }
@@ -692,7 +668,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: SUBAGENT_SPAWN_PROMPT_SNIPPET,
     promptGuidelines: [
       ...SUBAGENT_SPAWN_PROMPT_GUIDELINES,
-      "After spawn_agent starts a child, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch it run; completion automatically starts the next parent turn.",
+      "After spawn_agent starts a child, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch it run. Settlement is handed to Pi immediately; when its attached summary invokes the parent, continue the original task without waiting for another user message.",
     ],
     parameters: Type.Object({
       message: Type.String({
@@ -832,7 +808,6 @@ export default function (pi: ExtensionAPI) {
       const snapshots = ids.map((id) => manager.view.get(id)!);
       const settled = snapshots.filter((snap) => snap.status !== "running");
       const pending = snapshots.filter((snap) => snap.status === "running");
-      resultDelivery.consume(settled.map((snap) => snap.id));
 
       const sections: string[] = [];
       let remainingBytes = WAIT_OUTPUT_MAX_BYTES;
@@ -1121,7 +1096,7 @@ export default function (pi: ExtensionAPI) {
     label: "Start Pi Subagent Tasks",
     description: "Start independent subagent tasks together in the background and return their ids immediately. Completion notices automatically start the next parent turn, so the parent should end its current turn when no independent work remains instead of checking status.",
     promptGuidelines: [
-      "After task starts children, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch them run; completion automatically starts the next parent turn.",
+      "After task starts children, continue only independent parent work or end the turn immediately. Do not call wait_agent, list_agents, or check_agent merely to watch them run. Settlements are handed to Pi immediately; when their attached summaries invoke the parent, continue the original task without waiting for another user message.",
     ],
     parameters: Type.Object({
       tasks: Type.Array(

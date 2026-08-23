@@ -25,7 +25,7 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   assert.deepEqual(commands, ["term", "ps"]);
   assert.deepEqual(renderers, ["background-terminal-result"]);
   assert.ok(hooks.includes("session_start"));
-  assert.ok(hooks.includes("agent_settled"));
+  assert.equal(hooks.includes("agent_settled"), false);
   assert.ok(hooks.includes("session_shutdown"));
 
   const start = tools.get("start_terminal");
@@ -34,7 +34,8 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   assert.match(guidelines, /Use start_terminal by default/);
   assert.match(guidelines, /Never use a large bash timeout/);
   assert.match(guidelines, /end the turn immediately/);
-  assert.match(guidelines, /completion automatically sends a follow-up and starts the next parent turn/);
+  assert.match(guidelines, /settlement is handed to Pi immediately/);
+  assert.match(guidelines, /continue the original task immediately/);
   assert.match(guidelines, /do not call read_terminal, list_terminals, or start a timer/);
   assert.match(JSON.stringify(start.parameters), /working_dir/);
 
@@ -78,7 +79,7 @@ test("aborting startup stops the newly created terminal instead of orphaning it"
   await hooks.get("session_shutdown")?.();
 });
 
-test("reading a settled terminal does not suppress automatic completion delivery", async () => {
+test("settlement queues a follow-up immediately even while the parent is active", async () => {
   const tools = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
   const messages: Array<{ message: any; options: any }> = [];
@@ -115,12 +116,35 @@ test("reading a settled terminal does not suppress automatic completion delivery
     undefined,
   );
   assert.equal(read.details.status, "done");
-  assert.equal(messages.length, 0, "delivery stays deferred while the parent is active");
-
-  hooks.get("agent_settled")?.();
-  assert.equal(messages.length, 1);
+  assert.equal(messages.length, 1, "settlement must not wait for another parent lifecycle event");
   assert.equal(messages[0]?.message.customType, "background-terminal-result");
   assert.deepEqual(messages[0]?.options, { deliverAs: "followUp", triggerTurn: true });
+  await hooks.get("session_shutdown")?.();
+});
+
+test("a terminal that settles during its initial read returns synchronously without a duplicate follow-up", async () => {
+  const tools = new Map<string, any>();
+  const hooks = new Map<string, (...args: any[]) => any>();
+  const messages: Array<{ message: any; options: any }> = [];
+  extension({
+    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerCommand() {},
+    registerMessageRenderer() {},
+    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
+    sendMessage(message: any, options: any) { messages.push({ message, options }); },
+  } as never);
+
+  const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
+  hooks.get("session_start")?.({}, context);
+  const result = await tools.get("start_terminal").execute(
+    "call-sync-settle",
+    { command: `${JSON.stringify(process.execPath)} -e ""`, title: "sync fixture", wait_ms: 5_000 },
+    undefined,
+    undefined,
+    context,
+  );
+  assert.equal(result.details.status, "done");
+  assert.equal(messages.length, 0);
   await hooks.get("session_shutdown")?.();
 });
 

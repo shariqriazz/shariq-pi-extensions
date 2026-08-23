@@ -3,12 +3,12 @@ import * as path from "node:path";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
-  ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { deliverSettlement } from "../shared/settlement-delivery.ts";
 import { oneLine, sanitizeTerminalText, stateLabel } from "../shared/tui-dashboard.ts";
 import { TerminalManager, MAX_RUNNING_TERMINALS } from "./src/manager.ts";
 import {
@@ -37,12 +37,12 @@ function resolveCwd(base: string, requested?: string): string {
 
 export default function backgroundTerminals(pi: ExtensionAPI) {
   let manager: TerminalManager | undefined;
-  let sessionContext: ExtensionContext | undefined;
   let ui: ExtensionUIContext | undefined;
   let unsubscribe: (() => void) | undefined;
   let lastStatus = "";
   const pendingResults = new Map<string, TerminalSnapshot>();
   const modelOwned = new Set<string>();
+  const starting = new Set<string>();
 
   const getManager = (): TerminalManager => {
     if (manager) return manager;
@@ -56,7 +56,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         return;
       }
       pendingResults.set(snapshot.id, snapshot);
-      if (sessionContext?.isIdle()) flushResults();
+      if (!starting.has(snapshot.id)) flushResult(snapshot.id);
     });
     unsubscribe = manager.view.subscribe(updateStatus);
     updateStatus();
@@ -85,40 +85,31 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     }
   }
 
-  function deliver(snapshot: TerminalSnapshot): void {
-    pi.sendMessage(
-      {
-        customType: "background-terminal-result",
-        content: formatCompletion(snapshot),
-        display: true,
-        details: {
-          id: snapshot.id,
-          title: snapshot.title,
-          status: snapshot.status,
-          exitCode: snapshot.exitCode,
-        },
+  function flushResult(id: string): void {
+    const snapshot = pendingResults.get(id);
+    if (!snapshot) return;
+    pendingResults.delete(id);
+    deliverSettlement(pi, {
+      customType: "background-terminal-result",
+      content: formatCompletion(snapshot),
+      display: true,
+      details: {
+        id: snapshot.id,
+        title: snapshot.title,
+        status: snapshot.status,
+        exitCode: snapshot.exitCode,
       },
-      { deliverAs: "followUp", triggerTurn: true },
-    );
-  }
-
-  function flushResults(): void {
-    const results = [...pendingResults.values()];
-    pendingResults.clear();
-    for (const snapshot of results) deliver(snapshot);
+    });
   }
 
   pi.on("session_start", (_event, ctx) => {
-    sessionContext = ctx;
     if (ctx.hasUI) ui = ctx.ui;
   });
 
-  pi.on("agent_settled", flushResults);
-
   pi.on("session_shutdown", async () => {
-    sessionContext = undefined;
     pendingResults.clear();
     modelOwned.clear();
+    starting.clear();
     unsubscribe?.();
     unsubscribe = undefined;
     ui?.setStatus(STATUS_KEY, undefined);
@@ -140,7 +131,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     promptSnippet: "Start an interactive or long-running command in a managed background PTY.",
     promptGuidelines: [
       "Use start_terminal by default for servers, watchers, downloads, long or uncertain builds and tests, interactive shells, and any command that should not occupy the main turn; reserve bash for short commands whose result is needed immediately. Never use a large bash timeout merely to wait for long work.",
-      "After start_terminal returns, continue only genuinely independent work. If none remains, end the turn immediately. The terminal completion automatically sends a follow-up and starts the next parent turn; do not call read_terminal, list_terminals, or start a timer merely to check whether it finished.",
+      "After start_terminal returns, continue only genuinely independent work. If none remains, end the turn immediately. Terminal settlement is handed to Pi immediately: it queues a follow-up while the parent is active or starts the next parent turn when idle. When that result invokes the parent, continue the original task immediately without waiting for the user or rereading the same terminal; do not call read_terminal, list_terminals, or start a timer merely to check whether it finished.",
       "Use stop_terminal when a managed process is no longer needed. Background terminals are session-scoped and are stopped during session shutdown or reload.",
     ],
     parameters: Type.Object({
@@ -158,6 +149,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         cwd: resolveCwd(ctx.cwd, params.working_dir),
       });
       modelOwned.add(terminal.id);
+      starting.add(terminal.id);
       let result: TerminalReadResult;
       try {
         result = await getManager().read(terminal.id, {
@@ -166,12 +158,15 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
           signal,
         });
       } catch (error) {
-        await getManager().kill([terminal.id]).catch(() => undefined);
+        starting.delete(terminal.id);
         modelOwned.delete(terminal.id);
+        await getManager().kill([terminal.id]).catch(() => undefined);
         consume(terminal.id);
         throw error;
       }
+      starting.delete(terminal.id);
       if (result.snapshot.status !== "running") consume(terminal.id);
+      else flushResult(terminal.id);
       let text = `Started background terminal ${terminal.id} "${oneLine(terminal.title)}" (pid ${terminal.pid}). Use cursor ${result.cursor} for incremental reads.`;
       if (result.text || result.snapshot.status !== "running") {
         text += `\n\n${formatReadResult(result)}`;

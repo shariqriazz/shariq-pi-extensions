@@ -24,14 +24,14 @@ This skill governs temporary Pi child agents. The `codex-thread-orchestrator` sk
 
 ## Wait by notification; inspect progress only when justified
 
-A successful `spawn_agent` or `task` call starts asynchronous work and returns control to the parent. When a child finishes, its completion notice automatically starts the next main-agent turn. The parent does not need to remain active or check once before ending its turn.
+A successful `spawn_agent` or `task` call starts asynchronous work and returns control to the parent. When a child finishes, its settlement is handed to Pi immediately, queued as a follow-up if the parent is still active, and otherwise starts the next main-agent turn. The parent does not need to remain active or check once before ending its turn.
 
 After dispatch:
 
 1. Continue only parent work that is independently useful to the requested result.
 2. If no such work remains, end the turn immediately. A short progress note is enough when the user needs one.
 3. Do not call `wait_agent`, `list_agents`, or `check_agent` in the same turn merely because the child was just launched. Ending the turn is the waiting mechanism.
-4. Resume when a child completion notice invokes the main agent. Collect the completed result, launch any intentionally queued work if capacity requires waves, and otherwise keep waiting through notifications.
+4. When a child completion notice invokes the main agent, treat the attached summary as the child result and continue the original task immediately. Reconcile completed results, launch any intentionally queued work if capacity requires waves, and otherwise keep waiting through notifications. Do not wait for the user to prompt you again or call a status tool to retrieve the same result.
 
 A progress check is reasonable when the user asks for status, a child has run materially longer than expected for its task and model, an interruption left its state unclear, or current status will change an immediate coordination decision. Prefer `check_agent` for one known child and `list_agents` for a batch overview. Use `wait_agent` to collect results already expected to be available, not as a running-status probe.
 
