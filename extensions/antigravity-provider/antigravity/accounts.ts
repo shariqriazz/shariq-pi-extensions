@@ -14,11 +14,13 @@ const CAPACITY_COOLDOWN_MS = 60 * 1_000;
 const REFRESH_SKEW_MS = 60 * 1_000;
 
 export type AntigravityQuotaGroup = "gemini" | "non-gemini";
+export type AntigravityQuotaWindow = "five-hour" | "weekly";
 
 export interface AntigravityQuotaEntry {
   modelId: string;
   displayName?: string;
   group: AntigravityQuotaGroup;
+  window?: AntigravityQuotaWindow;
   remainingFraction: number;
   resetTime?: string;
 }
@@ -78,6 +80,7 @@ function normalizeAccount(value: unknown): AntigravityAccount | undefined {
           modelId: entry.modelId,
           displayName: typeof entry.displayName === "string" ? entry.displayName : undefined,
           group: entry.group,
+          window: entry.window === "five-hour" || entry.window === "weekly" ? entry.window : undefined,
           remainingFraction: Math.max(0, Math.min(1, remainingFraction)),
           resetTime: typeof entry.resetTime === "string" ? entry.resetTime : undefined,
         }];
@@ -281,7 +284,74 @@ export function updateAntigravityAccountQuota(id: string, quota: AntigravityQuot
 }
 
 export function parseAntigravityQuota(value: unknown): AntigravityQuotaEntry[] {
-  const entries: AntigravityQuotaEntry[] = [];
+  const findGroups = (node: unknown): unknown[] | undefined => {
+    if (!node || typeof node !== "object") return undefined;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = findGroups(item);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    const raw = node as Record<string, unknown>;
+    if (Array.isArray(raw.groups)) return raw.groups;
+    for (const child of Object.values(raw)) {
+      const found = findGroups(child);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
+  const summaryEntries: AntigravityQuotaEntry[] = [];
+  for (const groupValue of findGroups(value) ?? []) {
+    if (!groupValue || typeof groupValue !== "object") continue;
+    const group = groupValue as Record<string, unknown>;
+    const groupLabel = [group.displayName, group.name, group.id].find((item): item is string => typeof item === "string") ?? "";
+    const quotaGroup: AntigravityQuotaGroup | undefined = /gemini/i.test(groupLabel)
+      ? "gemini"
+      : /claude|third.party|3p|gpt/i.test(groupLabel)
+        ? "non-gemini"
+        : undefined;
+    if (!quotaGroup || !Array.isArray(group.buckets)) continue;
+    for (const bucketValue of group.buckets) {
+      if (!bucketValue || typeof bucketValue !== "object") continue;
+      const bucket = bucketValue as Record<string, unknown>;
+      const remaining = bucket.remaining && typeof bucket.remaining === "object"
+        ? bucket.remaining as Record<string, unknown>
+        : undefined;
+      const remainingFraction = finiteNumber(bucket.remainingFraction) ?? finiteNumber(remaining?.remainingFraction);
+      const windowLabel = [bucket.window, bucket.bucketId, bucket.displayName].find((item): item is string => typeof item === "string") ?? "";
+      const window: AntigravityQuotaWindow | undefined = /week/i.test(windowLabel)
+        ? "weekly"
+        : /5h|five.?hour/i.test(windowLabel)
+          ? "five-hour"
+          : undefined;
+      if (remainingFraction === undefined || !window) continue;
+      summaryEntries.push({
+        modelId: typeof bucket.bucketId === "string" ? bucket.bucketId : `${quotaGroup}-${window}`,
+        displayName: window === "weekly" ? "Weekly" : "5-Hour",
+        group: quotaGroup,
+        window,
+        remainingFraction: Math.max(0, Math.min(1, remainingFraction)),
+        resetTime: typeof bucket.resetTime === "string"
+          ? bucket.resetTime
+          : typeof remaining?.resetTime === "string"
+            ? remaining.resetTime
+            : undefined,
+      });
+    }
+  }
+  if (summaryEntries.length) return summaryEntries;
+
+  const supportedRuntimeIds = new Set(
+    Object.entries(ANTIGRAVITY_ROUTING).flatMap(([modelId, routing]) => [
+      modelId,
+      routing.off,
+      routing.defaultRequestId,
+      ...Object.values(routing.routing ?? {}),
+    ]).filter((item): item is string => typeof item === "string"),
+  );
+  const modelEntries: AntigravityQuotaEntry[] = [];
   const seen = new Set<string>();
   const visit = (node: unknown, keyHint?: string) => {
     if (!node || typeof node !== "object") return;
@@ -291,17 +361,17 @@ export function parseAntigravityQuota(value: unknown): AntigravityQuotaEntry[] {
     }
     const raw = node as Record<string, unknown>;
     const quota = raw.quotaInfo && typeof raw.quotaInfo === "object" ? raw.quotaInfo as Record<string, unknown> : raw;
-    const remaining = finiteNumber(quota.remainingFraction);
-    const modelId = [raw.modelId, raw.id, raw.name, raw.model, keyHint].find((item): item is string => typeof item === "string" && /gemini|claude|gpt-oss/i.test(item));
-    if (modelId && remaining !== undefined) {
+    const remainingFraction = finiteNumber(quota.remainingFraction);
+    const modelId = [raw.modelId, raw.id, raw.name, raw.model, keyHint].find((item): item is string => typeof item === "string");
+    if (modelId && remainingFraction !== undefined) {
       const normalized = modelId.replace(/^models\//, "");
-      if (!seen.has(normalized)) {
+      if (supportedRuntimeIds.has(normalized) && !seen.has(normalized)) {
         seen.add(normalized);
-        entries.push({
+        modelEntries.push({
           modelId: normalized,
-          displayName: typeof raw.displayName === "string" ? raw.displayName : typeof raw.label === "string" ? raw.label : undefined,
           group: normalized.startsWith("gemini-") ? "gemini" : "non-gemini",
-          remainingFraction: Math.max(0, Math.min(1, remaining)),
+          window: "five-hour",
+          remainingFraction: Math.max(0, Math.min(1, remainingFraction)),
           resetTime: typeof quota.resetTime === "string" ? quota.resetTime : undefined,
         });
       }
@@ -311,7 +381,16 @@ export function parseAntigravityQuota(value: unknown): AntigravityQuotaEntry[] {
     }
   };
   visit(value);
-  return entries;
+
+  return (["gemini", "non-gemini"] as const).flatMap((group) => {
+    const entries = modelEntries.filter((entry) => entry.group === group).sort((left, right) => left.remainingFraction - right.remainingFraction);
+    const mostConstrained = entries[0];
+    return mostConstrained ? [{
+      ...mostConstrained,
+      modelId: group === "gemini" ? "gemini-5h" : "claude-5h",
+      displayName: "5-Hour",
+    }] : [];
+  });
 }
 
 const refreshes = new Map<string, Promise<AntigravityAccount>>();

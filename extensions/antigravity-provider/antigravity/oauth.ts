@@ -322,8 +322,28 @@ function findDynamicModel(value: any, requestedId: string): DynamicModelInfo | u
 
 export async function fetchAntigravityQuotaCatalog(token: string, projectId: string, signal?: AbortSignal): Promise<unknown> {
 	let lastFailure = "Antigravity quota catalog is unavailable.";
-	const bodies = [{}, { cloudaicompanionProject: projectId }, { project: projectId }];
 	for (const endpoint of endpointCandidates()) {
+		try {
+			const res = await fetch(`${endpoint}/v1internal:retrieveUserQuotaSummary`, {
+				method: "POST",
+				headers: antigravityHeaders(token),
+				body: "{}",
+				signal: boundedFetchSignal(signal),
+			});
+			lastStatus = res.status;
+			lastEndpoint = endpoint;
+			if (res.ok) {
+				const summary = await res.json() as { groups?: unknown[] };
+				if (Array.isArray(summary.groups) && summary.groups.length) return summary;
+			}
+			else lastFailure = `HTTP ${res.status}: ${jsonOrTextError(await res.text())}`;
+		} catch (error) {
+			if (signal?.aborted) throw error;
+			lastFailure = safeError(error);
+			lastError = lastFailure;
+		}
+
+		const bodies = [{}, { cloudaicompanionProject: projectId }, { project: projectId }];
 		for (const candidateBody of bodies) {
 			try {
 				const res = await fetch(`${endpoint}/v1internal:fetchAvailableModels`, {

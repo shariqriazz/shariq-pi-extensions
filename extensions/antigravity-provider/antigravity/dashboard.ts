@@ -29,7 +29,22 @@ function until(timestamp: number | string | undefined) {
 }
 
 function groupQuota(quota: AntigravityQuotaEntry[] | undefined, group: "gemini" | "non-gemini") {
-  return (quota ?? []).filter((entry) => entry.group === group).sort((left, right) => left.remainingFraction - right.remainingFraction);
+  const byWindow = new Map<"five-hour" | "weekly", AntigravityQuotaEntry>();
+  for (const entry of (quota ?? []).filter((candidate) => candidate.group === group)) {
+    const window = entry.window ?? "five-hour";
+    const existing = byWindow.get(window);
+    if (!existing || entry.remainingFraction < existing.remainingFraction) {
+      byWindow.set(window, {
+        ...entry,
+        window,
+        displayName: window === "weekly" ? "Weekly" : "5-Hour",
+      });
+    }
+  }
+  return (["five-hour", "weekly"] as const).flatMap((window) => {
+    const entry = byWindow.get(window);
+    return entry ? [entry] : [];
+  });
 }
 
 function accountState(account: AntigravityAccountStatus) {
@@ -50,8 +65,7 @@ function stateColor(state: string) {
 
 function compactGroup(label: string, entries: AntigravityQuotaEntry[]) {
   if (!entries.length) return `${label}: unavailable`;
-  const worst = entries[0]!;
-  return `${label}: ${remaining(worst.remainingFraction)} remaining${worst.resetTime ? ` · resets ${until(worst.resetTime)}` : ""}`;
+  return `${label}: ${entries.map((entry) => `${entry.displayName} ${remaining(entry.remainingFraction)}${entry.resetTime ? ` · resets ${until(entry.resetTime)}` : ""}`).join(" · ")}`;
 }
 
 export class AntigravityDashboard implements Component {
@@ -159,7 +173,7 @@ export class AntigravityDashboard implements Component {
     const lines = width >= 64
       ? [joinSides(title, `${right}  `, width)]
       : [truncateToWidth(title, width, ""), truncateToWidth(`  ${right}`, width, "")];
-    lines.push(frameTop(this.theme, width, `ACCOUNTS ${accounts.length} · QUOTA REMAINING`));
+    lines.push(frameTop(this.theme, width, `ACCOUNTS ${accounts.length} · 5-HOUR + WEEKLY LIMITS REMAINING`));
     const inner = Math.max(1, width - 2);
     if (width >= 104 && selected) {
       const leftWidth = Math.max(46, Math.floor((inner - 1) * 0.45));
@@ -195,7 +209,7 @@ export class AntigravityDashboard implements Component {
       lines.push(selected ? this.theme.bg("selectedBg", padLine(first, width)) : first);
       if (!compact) {
         lines.push(`   ${this.theme.fg("muted", compactGroup("Gemini", groupQuota(account.quota, "gemini")))}`);
-        lines.push(`   ${this.theme.fg("muted", compactGroup("Claude / GPT", groupQuota(account.quota, "non-gemini")))}`);
+        lines.push(`   ${this.theme.fg("muted", compactGroup("Claude", groupQuota(account.quota, "non-gemini")))}`);
         lines.push("");
       }
     }
@@ -211,8 +225,8 @@ export class AntigravityDashboard implements Component {
     if (account.cooldownUntil && account.cooldownUntil > Date.now()) lines.push(` ${this.theme.fg("warning", `${account.cooldownReason || "rotation"} cooldown · ${until(account.cooldownUntil)}`)}`);
     if (account.quotaError) lines.push(` ${this.theme.fg("error", oneLine(account.quotaError))}`);
     if (account.lastError) lines.push(` ${this.theme.fg("warning", oneLine(account.lastError))}`);
-    lines.push("", ...this.renderQuotaGroup("Gemini", groupQuota(account.quota, "gemini"), width));
-    lines.push("", ...this.renderQuotaGroup("Claude / GPT-OSS", groupQuota(account.quota, "non-gemini"), width));
+    lines.push("", ...this.renderQuotaGroup("Gemini models", groupQuota(account.quota, "gemini"), width));
+    lines.push("", ...this.renderQuotaGroup("Claude models", groupQuota(account.quota, "non-gemini"), width));
     if (account.lastUsedAt) lines.push("", ` ${this.theme.fg("muted", "LAST USED")} ${this.theme.fg("text", new Date(account.lastUsedAt).toLocaleString())}`);
     return lines.slice(0, height);
   }
@@ -221,7 +235,7 @@ export class AntigravityDashboard implements Component {
     const lines = [` ${this.theme.fg("accent", this.theme.bold(`${name.toUpperCase()} · REMAINING`))}`];
     if (!entries.length) return [...lines, ` ${this.theme.fg("muted", "Unavailable")}`];
     const meterWidth = Math.max(10, width - 29);
-    for (const entry of entries.slice(0, 8)) {
+    for (const entry of entries) {
       const percent = entry.remainingFraction * 100;
       const color = percent <= 0 ? "error" : percent <= 15 ? "warning" : "active";
       const label = oneLine(entry.displayName || entry.modelId).slice(0, 16).padEnd(16);

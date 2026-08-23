@@ -7,7 +7,7 @@ function snapshot(): AntigravityDashboardSnapshot {
   const now = Date.now();
   return {
     authentication: "stored OAuth",
-    modelCount: 7,
+    modelCount: 4,
     accounts: Array.from({ length: 10 }, (_, index) => ({
       id: `account-${index}`,
       email: `account-${index}@example.com`,
@@ -21,8 +21,10 @@ function snapshot(): AntigravityDashboardSnapshot {
       disabled: index === 3,
       quotaUpdatedAt: now,
       quota: [
-        { modelId: "gemini-3.7-flash-low", displayName: "Gemini Flash", group: "gemini", remainingFraction: 0.72, resetTime: "2099-01-01T00:00:00Z" },
-        { modelId: "claude-opus-4-6-thinking", displayName: "Claude Opus", group: "non-gemini", remainingFraction: 0.31, resetTime: "2099-01-01T00:00:00Z" },
+        { modelId: "gemini-5h", displayName: "5-Hour", group: "gemini", window: "five-hour", remainingFraction: 0.72, resetTime: "2099-01-01T00:00:00Z" },
+        { modelId: "gemini-weekly", displayName: "Weekly", group: "gemini", window: "weekly", remainingFraction: 0.64, resetTime: "2099-01-02T00:00:00Z" },
+        { modelId: "3p-5h", displayName: "5-Hour", group: "non-gemini", window: "five-hour", remainingFraction: 0.31, resetTime: "2099-01-01T00:00:00Z" },
+        { modelId: "3p-weekly", displayName: "Weekly", group: "non-gemini", window: "weekly", remainingFraction: 0.88, resetTime: "2099-01-02T00:00:00Z" },
       ],
     })),
   };
@@ -53,9 +55,14 @@ test("Antigravity dashboard shows remaining quota and stays within the viewport"
   for (const width of [32, 72, 120]) {
     const lines = component.render(width);
     assert.ok(lines.every((line) => visibleWidth(line) <= width));
-    assert.match(lines.join("\n"), /Gemini: 72% remaining|GEMINI.*REMAINING/);
+    assert.match(lines.join("\n"), /Gemini: 5-Hour 72%|GEMINI MODELS.*REMAINING/);
     assert.doesNotMatch(lines.join("\n"), /hidden/);
   }
   component.handleInput("down");
+  const wide = component.render(120).join("\n");
+  assert.match(wide, /5-Hour/);
+  assert.match(wide, /Weekly/);
+  assert.match(wide, /CLAUDE MODELS/);
+  assert.doesNotMatch(wide, /GPT|3\.6|3\.5/);
   assert.ok(component.render(120).every((line) => visibleWidth(line) <= 120));
 });

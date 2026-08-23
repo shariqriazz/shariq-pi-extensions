@@ -6,7 +6,7 @@ Last verified: 2026-08-20
 
 ### [Antigravity Provider](../extensions/antigravity-provider/README.md)
 
-Registers the `antigravity` provider and `/login antigravity` flow for supported Google Antigravity models. Repeating login adds or updates accounts in the secure `<agent-dir>/antigravity/accounts.json` pool. Requests use quota-aware least-recently-used balancing, rotate before streaming on account-specific auth/rate/quota/capacity failures, honor known reset times, and refresh stored OAuth tokens. `/antigravity` shows account state and live model quotas and can enable or disable accounts; `/antigravity.doctor` reports sanitized provider and rotation diagnostics.
+Registers the `antigravity` provider and `/login antigravity` flow for the latest Gemini Flash, Gemini Pro, Claude Sonnet, and Claude Opus families. Repeating login adds or updates accounts in the secure `<agent-dir>/antigravity/accounts.json` pool. Requests use quota-aware least-recently-used balancing, rotate before streaming on account-specific auth/rate/quota/capacity failures, honor known reset times, and refresh stored OAuth tokens. `/antigravity` shows account state plus the shared five-hour and weekly limits for the Gemini and Claude pools and can enable or disable accounts; `/antigravity.doctor` reports sanitized provider and rotation diagnostics.
 
 ### [Cursor provider](../extensions/cursor-provider/README.md)
 

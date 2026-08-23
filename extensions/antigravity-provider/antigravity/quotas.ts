@@ -20,7 +20,9 @@ export function refreshAntigravityQuotas(options: { force?: boolean; signal?: Ab
     const accounts = antigravityAccountStatuses(now);
     for (const account of accounts) {
       if (account.disabled) continue;
-      if (!options.force && account.quotaUpdatedAt && now - account.quotaUpdatedAt < ANTIGRAVITY_QUOTA_TTL_MS) continue;
+      const hasBothWindows = account.quota?.some((entry) => entry.window === "five-hour") &&
+        account.quota.some((entry) => entry.window === "weekly");
+      if (!options.force && hasBothWindows && account.quotaUpdatedAt && now - account.quotaUpdatedAt < ANTIGRAVITY_QUOTA_TTL_MS) continue;
       try {
         const resolved = await resolveAntigravityAccount(account, refreshAntigravityToken, now);
         const catalog = await fetchAntigravityQuotaCatalog(resolved.access, resolved.projectId, options.signal);
