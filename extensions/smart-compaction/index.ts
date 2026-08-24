@@ -164,11 +164,19 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         }
 
         // Default status
+        const currentModelDesc = config.model === "inherit"
+          ? `inherit (${cmdCtx.model ? `${cmdCtx.model.provider}/${cmdCtx.model.id}` : "active session model"})`
+          : config.model;
+        const currentThinkingDesc = config.thinkingLevel === "inherit"
+          ? `inherit (${cmdCtx.thinkingLevel ?? "session default"})`
+          : (config.thinkingLevel ?? "inherit");
+        const maxTokensDesc = config.maxSummaryTokens ? `${config.maxSummaryTokens}` : "unlimited (full model output capacity)";
+
         const status = [
           `Smart Compaction: ${config.enabled ? "ENABLED" : "DISABLED"}`,
-          `Model: ${config.model} (${config.model === "inherit" ? (cmdCtx.model ? `${cmdCtx.model.provider}/${cmdCtx.model.id}` : "inherit") : config.model})`,
-          `Thinking Level: ${config.thinkingLevel ?? "medium"}`,
-          `Max Tokens: ${config.maxSummaryTokens ?? 4096}`,
+          `Model: ${currentModelDesc}`,
+          `Thinking Level: ${currentThinkingDesc}`,
+          `Max Output Tokens: ${maxTokensDesc}`,
           "",
           "Commands:",
           "  /smart-compaction enable | disable",

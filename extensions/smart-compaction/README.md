@@ -40,7 +40,10 @@ Settings are persisted in `~/.pi/agent/smart-compaction.json`:
   "version": 1,
   "enabled": true,
   "model": "inherit",
-  "thinkingLevel": "medium",
-  "maxSummaryTokens": 16384
+  "thinkingLevel": "inherit"
 }
 ```
+
+- `model`: `"inherit"` (uses current active session model) or explicit `"provider/model-id"`.
+- `thinkingLevel`: `"inherit"` (uses current session's thinking level) or `"off" | "low" | "medium" | "high" | "max"`.
+- `maxSummaryTokens`: optional override integer; if omitted, dynamically defaults to the model's full native output capacity (65,536–128,000+ tokens) so summaries are never artificially truncated.

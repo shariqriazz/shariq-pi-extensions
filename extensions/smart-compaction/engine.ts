@@ -44,7 +44,7 @@ export function resolveCompactionModel(
 
 export interface RunSmartCompactionOptions {
   event: SessionBeforeCompactEvent;
-  ctx: Pick<ExtensionContext, "model" | "modelRegistry">;
+  ctx: Pick<ExtensionContext, "model" | "modelRegistry" | "thinkingLevel">;
   config: SmartCompactionConfig;
 }
 
@@ -97,18 +97,27 @@ export async function runSmartCompaction(
     ],
   };
 
-  const requestedMaxTokens = config.maxSummaryTokens ?? 16384;
-  const maxTokens = model.maxTokens > 0 ? Math.min(requestedMaxTokens, model.maxTokens) : requestedMaxTokens;
-
   const completeOptions: Record<string, unknown> = {
-    maxTokens,
     signal,
     cacheRetention: "none",
     sessionId: uuidv7(),
   };
 
-  if (model.reasoning && config.thinkingLevel && config.thinkingLevel !== "off") {
-    completeOptions.reasoning = config.thinkingLevel;
+  // If user explicitly configured a maxSummaryTokens override, pass it.
+  // Otherwise, omit maxTokens so the provider uses the model's full native maximum output capacity (e.g. 128k, 65k).
+  if (typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0) {
+    completeOptions.maxTokens = config.maxSummaryTokens;
+  }
+
+  // Resolve reasoning effort / thinking level
+  if (model.reasoning) {
+    const desiredThinking = config.thinkingLevel === "inherit" || !config.thinkingLevel
+      ? ctx.thinkingLevel
+      : config.thinkingLevel;
+
+    if (desiredThinking && desiredThinking !== "off") {
+      completeOptions.reasoning = desiredThinking;
+    }
   }
 
   const response = await ctx.modelRegistry.complete(model, context, completeOptions as any);

@@ -6,16 +6,15 @@ export interface SmartCompactionConfig {
   version: 1;
   enabled: boolean;
   model: string; // "inherit" or "provider/model-id"
-  thinkingLevel?: "off" | "low" | "medium" | "high";
-  maxSummaryTokens?: number;
+  thinkingLevel?: "inherit" | "off" | "low" | "medium" | "high" | "max";
+  maxSummaryTokens?: number; // optional override; defaults to model's full capacity
 }
 
 export const DEFAULT_SMART_COMPACTION_CONFIG: SmartCompactionConfig = {
   version: 1,
   enabled: true,
   model: "inherit",
-  thinkingLevel: "medium",
-  maxSummaryTokens: 16384,
+  thinkingLevel: "inherit",
 };
 
 export function smartCompactionConfigPath(): string {
@@ -30,12 +29,12 @@ export function loadSmartCompactionConfig(file = smartCompactionConfigPath()): S
       version: 1,
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_SMART_COMPACTION_CONFIG.enabled,
       model: typeof raw.model === "string" && raw.model.trim() ? raw.model.trim() : DEFAULT_SMART_COMPACTION_CONFIG.model,
-      thinkingLevel: raw.thinkingLevel && ["off", "low", "medium", "high"].includes(raw.thinkingLevel)
-        ? raw.thinkingLevel
+      thinkingLevel: raw.thinkingLevel && ["inherit", "off", "low", "medium", "high", "max"].includes(raw.thinkingLevel)
+        ? (raw.thinkingLevel as SmartCompactionConfig["thinkingLevel"])
         : DEFAULT_SMART_COMPACTION_CONFIG.thinkingLevel,
       maxSummaryTokens: typeof raw.maxSummaryTokens === "number" && raw.maxSummaryTokens > 0
         ? raw.maxSummaryTokens
-        : DEFAULT_SMART_COMPACTION_CONFIG.maxSummaryTokens,
+        : undefined,
     };
   } catch {
     return { ...DEFAULT_SMART_COMPACTION_CONFIG };
@@ -50,8 +49,8 @@ export function saveSmartCompactionConfig(config: SmartCompactionConfig, file = 
     version: 1,
     enabled: config.enabled,
     model: config.model || "inherit",
-    thinkingLevel: config.thinkingLevel ?? "medium",
-    maxSummaryTokens: config.maxSummaryTokens ?? 16384,
+    thinkingLevel: config.thinkingLevel ?? "inherit",
+    maxSummaryTokens: config.maxSummaryTokens,
   };
   try {
     fs.writeFileSync(temporary, `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 });

@@ -45,8 +45,8 @@ describe("smart-compaction config", () => {
       assert.equal(config.version, 1);
       assert.equal(config.enabled, true);
       assert.equal(config.model, "inherit");
-      assert.equal(config.thinkingLevel, "medium");
-      assert.equal(config.maxSummaryTokens, 16384);
+      assert.equal(config.thinkingLevel, "inherit");
+      assert.equal(config.maxSummaryTokens, undefined);
     } finally {
       cleanup();
     }
