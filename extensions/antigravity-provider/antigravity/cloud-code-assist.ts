@@ -236,7 +236,7 @@ function buildRequest(model: any, context: any, projectId: string, options: any,
 	const generationConfig: any = {};
 	if (options?.temperature !== undefined) generationConfig.temperature = options.temperature;
 	if (options?.maxTokens !== undefined) generationConfig.maxOutputTokens = options.maxTokens;
-	else generationConfig.maxOutputTokens = Math.min(8192, model.maxTokens || 8192);
+	else if (model.maxTokens) generationConfig.maxOutputTokens = model.maxTokens;
 
 	const metadata = applyAgyRequestMetadata(request, runtimeModel);
 	if (metadata.thinkingBudget !== undefined) {

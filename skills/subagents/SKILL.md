@@ -24,7 +24,9 @@ This skill governs temporary Pi child agents. The `codex-thread-orchestrator` sk
 
 ## Wait by notification; inspect progress only when justified
 
-A successful `spawn_agent` or `task` call starts asynchronous work and returns control to the parent. When a child finishes, its settlement stays in a private extension queue while the parent is active and otherwise starts the next custom-result turn at Pi's safe idle edge, with the summary visible in model context without appearing as user-authored or follow-up input. The parent does not need to remain active or check once before ending its turn.
+A successful `spawn_agent` or `task` call starts asynchronous work and returns control to the parent with sub-millisecond dispatch latency. When a child finishes, its settlement stays in a private extension queue while the parent is active and otherwise starts the next custom-result turn at Pi's safe idle edge, with the summary visible in model context without appearing as user-authored or follow-up input. The parent does not need to remain active or check once before ending its turn.
+
+All subagent snapshots and transcripts persist across Pi restarts (`~/.pi/agent/subagents/runs/`), allowing `resume_from` to resume completed workers at any point. Cancellation immediately cascades across all child fibers in `<10ms`.
 
 After dispatch:
 

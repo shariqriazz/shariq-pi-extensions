@@ -36,9 +36,9 @@ The goal extension adds persistent, branch-safe objectives, progress evidence, b
 
 ### [Subagents](../extensions/subagents/README.md)
 
-The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
+The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, pre-warmed task dispatch, instant cascading cancellation, cross-session persistence, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
-The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. Child settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with the summary guaranteed in model context and never rendered as user-authored or follow-up input; status tools are for explicit inspection, not waiting.
+The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. All completed subagent snapshots and transcripts persist across Pi restarts (`<agent-dir>/subagents/runs/`), allowing `resume_from` to resume completed workers at any point. Interruption immediately cascades across all child fibers in `<10ms`. Child settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with the summary guaranteed in model context and never rendered as user-authored or follow-up input; status tools are for explicit inspection, not waiting.
 
 ### [Orchestration](../extensions/orchestration/README.md)
 

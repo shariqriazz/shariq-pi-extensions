@@ -24,6 +24,7 @@ import {
 } from "effect";
 import type { SubagentBackend, SubagentSession } from "./backend.ts";
 import { BackendRegistry } from "./backend.ts";
+import { loadPersistedSnapshots, saveSnapshot } from "./storage.ts";
 import type {
   BackendName,
   LiveToolState,
@@ -190,6 +191,37 @@ const makeManager = Effect.gen(function* () {
   const cleanups = new Set<Fiber.Fiber<unknown>>();
   const peerMessages: PeerMessage[] = [];
   let counter = 0;
+  const prewarmedIds: string[] = [];
+  const replenishIdPool = () => {
+    while (prewarmedIds.length < 16) {
+      prewarmedIds.push(`sa-${++counter}-${randomUUID().slice(0, 6)}`);
+    }
+  };
+  replenishIdPool();
+
+  const persistedSnapshots = new Map<string, SubagentSnapshot>();
+  try {
+    for (const snap of loadPersistedSnapshots()) {
+      persistedSnapshots.set(snap.id, snap);
+    }
+  } catch {
+    // Best-effort load
+  }
+
+  const allocateId = (preferredId?: string): string => {
+    if (preferredId && !entries.has(preferredId)) {
+      return preferredId;
+    }
+    if (prewarmedIds.length === 0) {
+      replenishIdPool();
+    }
+    const id = prewarmedIds.shift()!;
+    // Replenish in the background
+    if (prewarmedIds.length < 4) {
+      replenishIdPool();
+    }
+    return id;
+  };
   const reservedByGroup = new Map<string, number>();
   const reservedIn = (group: string) => reservedByGroup.get(group) ?? 0;
   const reserve = (group: string, count: number) =>
@@ -307,6 +339,7 @@ const makeManager = Effect.gen(function* () {
     s.liveTools = [];
     s.queued = [];
     const consumed = (waitInterest.get(s.id) ?? 0) > 0;
+    saveSnapshot(s as SubagentSnapshot);
     notify(s.id);
     try {
       // During teardown, don't queue results into a shutting-down session.
@@ -447,10 +480,7 @@ const makeManager = Effect.gen(function* () {
           });
         }
 
-        const id =
-          task.preferredId && !entries.has(task.preferredId)
-            ? task.preferredId
-            : `sa-${++counter}-${randomUUID().slice(0, 6)}`;
+        const id = allocateId(task.preferredId);
         const meta = yield* session.meta;
         const entry: Entry = {
           snapshot: {
@@ -738,8 +768,15 @@ const makeManager = Effect.gen(function* () {
   });
 
   const view: SubagentReadModel = {
-    list: () => [...entries.values()].map((entry) => entry.snapshot),
-    get: (id) => entries.get(id)?.snapshot,
+    list: () => {
+      const active = [...entries.values()].map((entry) => entry.snapshot);
+      const activeIds = new Set(active.map((s) => s.id));
+      const historical = [...persistedSnapshots.values()].filter(
+        (s) => !activeIds.has(s.id),
+      );
+      return [...active, ...historical];
+    },
+    get: (id) => entries.get(id)?.snapshot ?? persistedSnapshots.get(id),
     size: () => entries.size,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -799,8 +836,16 @@ const makeManager = Effect.gen(function* () {
     waitFor,
     cancel,
     send,
-    get: (id) => Effect.sync(() => entries.get(id)?.snapshot),
-    list: Effect.sync(() => [...entries.values()].map((e) => e.snapshot)),
+    get: (id) =>
+      Effect.sync(() => entries.get(id)?.snapshot ?? persistedSnapshots.get(id)),
+    list: Effect.sync(() => {
+      const active = [...entries.values()].map((e) => e.snapshot);
+      const activeIds = new Set(active.map((s) => s.id));
+      const historical = [...persistedSnapshots.values()].filter(
+        (s) => !activeIds.has(s.id),
+      );
+      return [...active, ...historical];
+    }),
     disposeAll,
     view,
   });
