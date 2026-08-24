@@ -63,13 +63,23 @@ export function createFactoryResponsesWebSocketFetch(options: FactoryWebSocketFe
 			});
 
 			const abort = () => {
-				socket.close();
-				void writer.abort(new Error("Factory request was aborted"));
+				init?.signal?.removeEventListener("abort", abort);
+				try {
+					socket.close();
+				} catch {
+					// Ignore socket close errors during abort.
+				}
+				void writer.abort(init?.signal?.reason || new Error("Factory request was aborted")).catch(() => undefined);
 				if (!settled) {
 					settled = true;
-					reject(new Error("Factory request was aborted"));
+					reject(init?.signal?.reason || new Error("Factory request was aborted"));
 				}
 			};
+
+			if (init?.signal?.aborted) {
+				abort();
+				return;
+			}
 			init?.signal?.addEventListener("abort", abort, { once: true });
 
 			socket.once("open", () => {
@@ -86,11 +96,11 @@ export function createFactoryResponsesWebSocketFetch(options: FactoryWebSocketFe
 
 			socket.on("message", (data: RawData) => {
 				const text = data.toString();
-				void writer.write(encoder.encode(`data: ${text}\n\n`));
+				void writer.write(encoder.encode(`data: ${text}\n\n`)).catch(() => undefined);
 				try {
 					const event = JSON.parse(text) as { type?: string };
 					if (event.type === "response.completed" || event.type === "response.failed" || event.type === "error") {
-						void writer.close();
+						void writer.close().catch(() => undefined);
 						socket.close();
 					}
 				} catch {
@@ -99,6 +109,7 @@ export function createFactoryResponsesWebSocketFetch(options: FactoryWebSocketFe
 			});
 
 			socket.once("unexpected-response", (_request, response) => {
+				init?.signal?.removeEventListener("abort", abort);
 				const chunks: Buffer[] = [];
 				response.on("data", (chunk: Buffer) => chunks.push(chunk));
 				response.on("end", () => {
@@ -114,11 +125,12 @@ export function createFactoryResponsesWebSocketFetch(options: FactoryWebSocketFe
 			});
 
 			socket.once("error", (error) => {
+				init?.signal?.removeEventListener("abort", abort);
 				if (!settled) {
 					settled = true;
 					reject(error);
 				} else if (opened) {
-					void writer.abort(error);
+					void writer.abort(error).catch(() => undefined);
 				}
 			});
 			socket.once("close", () => {
