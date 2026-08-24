@@ -46,6 +46,12 @@ The Orchestration extension coordinates explicitly requested large tasks through
 
 The model-facing `create_orchestration` tool starts planning only after an explicit orchestration request. `get_orchestration` reports status without advancing work. Interrupted runs recover paused under `<agent-dir>/orchestration/`.
 
+### [Smart Compaction](../extensions/smart-compaction/README.md)
+
+Replaces standard context compaction with a high-fidelity continuity engine. It intercepts `session_before_compact` events and synthesizes multi-turn conversations into structured checkpoint summaries capturing primary goals and negative constraints, progress ledgers (`Done`/`In Progress`/`Blocked`), verbatim code snippets for active/uncommitted edits, exact error root causes, architectural decisions, resume anchors, and deterministic `<read-files>`/`<modified-files>` metadata.
+
+Successive compactions utilize an incremental Delta-Merge to eliminate context degradation over long sessions. `/compaction-model` selects any custom compaction model (e.g. `factory/gemini-3.7-flash`, `cursor/cursor-grok-4.5-fast`) or defaults to inheriting the active session model (`inherit`). `/smart-compaction` toggles or inspects compaction configuration stored in `<agent-dir>/smart-compaction.json`.
+
 ### [Background terminals](../extensions/background-terminals/README.md)
 
 Managed PTYs support servers, watchers, long builds, downloads, and interactive processes. The extension tracks up to eight concurrent terminals, retains bounded output, stores full logs in restrictive temporary directories, and stops process groups during shutdown or reload.

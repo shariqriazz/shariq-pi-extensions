@@ -33,6 +33,7 @@ The package contains:
 - persistent task goals
 - configurable steer, interrupt, or follow-up input behavior
 - dedicated multi-agent orchestration
+- Smart Compaction with high-fidelity checkpointing, delta-merging, and custom model routing
 - Pi Memory
 - per-response TPS, TTFT, elapsed-time, and output status
 - Context Usage display
