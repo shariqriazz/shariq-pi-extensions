@@ -61,10 +61,11 @@ test("Factory uses Responses WebSocket only for OpenAI-routed models", () => {
   assert.equal(factoryResponsesUsesWebSocket("openai-completions", { "x-api-provider": "openai" }), false);
 });
 
-test("generic Factory authorization responses do not disable valid rotating keys", () => {
-  assert.equal(classifyFactoryKeyCooldown('401 {"detail":"Missing authorization token"}'), null);
-  assert.equal(classifyFactoryKeyCooldown("403 Forbidden"), null);
+test("Factory authorization and permission responses cool down failing keys", () => {
+  assert.equal(classifyFactoryKeyCooldown('401 {"detail":"Missing authorization token"}')?.kind, "auth");
+  assert.equal(classifyFactoryKeyCooldown("403 Forbidden")?.kind, "auth");
   assert.equal(classifyFactoryKeyCooldown("401 invalid API key")?.kind, "auth");
+  assert.equal(classifyFactoryKeyCooldown("Access Denied")?.kind, "auth");
 });
 
 test("Factory requests preserve Pi guidance behind the required Factory system marker", () => {

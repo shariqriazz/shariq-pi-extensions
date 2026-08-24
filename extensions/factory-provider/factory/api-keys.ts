@@ -133,9 +133,19 @@ function activeKeyEntries(modelId?: string) {
 
 export function classifyFactoryKeyCooldown(message: string): { ms: number; kind: "auth" | "rate" | "quota" } | null {
   const lower = message.toLowerCase();
-  // A bare 401/403 usually means our Factory transport or headers are wrong.
-  // Disable a credential only when Factory explicitly identifies the key itself.
-  if (lower.includes("invalid api key") || lower.includes("api key revoked") || lower.includes("api key expired")) return { ms: AUTH_COOLDOWN_MS, kind: "auth" };
+  if (
+    lower.includes("invalid api key") ||
+    lower.includes("api key revoked") ||
+    lower.includes("api key expired") ||
+    lower.includes("forbidden") ||
+    lower.includes("unauthorized") ||
+    lower.includes("permission") ||
+    lower.includes("access denied") ||
+    /\b401\b/.test(lower) ||
+    /\b403\b/.test(lower)
+  ) {
+    return { ms: AUTH_COOLDOWN_MS, kind: "auth" };
+  }
   if (/\b429\b/.test(lower) || lower.includes("rate limit")) return { ms: RATE_COOLDOWN_MS, kind: "rate" };
   if (lower.includes("quota") || lower.includes("billing") || lower.includes("credit") || lower.includes("usage limit") || lower.includes("exhaust")) return { ms: DEFAULT_COOLDOWN_MS, kind: "quota" };
   return null;
@@ -325,8 +335,8 @@ export function streamSimpleFactoryApiKeyResponses(model: any, context: any, opt
         const error = errorText(event);
         if (error) {
           lastError = error;
-          const retryNext = !hasStarted && markKeyFailure(key, error, model.id);
-          if (retryNext) {
+          markKeyFailure(key, error, model.id);
+          if (!hasStarted) {
             retriedBeforeStart = true;
             break;
           }
