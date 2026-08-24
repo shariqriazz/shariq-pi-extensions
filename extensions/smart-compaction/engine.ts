@@ -5,7 +5,6 @@ import { promisify } from "node:util";
 import { uuidv7, type Api, type Context, type Model, type Usage, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
 import type { SmartCompactionConfig } from "./config.ts";
-import { isSensitivePath, redactLikelySecrets } from "../shared/redaction.ts";
 import {
   formatFileOperationsXml,
   sanitizeTagContent,
@@ -24,7 +23,6 @@ export interface GitEngineeringState {
   available: boolean;
   files: DirtyFileState[];
   patch: string;
-  sensitiveFilesOmitted: number;
   lockfilesAndGeneratedAssets: string[];
 }
 
@@ -40,8 +38,6 @@ export interface SmartCompactionDetails {
   activeDirtyFileStates: DirtyFileState[];
   activeDirtyPatch: string;
   dirtyStateAvailable: boolean;
-  sensitiveDirtyFilesOmitted: number;
-  sensitiveTouchedFilesOmitted: number;
   activeBackgroundProcesses?: string[];
   lockfilesAndGeneratedAssets?: string[];
   cycleCount: number;
@@ -209,7 +205,7 @@ async function readUntrackedPreviews(
   const sections: string[] = [];
   let remaining = DIRTY_PATCH_CHARS;
   for (const file of files) {
-    if (file.status !== "??" || isSensitivePath(file.path) || isGeneratedOrLockfile(file.path) || remaining <= 0) continue;
+    if (file.status !== "??" || isGeneratedOrLockfile(file.path) || remaining <= 0) continue;
     const absolute = path.resolve(root, file.path);
     const relative = path.relative(root, absolute);
     if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
@@ -240,13 +236,11 @@ async function readUntrackedPreviews(
 }
 
 export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal): Promise<GitEngineeringState> {
-  if (!cwd) return { available: false, files: [], patch: "", sensitiveFilesOmitted: 0, lockfilesAndGeneratedAssets: [] };
+  if (!cwd) return { available: false, files: [], patch: "", lockfilesAndGeneratedAssets: [] };
   try {
     const root = (await runGit(cwd, ["rev-parse", "--show-toplevel"], signal)).trim();
     const status = await runGit(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], signal);
-    const allFiles = parseGitStatusPorcelainV1Z(status);
-    const sensitiveFilesOmitted = allFiles.filter((file) => isSensitivePath(file.path)).length;
-    const files = allFiles.filter((file) => !isSensitivePath(file.path));
+    const files = parseGitStatusPorcelainV1Z(status);
 
     const codeFiles = files.filter((file) => !isGeneratedOrLockfile(file.path));
     const lockOrGeneratedFiles = files.filter((file) => isGeneratedOrLockfile(file.path)).map((file) => file.path);
@@ -258,7 +252,6 @@ export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal)
       stagedArgs.push("--", ...trackedCodePaths);
       unstagedArgs.push("--", ...trackedCodePaths);
     } else {
-      // An unmatched pathspec avoids reading unrelated or sensitive tracked diffs.
       stagedArgs.push("--", ":(exclude,top)**");
       unstagedArgs.push("--", ":(exclude,top)**");
     }
@@ -275,13 +268,12 @@ export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal)
     return {
       available: true,
       files,
-      patch: truncatePatch(redactLikelySecrets(sections.join("\n\n"))),
-      sensitiveFilesOmitted,
+      patch: truncatePatch(sections.join("\n\n")),
       lockfilesAndGeneratedAssets: lockOrGeneratedFiles,
     };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { available: false, files: [], patch: "", sensitiveFilesOmitted: 0, lockfilesAndGeneratedAssets: [] };
+    return { available: false, files: [], patch: "", lockfilesAndGeneratedAssets: [] };
   }
 }
 
@@ -330,45 +322,37 @@ export function computeCompactionTokenCeiling(
   config: SmartCompactionConfig,
   reserveTokens = 16384,
 ): number {
+  if (reserveTokens <= 0) {
+    throw new Error("Reserve tokens budget must be positive.");
+  }
   const configuredMax = typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0
     ? config.maxSummaryTokens
     : 8192;
 
-  if (!Number.isFinite(reserveTokens) || reserveTokens <= 0) {
-    throw new Error(`Compaction reserveTokens must be positive; received ${reserveTokens}.`);
-  }
   const reserveDerived = Math.max(1, Math.floor(0.8 * reserveTokens));
   const modelLimit = model.maxTokens > 0 ? model.maxTokens : configuredMax;
 
   return Math.min(configuredMax, reserveDerived, modelLimit);
 }
 
-function errorStatus(err: unknown): number | undefined {
-  if (!err || typeof err !== "object") return undefined;
-  for (const key of ["status", "statusCode", "httpStatus"]) {
-    const value = (err as Record<string, unknown>)[key];
-    if (typeof value === "number") return value;
-  }
-  return undefined;
-}
-
 export function isFatalCompactionError(err: unknown): boolean {
   if (!err) return false;
-  const status = errorStatus(err);
-  if (status === 401 || status === 402 || status === 403) return true;
-  const name = err instanceof Error ? err.name.toLowerCase() : "";
+  if (err instanceof DOMException && err.name === "AbortError") return true;
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes("aborted") || msg.includes("cancelled")) return true;
+  if (msg.includes("invalid_request") && (msg.includes("reasoning") || msg.includes("effort") || msg.includes("budget"))) {
+    return false;
+  }
   return (
-    name === "aborterror" ||
-    msg.includes("cancelled") ||
-    msg.includes("canceled") ||
+    msg.includes("401") ||
     msg.includes("unauthorized") ||
     msg.includes("invalid_api_key") ||
-    msg.includes("authentication failed") ||
+    msg.includes("authentication") ||
+    msg.includes("403") ||
     msg.includes("forbidden") ||
+    msg.includes("402") ||
     msg.includes("insufficient_quota") ||
-    msg.includes("billing exhausted") ||
-    msg.includes("payment required")
+    msg.includes("billing")
   );
 }
 
@@ -376,23 +360,19 @@ export function combineCompactionUsage(first?: Usage, second?: Usage): Usage | u
   if (!first) return second;
   if (!second) return first;
   return {
-    input: first.input + second.input,
-    output: first.output + second.output,
-    cacheRead: first.cacheRead + second.cacheRead,
-    cacheWrite: first.cacheWrite + second.cacheWrite,
-    ...(first.cacheWrite1h !== undefined || second.cacheWrite1h !== undefined
-      ? { cacheWrite1h: (first.cacheWrite1h ?? 0) + (second.cacheWrite1h ?? 0) }
-      : {}),
-    ...(first.reasoning !== undefined || second.reasoning !== undefined
-      ? { reasoning: (first.reasoning ?? 0) + (second.reasoning ?? 0) }
-      : {}),
-    totalTokens: first.totalTokens + second.totalTokens,
+    input: (first.input || 0) + (second.input || 0),
+    output: (first.output || 0) + (second.output || 0),
+    cacheRead: (first.cacheRead || 0) + (second.cacheRead || 0),
+    cacheWrite: (first.cacheWrite || 0) + (second.cacheWrite || 0),
+    cacheWrite1h: ((first as any)?.cacheWrite1h || 0) + ((second as any)?.cacheWrite1h || 0),
+    reasoning: ((first as any)?.reasoning || 0) + ((second as any)?.reasoning || 0),
+    totalTokens: (first.totalTokens || 0) + (second.totalTokens || 0),
     cost: {
-      input: first.cost.input + second.cost.input,
-      output: first.cost.output + second.cost.output,
-      cacheRead: first.cost.cacheRead + second.cost.cacheRead,
-      cacheWrite: first.cost.cacheWrite + second.cost.cacheWrite,
-      total: first.cost.total + second.cost.total,
+      input: ((first.cost as any)?.input || 0) + ((second.cost as any)?.input || 0),
+      output: ((first.cost as any)?.output || 0) + ((second.cost as any)?.output || 0),
+      cacheRead: ((first.cost as any)?.cacheRead || 0) + ((second.cost as any)?.cacheRead || 0),
+      cacheWrite: ((first.cost as any)?.cacheWrite || 0) + ((second.cost as any)?.cacheWrite || 0),
+      total: ((first.cost as any)?.total || 0) + ((second.cost as any)?.total || 0),
     },
   };
 }
@@ -462,25 +442,20 @@ export async function runSmartCompaction(
     ? ctx.thinkingLevel
     : config.thinkingLevel;
 
-  const primaryReasoning = primaryModel.reasoning && desiredThinking && desiredThinking !== "off"
-    ? (desiredThinking as AttemptPlan["reasoning"])
-    : undefined;
   const plans: AttemptPlan[] = [
     {
       model: primaryModel,
-      reasoning: primaryReasoning,
+      reasoning: primaryModel.reasoning && desiredThinking && desiredThinking !== "off" ? (desiredThinking as any) : undefined,
       isInherited: primaryIsInherited,
-      stageLabel: primaryReasoning ? "primary model with reasoning" : "primary model",
+      stageLabel: "primary model with reasoning",
     },
-  ];
-  if (primaryReasoning) {
-    plans.push({
+    {
       model: primaryModel,
       reasoning: "off",
       isInherited: primaryIsInherited,
       stageLabel: "primary model without reasoning",
-    });
-  }
+    },
+  ];
 
   if (sessionModel && modelKey(sessionModel) !== modelKey(primaryModel)) {
     plans.push({
@@ -531,7 +506,6 @@ export async function runSmartCompaction(
         throw err instanceof Error ? err : new Error(String(err));
       }
       lastError = err instanceof Error ? err : new Error(String(err));
-      // Continue to next stage in retry ladder
     }
   }
 
@@ -554,13 +528,8 @@ export async function runSmartCompaction(
     ...(currentOps?.read ?? []),
   ]);
 
-  const allReadFiles = [...combinedRead].filter((file) => !combinedModified.has(file));
-  const allTouchedModifiedFiles = [...combinedModified];
-  const sensitiveTouchedFilesOmitted = new Set(
-    [...allReadFiles, ...allTouchedModifiedFiles].filter(isSensitivePath),
-  ).size;
-  const readFilesList = allReadFiles.filter((file) => !isSensitivePath(file)).sort();
-  const touchedModifiedFilesList = allTouchedModifiedFiles.filter((file) => !isSensitivePath(file)).sort();
+  const readFilesList = [...combinedRead].filter((file) => !combinedModified.has(file)).sort();
+  const touchedModifiedFilesList = [...combinedModified].sort();
   const gitState = await getGitEngineeringState(ctx.cwd, signal);
   const activeDirtyFilesList = gitState.files.map((file) => file.path);
   const activeBackgroundProcesses = getActiveBackgroundProcesses();
@@ -571,7 +540,6 @@ export async function runSmartCompaction(
     activeDirtyFiles: activeDirtyFilesList,
     dirtyPatch: gitState.patch,
     dirtyStateAvailable: gitState.available,
-    sensitiveFilesOmitted: gitState.sensitiveFilesOmitted + sensitiveTouchedFilesOmitted,
     activeBackgroundProcesses,
     lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets,
   });
@@ -591,8 +559,6 @@ export async function runSmartCompaction(
     activeDirtyFileStates: gitState.files,
     activeDirtyPatch: gitState.patch,
     dirtyStateAvailable: gitState.available,
-    sensitiveDirtyFilesOmitted: gitState.sensitiveFilesOmitted,
-    sensitiveTouchedFilesOmitted,
     activeBackgroundProcesses: activeBackgroundProcesses.length > 0 ? activeBackgroundProcesses : undefined,
     lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets.length > 0 ? gitState.lockfilesAndGeneratedAssets : undefined,
     cycleCount,

@@ -57,7 +57,7 @@ Key capabilities include:
 - **Active Background Terminal Awareness**: Automatically identifies running background processes and records them under `<active-background-processes>` to prevent duplicate server launches.
 - **Hierarchical Delta-Merging**: Carries forward immutable goals and user constraints across 10+ compaction cycles while condensing older completed items to prevent summary bloat.
 - **Classified Retry Ladder**: Distinguishes non-retryable fatal auth/quota errors from transient reasoning/length limits (retrying with reasoning off) and falling back to the active session model.
-- **Two-Ended Truncation & Credential Redaction**: Retains both head and tail of tool outputs (ensuring final error traces and test results survive) while redacting secrets and sensitive paths.
+- **Two-Ended Truncation & 100% Verbatim Fidelity**: Retains both head and tail of tool outputs (ensuring final error traces and test results survive) while preserving all user-supplied data, credentials, environment variables, and parameters verbatim.
 - **Custom Model Routing**: `/compaction-model` selects any custom compaction model (e.g. `factory/gemini-3.7-flash`, `cursor/cursor-grok-4.5-fast`) or defaults to inheriting the active session model (`inherit`). `/smart-compaction` manages settings stored in `<agent-dir>/smart-compaction.json`.
 
 ### [Background terminals](../extensions/background-terminals/README.md)

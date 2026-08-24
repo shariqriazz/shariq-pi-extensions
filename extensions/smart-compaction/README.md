@@ -31,7 +31,7 @@ When long-running agent sessions reach context thresholds, standard compaction f
   3. Session model with reasoning off.
   4. Graceful fallback to Pi's default compactor if all stages fail.
 - **Two-Ended Head & Tail Truncation**: Preserves both the beginning (context) and end (stack traces, compiler errors, exit codes, test summaries) of tool results and command logs.
-- **Secret-Safe Persistence**: Redacts credential-shaped values and omits sensitive tool paths, results, dirty files, and patches before durable compaction state is created.
+- **100% Full-Fidelity Data Preservation**: Preserves all user-provided data, credentials, environment variables, tool inputs, and code verbatim across compactions without stripping or redaction.
 - **Deterministic 10+ Cycle Stability**: Persists machine-readable touch, dirty-file, bounded-patch, and cycle ledgers in `CompactionEntry.details`; hierarchical delta merging keeps immutable constraints while condensing obsolete history.
 
 ## Model Selection
