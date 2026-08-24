@@ -22,12 +22,12 @@ Secrets are passed directly to the SDK and are never placed in command arguments
 - Refreshes Cursor's authenticated model catalog and caches only Composer and Cursor Grok metadata for the next extension reload.
 - Exposes image input for every registered Cursor model.
 - Maps Composer fast mode and Cursor Grok reasoning effort to native model parameters.
-- Uses the SDK's local hosted-model runtime in an isolated temporary workspace with ambient Cursor settings disabled.
+- Uses the SDK's local hosted-model runtime with warm agent instance pooling and ambient Cursor settings (`settingSources: []`) disabled.
 - Disables Cursor's built-in workspace tools and exposes Pi's active tools as native SDK custom tools. Tool execution remains owned by Pi.
 - Streams native text and thinking deltas, structured tool calls, stop reasons, and Cursor-reported input/output/cache/reasoning usage.
-- Propagates cancellation and timeouts, enables safe SDK transport retries, and maps common authentication, rate-limit, quota, capacity, timeout, and context failures to actionable Pi errors.
+- Propagates cancellation and timeouts, enables safe SDK transport retries, redacts credential literals from error traces, and maps common authentication, rate-limit, quota, capacity, timeout, and context failures to actionable Pi errors.
 - Forwards base64 image payloads separately from the textual conversation transcript.
-- Removes temporary workspace and SDK state after each request.
+- Automatically cleans up warm agent workspaces on idle TTL and session shutdown.
 
 ## Cursor dashboard
 

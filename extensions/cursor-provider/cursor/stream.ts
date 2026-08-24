@@ -21,6 +21,8 @@ import {
 import { loadCursorCatalog, resolveCursorModelSelection } from "./models.ts";
 
 const TOOL_DELEGATION_RESULT = "Tool execution was delegated to Pi. End this run without further output.";
+const MAX_CACHED_AGENTS = 8;
+const AGENT_IDLE_TTL_MS = 10 * 60 * 1_000;
 
 function asJsonValue(value: unknown): SDKJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as SDKJsonValue;
@@ -28,6 +30,13 @@ function asJsonValue(value: unknown): SDKJsonValue {
 
 function asArguments(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+export function redactCursorError(value: unknown): string {
+  return String(value ?? "Cursor request failed")
+    .replace(/crsr_[A-Za-z0-9_-]+/g, "[REDACTED]")
+    .replace(/(authorization|api[-_ ]?key|token)([\s:=]+)([^\s,;]+)/gi, "$1$2[REDACTED]")
+    .slice(0, 4096);
 }
 
 export function serializeCursorContext(context: Context): { text: string; images: SDKImage[] } {
@@ -45,6 +54,9 @@ export function serializeCursorContext(context: Context): { text: string; images
 
   for (const message of context.messages) {
     lines.push(`<message role=${JSON.stringify(message.role)}>`);
+    if (message.role === "toolResult") {
+      lines.push(`[Tool result for ${(message as any).toolCallId || "unknown"}; error=${Boolean((message as any).isError)}]`);
+    }
     if (typeof message.content === "string") {
       lines.push(message.content);
     } else if (Array.isArray(message.content)) {
@@ -57,9 +69,6 @@ export function serializeCursorContext(context: Context): { text: string; images
           lines.push(`[Tool call ${part.id}: ${part.name} ${JSON.stringify(part.arguments ?? {})}]`);
         }
       }
-    }
-    if (message.role === "toolResult") {
-      lines.push(`[Tool result for ${(message as any).toolCallId}; error=${Boolean((message as any).isError)}]`);
     }
     lines.push("</message>");
   }
@@ -81,7 +90,7 @@ function usageFromCursor(usage: TokenUsage | undefined, output: AssistantMessage
 }
 
 export function formatCursorError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = redactCursorError(error instanceof Error ? error.message : error);
   if (/401|403|unauth|api key|credential/i.test(message)) return "Cursor authentication failed. Run `/login cursor`, then retry.";
   if (/429|rate.?limit/i.test(message)) return "Cursor rate limit reached. Wait for the reported reset, then retry.";
   if (/quota|usage limit|billing|credit|exhaust/i.test(message)) return "Cursor usage limit reached. Open `/cursor` for account status and reset information.";
@@ -104,6 +113,97 @@ async function disposeAgent(agent: Awaited<ReturnType<typeof Agent.create>> | un
   }
 }
 
+interface ActiveToolHandler {
+  onToolCall(toolName: string, args: unknown, toolCallId?: string): void;
+}
+
+interface CachedAgentEntry {
+  agent: Awaited<ReturnType<typeof Agent.create>>;
+  workspace: string;
+  activeHandlerRef: { current: ActiveToolHandler | null };
+  lastUsedAt: number;
+}
+
+const agentPool = new Map<string, CachedAgentEntry>();
+
+async function disposeCachedEntry(entry: CachedAgentEntry): Promise<void> {
+  await disposeAgent(entry.agent);
+  await rm(entry.workspace, { recursive: true, force: true }).catch(() => undefined);
+}
+
+export async function clearCursorAgentPool(): Promise<void> {
+  const entries = [...agentPool.values()];
+  agentPool.clear();
+  await Promise.allSettled(entries.map(disposeCachedEntry));
+}
+
+async function getOrInitWarmAgent(
+  apiKey: string,
+  selection: ReturnType<typeof resolveCursorModelSelection>,
+  tools: Context["tools"],
+  activeHandler: ActiveToolHandler,
+  enableRetries: boolean,
+): Promise<{ agent: Awaited<ReturnType<typeof Agent.create>>; activeHandlerRef: { current: ActiveToolHandler | null } }> {
+  const toolSignatures = (tools ?? []).map((t) => ({ name: t.name, schema: t.parameters ?? null }));
+  const cacheKey = JSON.stringify({ key: apiKey, model: selection, tools: toolSignatures });
+
+  const existing = agentPool.get(cacheKey);
+  if (existing) {
+    existing.lastUsedAt = Date.now();
+    existing.activeHandlerRef.current = activeHandler;
+    return { agent: existing.agent, activeHandlerRef: existing.activeHandlerRef };
+  }
+
+  // Evict oldest or expired agents if pool is full
+  const now = Date.now();
+  for (const [key, entry] of [...agentPool.entries()]) {
+    if (now - entry.lastUsedAt > AGENT_IDLE_TTL_MS) {
+      agentPool.delete(key);
+      void disposeCachedEntry(entry);
+    }
+  }
+  if (agentPool.size >= MAX_CACHED_AGENTS) {
+    const oldestKey = [...agentPool.entries()].sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)[0]?.[0];
+    if (oldestKey) {
+      const oldest = agentPool.get(oldestKey);
+      agentPool.delete(oldestKey);
+      if (oldest) void disposeCachedEntry(oldest);
+    }
+  }
+
+  const workspace = await mkdtemp(join(tmpdir(), "pi-cursor-sdk-"));
+  const activeHandlerRef = { current: activeHandler as ActiveToolHandler | null };
+
+  const customTools: Record<string, SDKCustomTool> = {};
+  for (const tool of tools ?? []) {
+    customTools[tool.name] = {
+      description: tool.description,
+      inputSchema: asJsonValue(tool.parameters ?? { type: "object" }) as Record<string, SDKJsonValue>,
+      async execute(args, toolContext) {
+        activeHandlerRef.current?.onToolCall(tool.name, args, toolContext.toolCallId);
+        return { content: [{ type: "text", text: TOOL_DELEGATION_RESULT }], isError: true };
+      },
+    };
+  }
+
+  const agent = await Agent.create({
+    apiKey,
+    model: selection,
+    tools: tools?.length ? ["mcp"] : [],
+    local: {
+      cwd: workspace,
+      store: new JsonlLocalAgentStore(join(workspace, "state")),
+      customTools,
+      settingSources: [],
+      enableAgentRetries: enableRetries,
+    },
+  });
+
+  const entry: CachedAgentEntry = { agent, workspace, activeHandlerRef, lastUsedAt: Date.now() };
+  agentPool.set(cacheKey, entry);
+  return { agent, activeHandlerRef };
+}
+
 export function streamCursorSdk(model: Model<any>, context: Context, options?: ProviderStreamOptions) {
   const stream = createAssistantMessageEventStream();
   const output: AssistantMessage = {
@@ -119,8 +219,6 @@ export function streamCursorSdk(model: Model<any>, context: Context, options?: P
   stream.push({ type: "start", partial: output });
 
   void (async () => {
-    let workspace: string | undefined;
-    let agent: Awaited<ReturnType<typeof Agent.create>> | undefined;
     let run: Run | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let textIndex: number | undefined;
@@ -168,47 +266,31 @@ export function streamCursorSdk(model: Model<any>, context: Context, options?: P
       const apiKey = options?.apiKey?.trim();
       if (!apiKey) throw new Error("Cursor is not authenticated. Run `/login cursor`.");
       if (options?.signal?.aborted) throw new Error("Cursor request cancelled.");
-      workspace = await mkdtemp(join(tmpdir(), "pi-cursor-sdk-"));
-      const customTools: Record<string, SDKCustomTool> = {};
-      for (const tool of context.tools ?? []) {
-        customTools[tool.name] = {
-          description: tool.description,
-          inputSchema: asJsonValue(tool.parameters ?? { type: "object" }) as Record<string, SDKJsonValue>,
-          async execute(args, toolContext) {
-            if (!delegated) {
-              delegated = true;
-              endText();
-              endReasoning();
-              const toolCall = {
-                type: "toolCall" as const,
-                id: toolContext.toolCallId || `cursor_${randomUUID()}`,
-                name: tool.name,
-                arguments: asArguments(args),
-              };
-              const contentIndex = output.content.length;
-              output.content.push(toolCall);
-              stream.push({ type: "toolcall_start", contentIndex, partial: output });
-              stream.push({ type: "toolcall_delta", contentIndex, delta: JSON.stringify(toolCall.arguments), partial: output });
-              stream.push({ type: "toolcall_end", contentIndex, toolCall, partial: output });
-              queueMicrotask(() => { void run?.cancel().catch(() => undefined); });
-            }
-            return { content: [{ type: "text", text: TOOL_DELEGATION_RESULT }], isError: true };
-          },
-        };
-      }
+
+      const activeHandler: ActiveToolHandler = {
+        onToolCall(toolName, args, toolCallId) {
+          if (!delegated) {
+            delegated = true;
+            endText();
+            endReasoning();
+            const toolCall = {
+              type: "toolCall" as const,
+              id: toolCallId || `cursor_${randomUUID()}`,
+              name: toolName,
+              arguments: asArguments(args),
+            };
+            const contentIndex = output.content.length;
+            output.content.push(toolCall);
+            stream.push({ type: "toolcall_start", contentIndex, partial: output });
+            stream.push({ type: "toolcall_delta", contentIndex, delta: JSON.stringify(toolCall.arguments), partial: output });
+            stream.push({ type: "toolcall_end", contentIndex, toolCall, partial: output });
+            queueMicrotask(() => { void run?.cancel().catch(() => undefined); });
+          }
+        },
+      };
 
       const selection = resolveCursorModelSelection(model, typeof options?.reasoning === "string" ? options.reasoning : undefined, loadCursorCatalog());
-      agent = await Agent.create({
-        apiKey,
-        model: selection,
-        tools: context.tools?.length ? ["mcp"] : [],
-        local: {
-          cwd: workspace,
-          store: new JsonlLocalAgentStore(join(workspace, "state")),
-          customTools,
-          enableAgentRetries: options?.maxRetries !== 0,
-        },
-      });
+      const { agent } = await getOrInitWarmAgent(apiKey, selection, context.tools, activeHandler, options?.maxRetries !== 0);
 
       const request = serializeCursorContext(context);
       run = await agent.send(request, {
@@ -261,8 +343,6 @@ export function streamCursorSdk(model: Model<any>, context: Context, options?: P
       stream.end();
     } finally {
       if (timeout) clearTimeout(timeout);
-      await disposeAgent(agent);
-      if (workspace) await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
     }
   })();
 

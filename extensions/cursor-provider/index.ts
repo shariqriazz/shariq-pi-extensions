@@ -9,7 +9,7 @@ import {
   loadCursorCatalog,
   toCursorPiModels,
 } from "./cursor/models.ts";
-import { streamCursorSdk } from "./cursor/stream.ts";
+import { clearCursorAgentPool, streamCursorSdk } from "./cursor/stream.ts";
 import { fetchCursorUsage } from "./cursor/usage.ts";
 
 export default async function cursorProviderExtension(pi: ExtensionAPI) {
@@ -50,6 +50,10 @@ export default async function cursorProviderExtension(pi: ExtensionAPI) {
     (ctx.modelRegistry as any).authStorage?.reload?.();
   });
 
+  pi.on("session_shutdown", async () => {
+    await clearCursorAgentPool();
+  });
+
   pi.registerCommand("cursor", {
     description: "Open Cursor account, monthly usage, and limits dashboard",
     handler: async (_args, ctx) => {
@@ -83,6 +87,7 @@ export default async function cursorProviderExtension(pi: ExtensionAPI) {
     deactivate: async () => {
       try {
         pi.unregisterProvider(CURSOR_PROVIDER_ID);
+        await clearCursorAgentPool();
       } catch {
         // Ignore teardown after partial startup.
       }

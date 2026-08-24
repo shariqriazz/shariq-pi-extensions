@@ -4,7 +4,7 @@ import cursorProviderExtension from "./index.ts";
 import { loginCursor, refreshCursorToken } from "./cursor/auth.ts";
 import { CursorDashboard } from "./cursor/dashboard.ts";
 import { resolveCursorModelSelection, toCursorPiModels } from "./cursor/models.ts";
-import { formatCursorError, serializeCursorContext } from "./cursor/stream.ts";
+import { formatCursorError, redactCursorError, serializeCursorContext } from "./cursor/stream.ts";
 import { dollars, percentUsed } from "./cursor/usage.ts";
 
 const catalog = [
@@ -124,10 +124,11 @@ test("renders Cursor monthly totals without Factory-style windows", () => {
   assert.equal(percentUsed((dashboard as any).snapshot.usage), 40);
 });
 
-test("maps Cursor failures to actionable provider errors", () => {
+test("maps Cursor failures to actionable provider errors and redacts credentials", () => {
   assert.match(formatCursorError(new Error("HTTP 429")), /rate limit/i);
   assert.match(formatCursorError(new Error("context too long")), /Compact/i);
-  assert.match(formatCursorError(new Error("invalid api key")), /login cursor/i);
+  assert.match(formatCursorError(new Error("invalid api key crsr_1234567890abcdef")), /login cursor/i);
+  assert.equal(redactCursorError("Failed crsr_secret_key_123 with token=abc123secret"), "Failed [REDACTED] with token=[REDACTED]");
 });
 
 test("registers the native non-ACP Cursor provider", async () => {
