@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { isSensitivePath, redactLikelySecrets } from "../shared/redaction.ts";
 
 export const SMART_COMPACTION_SYSTEM_PROMPT = `You are a high-fidelity context continuity synthesizer for an autonomous coding agent.
 Your task is to analyze the preceding conversation and produce a comprehensive, structured checkpoint summary.
@@ -93,7 +94,6 @@ Use this EXACT format with all 6 numbered section headings:
 
 const TOOL_RESULT_HEAD_CHARS = 1200;
 const TOOL_RESULT_TAIL_CHARS = 1200;
-const TOOL_RESULT_TOTAL_BUDGET = TOOL_RESULT_HEAD_CHARS + TOOL_RESULT_TAIL_CHARS;
 
 export function truncateHeadAndTail(text: string, headChars = TOOL_RESULT_HEAD_CHARS, tailChars = TOOL_RESULT_TAIL_CHARS): string {
   const maxTotal = headChars + tailChars;
@@ -103,6 +103,15 @@ export function truncateHeadAndTail(text: string, headChars = TOOL_RESULT_HEAD_C
   const head = text.slice(0, headChars);
   const tail = text.slice(-tailChars);
   return `${head}\n\n[... ${omitted} characters omitted; showing beginning and end of output ...]\n\n${tail}`;
+}
+
+export function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 export function sanitizeTagContent(text: string): string {
@@ -137,11 +146,13 @@ function extractTextContent(content: unknown): string {
 
 export function serializeConversationForCompaction(messages: AgentMessage[]): string {
   const parts: string[] = [];
+  const sensitiveToolCallIds = new Set<string>();
+  const safeTranscriptText = (text: string) => sanitizeTagContent(redactLikelySecrets(text));
 
   for (const msg of messages) {
     if (msg.role === "user") {
       const text = extractTextContent((msg as any).content);
-      if (text) parts.push(`[User]:\n${sanitizeTagContent(text)}`);
+      if (text) parts.push(`[User]:\n${safeTranscriptText(text)}`);
     } else if (msg.role === "assistant") {
       const content = (msg as any).content;
       const thinkingBlocks: string[] = [];
@@ -157,8 +168,17 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
             textBlocks.push(block.text.trim());
           } else if (block.type === "toolCall") {
             const args = block.arguments as Record<string, unknown>;
+            const targetPath = typeof args?.path === "string" ? args.path : "";
+            const sensitive = ["read", "write", "edit"].includes(block.name)
+              && targetPath
+              && isSensitivePath(targetPath);
+            if (sensitive) {
+              if (typeof block.id === "string") sensitiveToolCallIds.add(block.id);
+              toolCallBlocks.push(`${block.name}([sensitive path and arguments omitted])`);
+              continue;
+            }
             const formattedArgs = Object.entries(args ?? {})
-              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .map(([k, v]) => `${k}=${redactLikelySecrets(JSON.stringify(v))}`)
               .join(", ");
             toolCallBlocks.push(`${block.name}(${formattedArgs})`);
           }
@@ -169,49 +189,76 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
 
       if (thinkingBlocks.length > 0) {
         const combinedThinking = thinkingBlocks.join("\n");
-        parts.push(`[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, 800, 800))}`);
+        parts.push(`[Assistant Thinking]:\n${safeTranscriptText(truncateHeadAndTail(combinedThinking, 800, 800))}`);
       }
       if (textBlocks.length > 0) {
-        parts.push(`[Assistant]:\n${sanitizeTagContent(textBlocks.join("\n"))}`);
+        parts.push(`[Assistant]:\n${safeTranscriptText(textBlocks.join("\n"))}`);
       }
       if (toolCallBlocks.length > 0) {
-        parts.push(`[Assistant Tool Calls]:\n${sanitizeTagContent(toolCallBlocks.join("\n"))}`);
+        parts.push(`[Assistant Tool Calls]:\n${safeTranscriptText(toolCallBlocks.join("\n"))}`);
       }
     } else if (msg.role === "toolResult") {
+      if (sensitiveToolCallIds.has((msg as any).toolCallId)) {
+        parts.push("[Tool Result]:\n[sensitive tool result omitted]");
+        continue;
+      }
       const text = extractTextContent((msg as any).content);
       if (text) {
-        parts.push(`[Tool Result]:\n${sanitizeTagContent(truncateHeadAndTail(text, TOOL_RESULT_HEAD_CHARS, TOOL_RESULT_TAIL_CHARS))}`);
+        parts.push(`[Tool Result]:\n${safeTranscriptText(truncateHeadAndTail(text, TOOL_RESULT_HEAD_CHARS, TOOL_RESULT_TAIL_CHARS))}`);
       }
     } else if (msg.role === "custom") {
       const text = extractTextContent((msg as any).content);
-      if (text) parts.push(`[System Event]:\n${sanitizeTagContent(text)}`);
+      if (text) parts.push(`[System Event]:\n${safeTranscriptText(text)}`);
     } else if (msg.role === "bashExecution") {
       const cmd = (msg as any).command ?? "";
       const out = (msg as any).output ?? "";
-      parts.push(`[Command Executed]:\n$ ${cmd}\n${sanitizeTagContent(truncateHeadAndTail(out, 800, 800))}`);
+      parts.push(`[Command Executed]:\n$ ${safeTranscriptText(cmd)}\n${safeTranscriptText(truncateHeadAndTail(out, 800, 800))}`);
     } else if (msg.role === "compactionSummary" || msg.role === "branchSummary") {
       const summary = (msg as any).summary ?? "";
-      if (summary) parts.push(`[Prior Summary]:\n${sanitizeTagContent(summary)}`);
+      if (summary) parts.push(`[Prior Summary]:\n${safeTranscriptText(summary)}`);
     }
   }
 
   return parts.join("\n\n---\n\n");
 }
 
-export function formatFileOperationsXml(fileOps?: { read?: Iterable<string>; written?: Iterable<string>; edited?: Iterable<string> }): string {
-  if (!fileOps) return "";
-  const readSet = new Set(fileOps.read ?? []);
-  const modifiedSet = new Set([...(fileOps.written ?? []), ...(fileOps.edited ?? [])]);
-  const readOnly = [...readSet].filter((f) => !modifiedSet.has(f)).sort();
-  const modified = [...modifiedSet].sort();
+export function formatFileOperationsXml(options?: {
+  readFiles?: Iterable<string>;
+  touchedModifiedFiles?: Iterable<string>;
+  activeDirtyFiles?: Iterable<string>;
+  dirtyPatch?: string;
+  dirtyStateAvailable?: boolean;
+  sensitiveFilesOmitted?: number;
+}): string {
+  if (!options) return "";
+  const readSet = new Set(options.readFiles ?? []);
+  const touchedSet = new Set(options.touchedModifiedFiles ?? []);
+  const dirtySet = new Set(options.activeDirtyFiles ?? []);
+
+  const readOnly = [...readSet].filter((f) => !touchedSet.has(f)).sort();
+  const touched = [...touchedSet].sort();
+  const dirty = [...dirtySet].sort();
 
   const sections: string[] = [];
   if (readOnly.length > 0) {
-    sections.push(`<read-files>\n${readOnly.join("\n")}\n</read-files>`);
+    sections.push(`<read-files>\n${readOnly.map(escapeXml).join("\n")}\n</read-files>`);
   }
-  if (modified.length > 0) {
-    sections.push(`<modified-files>\n${modified.join("\n")}\n</modified-files>`);
+  if (touched.length > 0) {
+    sections.push(`<touched-files>\n${touched.map(escapeXml).join("\n")}\n</touched-files>`);
   }
+  if (dirty.length > 0) {
+    sections.push(`<uncommitted-dirty-files>\n${dirty.map(escapeXml).join("\n")}\n</uncommitted-dirty-files>`);
+  }
+  if (options.dirtyPatch) {
+    sections.push(`<uncommitted-diff>\n${escapeXml(options.dirtyPatch)}\n</uncommitted-diff>`);
+  }
+  if (options.dirtyStateAvailable === false) {
+    sections.push("<uncommitted-state-unavailable />");
+  }
+  if ((options.sensitiveFilesOmitted ?? 0) > 0) {
+    sections.push(`<sensitive-dirty-files-omitted count="${options.sensitiveFilesOmitted}" />`);
+  }
+
   if (sections.length === 0) return "";
   return `\n\n${sections.join("\n\n")}`;
 }

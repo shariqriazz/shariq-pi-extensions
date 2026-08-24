@@ -45,9 +45,9 @@ Keep secrets out of examples and fixtures. Tests should inject temporary roots, 
 
 ## Skills paired with extensions
 
-The root manifest declares `skills/background-terminals` and `skills/subagents`. Pi loads them directly from the managed Git package. Do not copy them into the agent directory from install scripts; that would create duplicates and leave stale files after removal.
+The root manifest declares `skills/background-terminals`, `skills/orchestration`, and `skills/subagents`. Pi loads them directly from the managed package. Do not copy them into the agent directory from install scripts; that would create duplicates and leave stale files after removal.
 
-When either skill changes, validate its structure and keep its behavior aligned with the corresponding extension tools.
+When any paired skill changes, validate its structure and keep its behavior aligned with the corresponding extension tools.
 
 ## Pi Memory
 

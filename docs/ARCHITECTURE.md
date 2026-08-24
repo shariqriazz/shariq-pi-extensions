@@ -38,6 +38,8 @@ Installed package directories are treated as immutable. Extensions resolve writa
 
 - Cursor's authenticated Composer/Grok catalog cache: `<agent-dir>/cursor/models.json`
 - Factory key selection, Droid metadata, and throttled per-credential limit cache: `<agent-dir>/factory/`
+- Smart Compaction configuration and details ledgers: `<agent-dir>/smart-compaction.json`
+- Input mode configuration: `<agent-dir>/input-mode.json`
 - Pi Memory state: `<agent-dir>/pi-memory/`
 - Subagent configuration and catalog: paths derived from `getAgentDir()`
 - Orchestration settings and run ledgers: `<agent-dir>/orchestration/`

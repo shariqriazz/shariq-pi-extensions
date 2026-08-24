@@ -10,7 +10,7 @@ import {
   saveSmartCompactionConfig,
   type SmartCompactionConfig,
 } from "./config.ts";
-import { runSmartCompaction } from "./engine.ts";
+import { resolveCompactionModel, runSmartCompaction } from "./engine.ts";
 
 const STATUS_KEY = "smart-compaction";
 
@@ -64,7 +64,7 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       if (event.fromExtension) {
         const details = event.compactionEntry.details as Record<string, unknown> | undefined;
         if (details?.customCompactor === "smart-compaction") {
-          const model = String(details.model ?? "session model");
+          const model = String(details.resolvedModel ?? details.model ?? "session model");
           ctx.ui?.notify(`Smart Compaction completed (${model})`, "info");
         }
       }
@@ -85,17 +85,21 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
             return;
           }
 
-          // Validate if model exists in registry
+          // Strict validation against available models in registry
           const available = cmdCtx.modelRegistry.getAvailable();
           const match = available.find(
             (m) => m.id === requested || `${m.provider}/${m.id}` === requested,
           );
 
           if (!match) {
-            cmdCtx.ui.notify(`Model "${requested}" not found in available models. Setting anyway.`, "warning");
+            cmdCtx.ui.notify(
+              `Model "${requested}" not found in available models. Run /compaction-model without arguments to select from active providers.`,
+              "error",
+            );
+            return;
           }
 
-          config.model = match ? `${match.provider}/${match.id}` : requested;
+          config.model = `${match.provider}/${match.id}`;
           saveSmartCompactionConfig(config, options.configFile);
           updateStatus();
           cmdCtx.ui.notify(`Compaction model set to: ${config.model}`, "info");
@@ -154,29 +158,29 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           cmdCtx.ui.notify("Smart Compaction disabled (using default compactor).", "info");
           return;
         }
-        if (sub.startsWith("model ")) {
-          const target = args.trim().slice(6).trim();
-          config.model = target || "inherit";
-          saveSmartCompactionConfig(config, options.configFile);
-          updateStatus();
-          cmdCtx.ui.notify(`Smart Compaction model set to: ${config.model}`, "info");
-          return;
+
+        let resolvedInfo = "inherit";
+        try {
+          const { model, isFallback, fallbackReason } = resolveCompactionModel(cmdCtx, config.model);
+          resolvedInfo = `${model.provider}/${model.id}`;
+          if (isFallback) {
+            resolvedInfo += ` (FALLBACK: ${fallbackReason})`;
+          }
+        } catch {
+          resolvedInfo = "unresolved";
         }
 
-        // Default status
-        const currentModelDesc = config.model === "inherit"
-          ? `inherit (${cmdCtx.model ? `${cmdCtx.model.provider}/${cmdCtx.model.id}` : "active session model"})`
-          : config.model;
         const currentThinkingDesc = config.thinkingLevel === "inherit"
           ? `inherit (${cmdCtx.thinkingLevel ?? "session default"})`
           : (config.thinkingLevel ?? "inherit");
-        const maxTokensDesc = config.maxSummaryTokens ? `${config.maxSummaryTokens}` : "unlimited (full model output capacity)";
+        const maxTokensDesc = `${config.maxSummaryTokens ?? 8192} tokens`;
 
         const status = [
           `Smart Compaction: ${config.enabled ? "ENABLED" : "DISABLED"}`,
-          `Model: ${currentModelDesc}`,
+          `Configured Model: ${config.model}`,
+          `Resolved Model: ${resolvedInfo}`,
           `Thinking Level: ${currentThinkingDesc}`,
-          `Max Output Tokens: ${maxTokensDesc}`,
+          `Summary Token Ceiling: ${maxTokensDesc}`,
           "",
           "Commands:",
           "  /smart-compaction enable | disable",

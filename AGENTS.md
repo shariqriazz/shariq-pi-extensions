@@ -23,7 +23,7 @@ This public repository packages the user's Pi extensions as one suite distribute
 
 ## Secrets and generated state
 
-Never commit API keys, OAuth credentials, `.env`, `auth.json`, Factory key files, SQLite databases, caches, sessions, logs, or `node_modules`. Factory state belongs under the active Pi agent directory in `factory/`; Pi Memory data belongs in `pi-memory/`.
+Never commit API keys, OAuth credentials, `.env`, `auth.json`, Factory key files, SQLite databases, caches, sessions, logs, or `node_modules`. Factory state belongs under the active Pi agent directory in `factory/`; Pi Memory data belongs in `pi-memory/`; Smart Compaction settings belong in `smart-compaction.json`; Input Mode settings belong in `input-mode.json`.
 
 ## Validation
 

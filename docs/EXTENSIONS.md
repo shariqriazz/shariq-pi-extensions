@@ -10,7 +10,7 @@ Registers the `antigravity` provider and `/login antigravity` flow for the lates
 
 ### [Cursor provider](../extensions/cursor-provider/README.md)
 
-Registers one `cursor` provider for Cursor-hosted Composer and Cursor Grok models through the native Cursor SDK. `/login cursor` supports browser-minted or existing user API keys, images and native Pi tool delegation are enabled, and `/cursor` shows Cursor's authoritative current-month total, Auto/Composer and named/API percentages, reset date, plan, and on-demand limits. It does not expose ACP, third-party models, or Factory-style 5-hour/weekly pools. The authenticated catalog cache belongs in `<agent-dir>/cursor/models.json`.
+Registers one `cursor` provider for Cursor-hosted Composer and Cursor Grok models through the native Cursor SDK with warm agent instance pooling (LRU pool with 10-minute idle TTL) and ambient settings suppression (`settingSources: []`) to eliminate per-turn startup latency. `/login cursor` supports browser-minted or existing user API keys, images and native Pi tool delegation are enabled, credential redaction automatically scrubs API keys and tokens from error logs, and `/cursor` shows Cursor's authoritative current-month total, Auto/Composer and named/API percentages, reset date, plan, and on-demand limits. It does not expose ACP, third-party models, or Factory-style 5-hour/weekly pools. The authenticated catalog cache belongs in `<agent-dir>/cursor/models.json`.
 
 ### [Factory provider](../extensions/factory-provider/README.md)
 
@@ -48,9 +48,15 @@ The model-facing `create_orchestration` tool starts planning only after an expli
 
 ### [Smart Compaction](../extensions/smart-compaction/README.md)
 
-Replaces standard context compaction with a high-fidelity continuity engine. It intercepts `session_before_compact` events and synthesizes multi-turn conversations into structured checkpoint summaries capturing primary goals and negative constraints, progress ledgers (`Done`/`In Progress`/`Blocked`), verbatim code snippets for active/uncommitted edits, exact error root causes, architectural decisions, resume anchors, and deterministic `<read-files>`/`<modified-files>` metadata.
+Replaces standard context compaction with a defensive, high-fidelity continuity engine. It intercepts `session_before_compact` events and synthesizes multi-turn conversations into structured checkpoint summaries capturing primary goals and negative constraints, progress ledgers (`Done`/`In Progress`/`Blocked`), verbatim code snippets for active/uncommitted edits, exact error root causes, architectural decisions, resume anchors, and deterministic file/diff state.
 
-Successive compactions utilize an incremental Delta-Merge to eliminate context degradation over long sessions. `/compaction-model` selects any custom compaction model (e.g. `factory/gemini-3.7-flash`, `cursor/cursor-grok-4.5-fast`) or defaults to inheriting the active session model (`inherit`). `/smart-compaction` toggles or inspects compaction configuration stored in `<agent-dir>/smart-compaction.json`.
+Key capabilities include:
+- **Fail-Closed Validation**: Strictly enforces `stopReason === "stop"`, rejects tool calls and length-truncated output, and requires all 6 section headings.
+- **Deterministic State Ledger (Schema v3)**: Machine-readable tracking of `touchedReadFiles`, `touchedModifiedFiles`, and asynchronous NUL-delimited Git worktree parsing capturing `activeDirtyFiles`, staged diffs, unstaged diffs, and untracked file previews in `CompactionEntry.details` and `<uncommitted-diff>` context.
+- **Hierarchical Delta-Merging**: Carries forward immutable goals and user constraints across 10+ compaction cycles while condensing older completed items to prevent summary bloat.
+- **Classified Retry Ladder**: Distinguishes non-retryable fatal auth/quota errors from transient reasoning/length limits (retrying with reasoning off) and falling back to the active session model.
+- **Two-Ended Truncation & Credential Redaction**: Retains both head and tail of tool outputs (ensuring final error traces and test results survive) while redacting secrets and sensitive paths.
+- **Custom Model Routing**: `/compaction-model` selects any custom compaction model (e.g. `factory/gemini-3.7-flash`, `cursor/cursor-grok-4.5-fast`) or defaults to inheriting the active session model (`inherit`). `/smart-compaction` manages settings stored in `<agent-dir>/smart-compaction.json`.
 
 ### [Background terminals](../extensions/background-terminals/README.md)
 
