@@ -12,8 +12,8 @@ When long-running agent sessions reach context thresholds, standard compaction f
 
 **Smart Compaction** resolves these issues through a 6-dimensional checkpoint architecture, fail-closed validation, deterministic file-ledger accumulation, and a multi-stage retry ladder:
 
-1. **🎯 Primary Goal & Nuanced Intent** — Retains full user objectives, styling preferences, scope boundaries, and explicit negative constraints.
-2. **📋 Progress Ledger** — Strict `[x] Done`, `[ ] In Progress`, and `[!] Blocked` tracking.
+1. **🎯 Primary Goal & Nuanced Intent** — Retains full user objectives, styling preferences, scope boundaries, explicit negative constraints, and full opaque identifiers (full 40-char commit SHAs, UUIDs, hostnames, IPs, ports, URLs).
+2. **📋 Progress Ledger** — Strict `[x] Done`, `[ ] In Progress` (including exact batch counts `Batch: X/Y completed`), and `[!] Blocked` tracking. Items under `Done` are marked as closed historical milestones that must not be re-executed.
 3. **🛠️ Code Changes & In-Progress Snippets** — Captures verbatim code snippets of active work and recent edits, supplemented by a bounded worktree patch so a successor can recover the current engineering state.
 4. **💥 Errors, Root Causes & Fixes** — Full error traces, root cause diagnostics, and verified solutions.
 5. **🧠 Key Decisions & Hypotheses** — Architectural choices, trade-offs, and discarded hypotheses.
