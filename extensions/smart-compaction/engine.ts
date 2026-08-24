@@ -25,6 +25,7 @@ export interface GitEngineeringState {
   files: DirtyFileState[];
   patch: string;
   sensitiveFilesOmitted: number;
+  lockfilesAndGeneratedAssets: string[];
 }
 
 export interface SmartCompactionDetails {
@@ -41,6 +42,8 @@ export interface SmartCompactionDetails {
   dirtyStateAvailable: boolean;
   sensitiveDirtyFilesOmitted: number;
   sensitiveTouchedFilesOmitted: number;
+  activeBackgroundProcesses?: string[];
+  lockfilesAndGeneratedAssets?: string[];
   cycleCount: number;
   timestamp: number;
 }
@@ -124,6 +127,42 @@ export function extractPriorFileState(branchEntries?: any[]): {
   return { touchedReadFiles, touchedModifiedFiles, cycleCount };
 }
 
+const GENERATED_OR_LOCKFILE_PATTERNS = [
+  /(?:^|\/)package-lock\.json$/i,
+  /(?:^|\/)pnpm-lock\.yaml$/i,
+  /(?:^|\/)yarn\.lock$/i,
+  /(?:^|\/)Cargo\.lock$/i,
+  /(?:^|\/)poetry\.lock$/i,
+  /(?:^|\/)bun\.lockb?$/i,
+  /(?:^|\/)composer\.lock$/i,
+  /(?:^|\/)flake\.lock$/i,
+  /(?:^|\/)mise\.lock$/i,
+  /\.min\.(?:js|css|mjs)$/i,
+  /\.map$/i,
+  /\.wasm$/i,
+  /(?:^|\/)(?:dist|build|out|\.next|\.nuxt|\.turbo|\.parcel-cache)\//i,
+];
+
+export function isGeneratedOrLockfile(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  return GENERATED_OR_LOCKFILE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function getActiveBackgroundProcesses(): string[] {
+  try {
+    const fn = (globalThis as any).__pi_get_active_terminals;
+    if (typeof fn === "function") {
+      const active = fn();
+      if (Array.isArray(active)) {
+        return active.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
+      }
+    }
+  } catch {
+    // Best-effort inspection.
+  }
+  return [];
+}
+
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 5_000;
 const GIT_OUTPUT_LIMIT = 2 * 1024 * 1024;
@@ -170,7 +209,7 @@ async function readUntrackedPreviews(
   const sections: string[] = [];
   let remaining = DIRTY_PATCH_CHARS;
   for (const file of files) {
-    if (file.status !== "??" || isSensitivePath(file.path) || remaining <= 0) continue;
+    if (file.status !== "??" || isSensitivePath(file.path) || isGeneratedOrLockfile(file.path) || remaining <= 0) continue;
     const absolute = path.resolve(root, file.path);
     const relative = path.relative(root, absolute);
     if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
@@ -201,19 +240,23 @@ async function readUntrackedPreviews(
 }
 
 export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal): Promise<GitEngineeringState> {
-  if (!cwd) return { available: false, files: [], patch: "", sensitiveFilesOmitted: 0 };
+  if (!cwd) return { available: false, files: [], patch: "", sensitiveFilesOmitted: 0, lockfilesAndGeneratedAssets: [] };
   try {
     const root = (await runGit(cwd, ["rev-parse", "--show-toplevel"], signal)).trim();
     const status = await runGit(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], signal);
     const allFiles = parseGitStatusPorcelainV1Z(status);
     const sensitiveFilesOmitted = allFiles.filter((file) => isSensitivePath(file.path)).length;
     const files = allFiles.filter((file) => !isSensitivePath(file.path));
-    const trackedPaths = files.filter((file) => file.status !== "??").map((file) => file.path).slice(0, 250);
+
+    const codeFiles = files.filter((file) => !isGeneratedOrLockfile(file.path));
+    const lockOrGeneratedFiles = files.filter((file) => isGeneratedOrLockfile(file.path)).map((file) => file.path);
+
+    const trackedCodePaths = codeFiles.filter((file) => file.status !== "??").map((file) => file.path).slice(0, 250);
     const stagedArgs = ["diff", "--cached", "--no-ext-diff", "--no-color", "--unified=2"];
     const unstagedArgs = ["diff", "--no-ext-diff", "--no-color", "--unified=2"];
-    if (trackedPaths.length > 0) {
-      stagedArgs.push("--", ...trackedPaths);
-      unstagedArgs.push("--", ...trackedPaths);
+    if (trackedCodePaths.length > 0) {
+      stagedArgs.push("--", ...trackedCodePaths);
+      unstagedArgs.push("--", ...trackedCodePaths);
     } else {
       // An unmatched pathspec avoids reading unrelated or sensitive tracked diffs.
       stagedArgs.push("--", ":(exclude,top)**");
@@ -222,7 +265,7 @@ export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal)
     const [staged, unstaged, untracked] = await Promise.all([
       runGit(root, stagedArgs, signal),
       runGit(root, unstagedArgs, signal),
-      readUntrackedPreviews(root, files),
+      readUntrackedPreviews(root, codeFiles),
     ]);
     const sections = [
       staged ? `## Staged changes\n${staged}` : "",
@@ -234,10 +277,11 @@ export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal)
       files,
       patch: truncatePatch(redactLikelySecrets(sections.join("\n\n"))),
       sensitiveFilesOmitted,
+      lockfilesAndGeneratedAssets: lockOrGeneratedFiles,
     };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { available: false, files: [], patch: "", sensitiveFilesOmitted: 0 };
+    return { available: false, files: [], patch: "", sensitiveFilesOmitted: 0, lockfilesAndGeneratedAssets: [] };
   }
 }
 
@@ -519,6 +563,7 @@ export async function runSmartCompaction(
   const touchedModifiedFilesList = allTouchedModifiedFiles.filter((file) => !isSensitivePath(file)).sort();
   const gitState = await getGitEngineeringState(ctx.cwd, signal);
   const activeDirtyFilesList = gitState.files.map((file) => file.path);
+  const activeBackgroundProcesses = getActiveBackgroundProcesses();
 
   const fileOpsXml = formatFileOperationsXml({
     readFiles: readFilesList,
@@ -527,6 +572,8 @@ export async function runSmartCompaction(
     dirtyPatch: gitState.patch,
     dirtyStateAvailable: gitState.available,
     sensitiveFilesOmitted: gitState.sensitiveFilesOmitted + sensitiveTouchedFilesOmitted,
+    activeBackgroundProcesses,
+    lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets,
   });
 
   const finalSummary = `${finalSummaryText}${fileOpsXml}`;
@@ -546,6 +593,8 @@ export async function runSmartCompaction(
     dirtyStateAvailable: gitState.available,
     sensitiveDirtyFilesOmitted: gitState.sensitiveFilesOmitted,
     sensitiveTouchedFilesOmitted,
+    activeBackgroundProcesses: activeBackgroundProcesses.length > 0 ? activeBackgroundProcesses : undefined,
+    lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets.length > 0 ? gitState.lockfilesAndGeneratedAssets : undefined,
     cycleCount,
     timestamp: Date.now(),
   };

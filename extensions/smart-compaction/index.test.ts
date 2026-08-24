@@ -22,6 +22,7 @@ import {
   extractPriorFileState,
   getGitEngineeringState,
   isFatalCompactionError,
+  isGeneratedOrLockfile,
   modelKey,
   parseGitStatusPorcelainV1Z,
   resolveCompactionModel,
@@ -135,7 +136,16 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
     assert.equal(escapeXml(`src/bad&name<1>.ts`), `src/bad&amp;name&lt;1&gt;.ts`);
   });
 
-  it("formats touched, read, dirty files, and bounded patches into XML blocks", () => {
+  it("identifies generated bundles and lockfiles for diff exclusion", () => {
+    assert.equal(isGeneratedOrLockfile("package-lock.json"), true);
+    assert.equal(isGeneratedOrLockfile("Cargo.lock"), true);
+    assert.equal(isGeneratedOrLockfile("pnpm-lock.yaml"), true);
+    assert.equal(isGeneratedOrLockfile("dist/bundle.js"), true);
+    assert.equal(isGeneratedOrLockfile("app.min.js"), true);
+    assert.equal(isGeneratedOrLockfile("src/index.ts"), false);
+  });
+
+  it("formats touched, read, dirty files, lockfiles, and bounded patches into XML blocks", () => {
     const xml = formatFileOperationsXml({
       readFiles: ["src/index.ts", "README.md"],
       touchedModifiedFiles: ["src/index.ts", "src/out.ts"],
@@ -143,10 +153,14 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
       dirtyPatch: `diff --git a/src/out.ts b/src/out.ts\n+const unsafe = "<value>";`,
       dirtyStateAvailable: true,
       sensitiveFilesOmitted: 2,
+      activeBackgroundProcesses: ["term-1: npm run dev (pid 1234)"],
+      lockfilesAndGeneratedAssets: ["package-lock.json"],
     });
     assert.match(xml, /<read-files>\nREADME\.md\n<\/read-files>/);
     assert.match(xml, /<touched-files>\nsrc\/index\.ts\nsrc\/out\.ts\n<\/touched-files>/);
     assert.match(xml, /<uncommitted-dirty-files>\nsrc\/out\.ts\n<\/uncommitted-dirty-files>/);
+    assert.match(xml, /<modified-lockfiles-and-assets>\npackage-lock\.json\n<\/modified-lockfiles-and-assets>/);
+    assert.match(xml, /<active-background-processes>\nterm-1: npm run dev \(pid 1234\)\n<\/active-background-processes>/);
     assert.ok(xml.includes("<uncommitted-diff>"));
     assert.ok(xml.includes("&lt;value&gt;"));
     assert.ok(xml.includes('<sensitive-dirty-files-omitted count="2" />'));

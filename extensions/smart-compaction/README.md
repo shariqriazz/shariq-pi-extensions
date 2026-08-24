@@ -18,11 +18,13 @@ When long-running agent sessions reach context thresholds, standard compaction f
 4. **💥 Errors, Root Causes & Fixes** — Full error traces, root cause diagnostics, and verified solutions.
 5. **🧠 Key Decisions & Hypotheses** — Architectural choices, trade-offs, and discarded hypotheses.
 6. **📍 Resume Anchor & Immediate Next Action** — Verbatim quote or exact resume state with the single immediate next action.
-7. **📂 Deterministic Engineering Ledger** — Programmatic `<read-files>`, `<touched-files>`, `<uncommitted-dirty-files>`, and bounded `<uncommitted-diff>` blocks. Historical touch state, current NUL-delimited porcelain status, and redacted patch data are persisted in versioned compaction details; sensitive paths are omitted.
+7. **📂 Deterministic Engineering Ledger** — Programmatic `<read-files>`, `<touched-files>`, `<uncommitted-dirty-files>`, `<modified-lockfiles-and-assets>`, `<active-background-processes>`, and bounded `<uncommitted-diff>` blocks. Lockfiles and minified bundles are automatically excluded from raw diffing to preserve token budgets for real source code, while active background terminals/daemons are recorded to prevent port conflicts.
 
 ## Defensive Reliability & Multi-Stage Retry Ladder
 
 - **Fail-Closed Validation**: Accepts only `stopReason === "stop"` and rejects tool calls, empty output, or summaries missing required section headers.
+- **Lockfile & Bundle Diff Exclusion**: Automatically excludes `package-lock.json`, `Cargo.lock`, `yarn.lock`, `pnpm-lock.yaml`, and minified assets from raw diffs, recording their status under `<modified-lockfiles-and-assets>` to preserve 100% of diff token headroom for source code.
+- **Background Daemon & Terminal Awareness**: Automatically detects running background terminals/processes and injects their status into `<active-background-processes>` so the successor agent never launches duplicate services.
 - **Retry Ladder**: If an attempt encounters output limits or transient reasoning timeouts:
   1. Primary configured model with requested reasoning.
   2. Primary model with reasoning off (unblocks reasoning/token caps).

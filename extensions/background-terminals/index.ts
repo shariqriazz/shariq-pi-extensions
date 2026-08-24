@@ -48,6 +48,10 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
   const getManager = (): TerminalManager => {
     if (manager) return manager;
     manager = new TerminalManager();
+    (globalThis as any).__pi_get_active_terminals = () => {
+      if (!manager) return [];
+      return manager.list().filter((s) => s.status === "running").map((s) => `${s.id}: "${oneLine(s.title)}" (pid ${s.pid})`);
+    };
     manager.setOnSettled((snapshot) => {
       if (!modelOwned.delete(snapshot.id)) {
         ui?.notify(
@@ -392,5 +396,9 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
   pi.registerCommand("ps", {
     description: "Open the background terminal control center",
     handler: async (_args, ctx) => openCommand(ctx),
+  });
+
+  pi.on("session_shutdown", () => {
+    delete (globalThis as any).__pi_get_active_terminals;
   });
 }

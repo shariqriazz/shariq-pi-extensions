@@ -229,15 +229,21 @@ export function formatFileOperationsXml(options?: {
   dirtyPatch?: string;
   dirtyStateAvailable?: boolean;
   sensitiveFilesOmitted?: number;
+  activeBackgroundProcesses?: Iterable<string>;
+  lockfilesAndGeneratedAssets?: Iterable<string>;
 }): string {
   if (!options) return "";
   const readSet = new Set(options.readFiles ?? []);
   const touchedSet = new Set(options.touchedModifiedFiles ?? []);
   const dirtySet = new Set(options.activeDirtyFiles ?? []);
+  const backgroundSet = new Set(options.activeBackgroundProcesses ?? []);
+  const lockfilesSet = new Set(options.lockfilesAndGeneratedAssets ?? []);
 
   const readOnly = [...readSet].filter((f) => !touchedSet.has(f)).sort();
   const touched = [...touchedSet].sort();
   const dirty = [...dirtySet].sort();
+  const background = [...backgroundSet].sort();
+  const lockfiles = [...lockfilesSet].sort();
 
   const sections: string[] = [];
   if (readOnly.length > 0) {
@@ -248,6 +254,12 @@ export function formatFileOperationsXml(options?: {
   }
   if (dirty.length > 0) {
     sections.push(`<uncommitted-dirty-files>\n${dirty.map(escapeXml).join("\n")}\n</uncommitted-dirty-files>`);
+  }
+  if (lockfiles.length > 0) {
+    sections.push(`<modified-lockfiles-and-assets>\n${lockfiles.map(escapeXml).join("\n")}\n</modified-lockfiles-and-assets>`);
+  }
+  if (background.length > 0) {
+    sections.push(`<active-background-processes>\n${background.map(escapeXml).join("\n")}\n</active-background-processes>`);
   }
   if (options.dirtyPatch) {
     sections.push(`<uncommitted-diff>\n${escapeXml(options.dirtyPatch)}\n</uncommitted-diff>`);

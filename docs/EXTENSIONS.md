@@ -53,6 +53,8 @@ Replaces standard context compaction with a defensive, high-fidelity continuity 
 Key capabilities include:
 - **Fail-Closed Validation**: Strictly enforces `stopReason === "stop"`, rejects tool calls and length-truncated output, and requires all 6 section headings.
 - **Deterministic State Ledger (Schema v3)**: Machine-readable tracking of `touchedReadFiles`, `touchedModifiedFiles`, and asynchronous NUL-delimited Git worktree parsing capturing `activeDirtyFiles`, staged diffs, unstaged diffs, and untracked file previews in `CompactionEntry.details` and `<uncommitted-diff>` context.
+- **Lockfile & Bundle Diff Filtering**: Automatically isolates `package-lock.json`, `Cargo.lock`, `yarn.lock`, and minified assets from raw diffs to preserve token budgets for source code logic.
+- **Active Background Terminal Awareness**: Automatically identifies running background processes and records them under `<active-background-processes>` to prevent duplicate server launches.
 - **Hierarchical Delta-Merging**: Carries forward immutable goals and user constraints across 10+ compaction cycles while condensing older completed items to prevent summary bloat.
 - **Classified Retry Ladder**: Distinguishes non-retryable fatal auth/quota errors from transient reasoning/length limits (retrying with reasoning off) and falling back to the active session model.
 - **Two-Ended Truncation & Credential Redaction**: Retains both head and tail of tool outputs (ensuring final error traces and test results survive) while redacting secrets and sensitive paths.
