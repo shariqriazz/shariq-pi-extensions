@@ -326,14 +326,16 @@ export function computeCompactionTokenCeiling(
   if (reserveTokens <= 0) {
     throw new Error("Reserve tokens budget must be positive.");
   }
-  const configuredMax = typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0
-    ? config.maxSummaryTokens
-    : 8192;
+  const modelMax = model.maxTokens > 0 ? model.maxTokens : 32768;
 
-  const reserveDerived = Math.max(1, Math.floor(0.8 * reserveTokens));
-  const modelLimit = model.maxTokens > 0 ? model.maxTokens : configuredMax;
+  // If the user explicitly configured a maxSummaryTokens override, respect it within model's capacity
+  if (typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0) {
+    return Math.min(config.maxSummaryTokens, modelMax);
+  }
 
-  return Math.min(configuredMax, reserveDerived, modelLimit);
+  // Dynamic model-native output capacity:
+  // Take full output capacity directly from the model (e.g., 32k, 64k, 128k+)
+  return modelMax;
 }
 
 export function isFatalCompactionError(err: unknown): boolean {

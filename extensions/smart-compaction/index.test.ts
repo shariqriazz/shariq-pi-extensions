@@ -83,7 +83,7 @@ export const pool = new Pool({ max: 20 });
 - **Next Concrete Step**: Run test suite via \`npm test test/db.test.ts\`.`;
 
 describe("smart-compaction config", () => {
-  it("loads default config with 8192 token ceiling and inherit model", () => {
+  it("loads default config with dynamic model ceiling and inherit model", () => {
     const { file, cleanup } = createTmpConfig();
     try {
       const config = loadSmartCompactionConfig(file);
@@ -91,7 +91,7 @@ describe("smart-compaction config", () => {
       assert.equal(config.enabled, true);
       assert.equal(config.model, "inherit");
       assert.equal(config.thinkingLevel, "inherit");
-      assert.equal(config.maxSummaryTokens, 8192);
+      assert.equal(config.maxSummaryTokens, undefined);
     } finally {
       cleanup();
     }
@@ -288,17 +288,25 @@ describe("smart-compaction strict fail-closed validation", () => {
 });
 
 describe("smart-compaction token ceiling, usage, and error classification", () => {
-  it("computes safe token ceiling derived strictly from reserveTokens without over-allocating", () => {
-    const dummyModel: Model<Api> = { maxTokens: 128000 } as any;
-    const config: SmartCompactionConfig = { version: 1, enabled: true, model: "inherit", maxSummaryTokens: 8192 };
+  it("computes dynamic model-native token ceiling and respects explicit overrides", () => {
+    const largeModel: Model<Api> = { maxTokens: 65536 } as any;
+    const defaultModel: Model<Api> = { maxTokens: 0 } as any;
+    const boundedModel: Model<Api> = { maxTokens: 8192 } as any;
 
-    // Standard 16384 reserveTokens -> floor(0.8 * 16384) = 13107. Min(8192, 13107, 128000) = 8192
-    assert.equal(computeCompactionTokenCeiling(dummyModel, config, 16384), 8192);
+    const defaultConfig: SmartCompactionConfig = { version: 1, enabled: true, model: "inherit" };
+    const overrideConfig: SmartCompactionConfig = { version: 1, enabled: true, model: "inherit", maxSummaryTokens: 12000 };
 
-    // Small reserves remain bounded, and invalid non-positive reserves fail closed.
-    assert.equal(computeCompactionTokenCeiling(dummyModel, config, 2000), 1600);
-    assert.equal(computeCompactionTokenCeiling(dummyModel, config, 1), 1);
-    assert.throws(() => computeCompactionTokenCeiling(dummyModel, config, 0), /must be positive/);
+    // Dynamic model ceiling returns full native capacity
+    assert.equal(computeCompactionTokenCeiling(largeModel, defaultConfig), 65536);
+    assert.equal(computeCompactionTokenCeiling(boundedModel, defaultConfig), 8192);
+    assert.equal(computeCompactionTokenCeiling(defaultModel, defaultConfig), 32768);
+
+    // Explicit override is respected when configured
+    assert.equal(computeCompactionTokenCeiling(largeModel, overrideConfig), 12000);
+    assert.equal(computeCompactionTokenCeiling(boundedModel, overrideConfig), 8192);
+
+    // Invalid non-positive reserves fail closed
+    assert.throws(() => computeCompactionTokenCeiling(largeModel, defaultConfig, 0), /must be positive/);
   });
 
   it("classifies fatal authentication and quota errors vs transient errors", () => {

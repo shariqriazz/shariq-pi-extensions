@@ -173,7 +173,9 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         const currentThinkingDesc = config.thinkingLevel === "inherit"
           ? `inherit (${cmdCtx.thinkingLevel ?? "session default"})`
           : (config.thinkingLevel ?? "inherit");
-        const maxTokensDesc = `${config.maxSummaryTokens ?? 8192} tokens`;
+        const maxTokensDesc = typeof config.maxSummaryTokens === "number"
+          ? `${config.maxSummaryTokens} tokens (custom override)`
+          : "dynamic (full model capacity)";
 
         const status = [
           `Smart Compaction: ${config.enabled ? "ENABLED" : "DISABLED"}`,

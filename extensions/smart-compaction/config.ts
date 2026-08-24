@@ -7,7 +7,7 @@ export interface SmartCompactionConfig {
   enabled: boolean;
   model: string; // "inherit" or "provider/model-id"
   thinkingLevel?: "inherit" | "off" | "low" | "medium" | "high" | "max";
-  maxSummaryTokens?: number; // default: 8192
+  maxSummaryTokens?: number; // optional override; defaults to dynamic model maxTokens
 }
 
 export const DEFAULT_SMART_COMPACTION_CONFIG: SmartCompactionConfig = {
@@ -15,7 +15,6 @@ export const DEFAULT_SMART_COMPACTION_CONFIG: SmartCompactionConfig = {
   enabled: true,
   model: "inherit",
   thinkingLevel: "inherit",
-  maxSummaryTokens: 8192,
 };
 
 export function smartCompactionConfigPath(): string {
@@ -35,7 +34,7 @@ export function loadSmartCompactionConfig(file = smartCompactionConfigPath()): S
         : DEFAULT_SMART_COMPACTION_CONFIG.thinkingLevel,
       maxSummaryTokens: typeof raw.maxSummaryTokens === "number" && raw.maxSummaryTokens > 0
         ? raw.maxSummaryTokens
-        : DEFAULT_SMART_COMPACTION_CONFIG.maxSummaryTokens,
+        : undefined,
     };
   } catch {
     return { ...DEFAULT_SMART_COMPACTION_CONFIG };
@@ -51,7 +50,9 @@ export function saveSmartCompactionConfig(config: SmartCompactionConfig, file = 
     enabled: config.enabled,
     model: config.model || "inherit",
     thinkingLevel: config.thinkingLevel ?? "inherit",
-    maxSummaryTokens: config.maxSummaryTokens ?? 8192,
+    ...(typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0
+      ? { maxSummaryTokens: config.maxSummaryTokens }
+      : {}),
   };
   try {
     fs.writeFileSync(temporary, `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 });

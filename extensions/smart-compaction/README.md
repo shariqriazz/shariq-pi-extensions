@@ -54,7 +54,7 @@ Settings are persisted in `~/.pi/agent/smart-compaction.json`:
   "version": 1,
   "enabled": true,
   "model": "inherit",
-  "thinkingLevel": "inherit",
-  "maxSummaryTokens": 8192
+  "thinkingLevel": "inherit"
 }
 ```
+*Note: `maxSummaryTokens` defaults to `undefined`, dynamically allowing the summarizer model to use its full native output token capacity (e.g. up to 65,536 tokens for Gemini, 32,768 for Codex Luna, 64,000 for Claude 3.7).*
