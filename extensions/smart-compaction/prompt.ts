@@ -145,10 +145,19 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
+export const CHECKPOINT_RESUMPTION_PREAMBLE =
+  `> **Context Checkpoint**: This is an automatically generated checkpoint condensing earlier conversation turns to free up context. Treat this captured context as established ground truth and continue the task directly without acknowledging or discussing this summary.\n\n`;
+
 export function serializeConversationForCompaction(messages: AgentMessage[]): string {
   const parts: string[] = [];
+  const totalMessages = messages.length;
 
-  for (const msg of messages) {
+  for (let i = 0; i < totalMessages; i++) {
+    const msg = messages[i];
+    const isRecent = (totalMessages - i) <= 14;
+    const toolHead = isRecent ? 1500 : 500;
+    const toolTail = isRecent ? 1500 : 500;
+
     if (msg.role === "user") {
       const text = extractTextContent((msg as any).content);
       if (text) parts.push(`[User]:\n${sanitizeTagContent(text)}`);
@@ -179,7 +188,7 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
 
       if (thinkingBlocks.length > 0) {
         const combinedThinking = thinkingBlocks.join("\n");
-        parts.push(`[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, 800, 800))}`);
+        parts.push(`[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, isRecent ? 800 : 400, isRecent ? 800 : 400))}`);
       }
       if (textBlocks.length > 0) {
         parts.push(`[Assistant]:\n${sanitizeTagContent(textBlocks.join("\n"))}`);
@@ -190,7 +199,7 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
     } else if (msg.role === "toolResult") {
       const text = extractTextContent((msg as any).content);
       if (text) {
-        parts.push(`[Tool Result]:\n${sanitizeTagContent(truncateHeadAndTail(text, TOOL_RESULT_HEAD_CHARS, TOOL_RESULT_TAIL_CHARS))}`);
+        parts.push(`[Tool Result]:\n${sanitizeTagContent(truncateHeadAndTail(text, toolHead, toolTail))}`);
       }
     } else if (msg.role === "custom") {
       const text = extractTextContent((msg as any).content);
@@ -198,7 +207,7 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
     } else if (msg.role === "bashExecution") {
       const cmd = (msg as any).command ?? "";
       const out = (msg as any).output ?? "";
-      parts.push(`[Command Executed]:\n$ ${sanitizeTagContent(cmd)}\n${sanitizeTagContent(truncateHeadAndTail(out, 800, 800))}`);
+      parts.push(`[Command Executed]:\n$ ${sanitizeTagContent(cmd)}\n${sanitizeTagContent(truncateHeadAndTail(out, isRecent ? 800 : 400, isRecent ? 800 : 400))}`);
     } else if (msg.role === "compactionSummary" || msg.role === "branchSummary") {
       const summary = (msg as any).summary ?? "";
       if (summary) parts.push(`[Prior Summary]:\n${sanitizeTagContent(summary)}`);

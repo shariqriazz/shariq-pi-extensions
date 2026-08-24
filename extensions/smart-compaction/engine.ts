@@ -6,6 +6,7 @@ import { uuidv7, type Api, type Context, type Model, type Usage, type AssistantM
 import type { ExtensionContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
 import type { SmartCompactionConfig } from "./config.ts";
 import {
+  CHECKPOINT_RESUMPTION_PREAMBLE,
   formatFileOperationsXml,
   sanitizeTagContent,
   SMART_COMPACTION_INITIAL_PROMPT,
@@ -544,7 +545,7 @@ export async function runSmartCompaction(
     lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets,
   });
 
-  const finalSummary = `${finalSummaryText}${fileOpsXml}`;
+  const finalSummary = `${CHECKPOINT_RESUMPTION_PREAMBLE}${finalSummaryText}${fileOpsXml}`;
   const cycleCount = prior.cycleCount + 1;
 
   const details: SmartCompactionDetails = {
