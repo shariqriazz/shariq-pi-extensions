@@ -25,9 +25,10 @@ This public repository packages the user's Pi extensions as one suite distribute
 
 Never commit API keys, OAuth credentials, `.env`, `auth.json`, Factory key files, SQLite databases, caches, sessions, logs, or `node_modules`. Factory state belongs under the active Pi agent directory in `factory/`; Pi Memory data belongs in `pi-memory/`; Smart Compaction settings belong in `smart-compaction.json`; Input Mode settings belong in `input-mode.json`.
 
-## Validation
+## Validation and releases
 
-Before committing package or manifest changes, run the root validation and inspect the package payload. Preserve required license files beside the code they cover.
+- Before committing package or manifest changes, run the root validation (`npm run validate`) and inspect the package payload. Preserve required license files beside the code they cover.
+- On functional changes, always bump the `version` in `package.json`. Pushing to `main` automatically triggers CI (`publish-npm.yml`) to validate and publish the new version to npm with OIDC provenance whenever the version is updated.
 
 ## Documentation
 

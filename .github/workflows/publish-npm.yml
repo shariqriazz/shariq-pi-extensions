@@ -1,6 +1,9 @@
 name: Publish npm package
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -18,4 +21,13 @@ jobs:
           cache: true
       - run: mise exec --locked -- npm ci
       - run: mise exec --locked -- npm run validate
-      - run: mise exec --locked -- npm publish --access public --provenance
+      - name: Publish if version updated
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          NPM_VERSION=$(npm view shariq-pi-extensions version 2>/dev/null || echo "0.0.0")
+          if [ "$CURRENT_VERSION" != "$NPM_VERSION" ]; then
+            echo "Publishing version $CURRENT_VERSION (npm registry has $NPM_VERSION)..."
+            mise exec --locked -- npm publish --access public --provenance
+          else
+            echo "Version $CURRENT_VERSION is already published on npm. Skipping publish step."
+          fi
