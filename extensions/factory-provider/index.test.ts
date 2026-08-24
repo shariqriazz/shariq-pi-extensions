@@ -4,6 +4,7 @@ import factoryExtension from "./index.ts";
 import { FACTORY_API_KEY_FILE_SENTINEL, classifyFactoryKeyCooldown, factoryApiKeyStatus, factoryAuthModeFromHeaders, factoryProviderRoutingSource, factoryResponsesUsesWebSocket, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
+import { droidVersion } from "./factory/droid.ts";
 import { DROID_MODELS_FALLBACK, factoryApiForModel, toPiModel } from "./factory/models.ts";
 import { FACTORY_SYSTEM_MARKER, resolvedFactoryReasoning, sanitizeFactoryContext, streamFactoryGemini } from "./factory/responses.ts";
 
@@ -147,7 +148,7 @@ test("registers one unified Factory provider and one dashboard command", async (
   assert.deepEqual([...providers.keys()], ["factory"]);
   assert.deepEqual(commands, ["factory"]);
   assert.equal(config.models.length, 13);
-  assert.equal(config.headers["X-Client-Version"], FALLBACK_DROID_VERSION);
+  assert.equal(config.headers["X-Client-Version"], droidVersion());
   const ids = config.models.map((model: any) => model.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(ids.includes("gpt-5.6-luna"));

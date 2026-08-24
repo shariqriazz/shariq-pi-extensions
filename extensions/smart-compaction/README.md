@@ -1,12 +1,16 @@
 # Smart Compaction Extension
 
-A high-fidelity context continuity synthesizer for Pi sessions that replaces standard compaction with an advanced multi-phase checkpoint engine.
+A high-fidelity context continuity synthesizer for Pi sessions that replaces standard compaction with an advanced multi-phase checkpoint engine and deterministic state tracking.
 
 ## Overview
 
-When a coding agent session reaches context limits, standard compaction often degrades in subtle code nuances, drops uncommitted code snippets, or suffers from "telephone game" information loss across successive compactions.
+When long-running agent sessions reach context thresholds, standard compaction frequently suffers from:
+- Information decay over repeated compactions ("the telephone game");
+- Dropping active, uncommitted code snippets and subtle compiler diagnostics;
+- Forgetting explicit user negative constraints ("never modify X");
+- Output length truncation resulting in broken or partial summaries.
 
-**Smart Compaction** solves this by generating structured, high-density checkpoint summaries organized into 6 vital engineering dimensions:
+**Smart Compaction** resolves these issues through a 6-dimensional checkpoint architecture, fail-closed validation, deterministic file-ledger accumulation, and a multi-stage retry ladder:
 
 1. **🎯 Primary Goal & Nuanced Intent** — Retains full user objectives, styling preferences, scope boundaries, and explicit negative constraints.
 2. **📋 Progress Ledger** — Strict `[x] Done`, `[ ] In Progress`, and `[!] Blocked` tracking.
@@ -14,15 +18,22 @@ When a coding agent session reaches context limits, standard compaction often de
 4. **💥 Errors, Root Causes & Fixes** — Full error traces, root cause diagnostics, and verified solutions.
 5. **🧠 Key Decisions & Hypotheses** — Architectural choices, trade-offs, and discarded hypotheses.
 6. **📍 Resume Anchor & Immediate Next Action** — Verbatim quote or exact resume state with the single immediate next action.
-7. **📂 Programmatic File Operations** — Append deterministic `<read-files>` and `<modified-files>` XML blocks extracted from tool calls.
+7. **📂 Deterministic File Ledger** — Programmatic `<read-files>` and `<modified-files>` XML blocks merged deterministically across cycles in `details.readFiles` and `details.modifiedFiles`.
 
-## Incremental Delta-Merging
+## Defensive Reliability & Multi-Stage Retry Ladder
 
-When multiple compactions occur in a single long-running session, Smart Compaction utilizes a **Delta-Merge** pipeline that carries forward historical foundations while accumulating new progress, code modifications, and error solutions—eliminating context bleed over 5+ compaction cycles.
+- **Fail-Closed Validation**: Rejects `stopReason === "length"`, `stopReason === "error"`, accidental tool calls, or partial summaries missing required section headers.
+- **Retry Ladder**: If an attempt encounters output limits or transient reasoning timeouts:
+  1. Primary configured model with requested reasoning.
+  2. Primary model with reasoning off (unblocks reasoning/token caps).
+  3. Session model with reasoning off.
+  4. Graceful fallback to Pi's default compactor if all stages fail.
+- **Two-Ended Head & Tail Truncation**: Preserves both the beginning (context) and end (stack traces, compiler errors, exit codes, test summaries) of tool results and command logs.
+- **Deterministic 10+ Cycle Stability**: Persists machine-readable file and cycle ledgers in `CompactionEntry.details` so file states survive indefinitely across successive compactions.
 
 ## Model Selection
 
-Smart Compaction can use the **active session model** (default: `inherit`) or any dedicated fast/cost-effective model (e.g. `factory/gemini-3.7-flash`, `antigravity/gemini-2.5-flash`, `cursor/cursor-grok-4.5-fast`).
+Smart Compaction uses the **active session model** by default (`model: "inherit"`, `thinkingLevel: "inherit"`), or can be routed to any dedicated model (e.g. `factory/gemini-3.7-flash`, `antigravity/gemini-2.5-flash`, `cursor/cursor-grok-4.5-fast`).
 
 ## Commands
 
@@ -40,10 +51,7 @@ Settings are persisted in `~/.pi/agent/smart-compaction.json`:
   "version": 1,
   "enabled": true,
   "model": "inherit",
-  "thinkingLevel": "inherit"
+  "thinkingLevel": "inherit",
+  "maxSummaryTokens": 8192
 }
 ```
-
-- `model`: `"inherit"` (uses current active session model) or explicit `"provider/model-id"`.
-- `thinkingLevel`: `"inherit"` (uses current session's thinking level) or `"off" | "low" | "medium" | "high" | "max"`.
-- `maxSummaryTokens`: optional override integer; if omitted, dynamically defaults to the model's full native output capacity (65,536–128,000+ tokens) so summaries are never artificially truncated.
