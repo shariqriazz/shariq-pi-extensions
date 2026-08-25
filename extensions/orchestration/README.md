@@ -31,7 +31,7 @@ Each project has up to 10 concurrent worker, explorer, or reviewer sessions. The
 
 ## Dashboard
 
-`/orchestration` opens the full-screen operations dashboard.
+Orchestration creation and inspection render as compact main-chat cards with expandable detail. Active runs appear in the shared bounded **Active work** dock; plan-ready and blocked runs are prioritized as attention states. `/orchestration` opens the full-screen operations dashboard. Dashboard actions close the overlay before opening editors, settings, or confirmation prompts, then return to the live dashboard so nested UI cannot stall.
 
 - `j` / `k`: select a run
 - `Enter`: inspect tasks and reviews
@@ -40,7 +40,7 @@ Each project has up to 10 concurrent worker, explorer, or reviewer sessions. The
 - `a`: approve the initial plan
 - `f`: give plan feedback
 - `p`: pause, resume, or recover
-- `x`: cancel while preserving artifacts
+- `x`: leave the dashboard and confirm cancellation while preserving artifacts
 - `Esc`: go back or close
 
 Interrupted runs recover in a paused state and require explicit resume. Run state is machine-local under Pi's active agent directory at `orchestration/runs/<run-id>/`.

@@ -3,7 +3,11 @@ import type {
   ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { clearActivitySource, setActivitySource } from "../shared/activity-dock.ts";
+import { toolCallCard, toolResultCard } from "../shared/tool-card.ts";
+import { oneLine, stateLabel } from "../shared/tui-dashboard.ts";
 import {
   requestSubagentCoordinator,
   type SubagentCoordinator,
@@ -33,16 +37,36 @@ export default function orchestration(pi: ExtensionAPI) {
   const updateStatus = () => {
     if (!ui || !engine) return;
     const active = engine.list().filter((run) => !["completed", "cancelled"].includes(run.status));
+    if (context) {
+      setActivitySource(context, "orchestration", active.map((run) => {
+        const done = run.tasks.filter((task) => task.status === "completed").length;
+        const attention = run.status === "awaiting-approval";
+        return {
+          id: run.id,
+          label: "Orchestration",
+          title: run.objective,
+          detail: `${attention ? "plan ready for review" : run.status} · ${done}/${run.tasks.length}`,
+          state: run.status === "blocked" ? "error" as const : attention ? "warning" as const : ["planning", "running"].includes(run.status) ? "active" as const : "muted" as const,
+          priority: attention ? 120 : run.status === "blocked" ? 110 : 45,
+        };
+      }));
+    }
     if (!active.length) {
       ui.setStatus("orchestration", undefined);
       return;
     }
-    const running = active.filter((run) => run.status === "running" || run.status === "planning").length;
+    const awaiting = active.filter((run) => run.status === "awaiting-approval").length;
     const blocked = active.filter((run) => run.status === "blocked").length;
-    ui.setStatus(
-      "orchestration",
-      `${ui.theme.fg(blocked ? "error" : running ? "warning" : "muted", "■")} orchestration ${running} running${blocked ? ` · ${blocked} blocked` : ""}`,
-    );
+    const running = active.filter((run) => run.status === "running" || run.status === "planning").length;
+    const paused = active.filter((run) => ["paused", "interrupted"].includes(run.status)).length;
+    const text = awaiting
+      ? `${awaiting} plan${awaiting === 1 ? "" : "s"} ready · /orchestration`
+      : blocked
+        ? `${blocked} blocked · /orchestration`
+        : running
+          ? `${running} running · /orchestration`
+          : `${paused} paused · /orchestration`;
+    ui.setStatus("orchestration", stateLabel(ui.theme, awaiting || blocked ? "warning" : running ? "active" : "muted", `Orchestration ${text}`));
   };
 
   const requireEngine = () => {
@@ -81,38 +105,41 @@ export default function orchestration(pi: ExtensionAPI) {
     }
   };
 
-  const runAction = (operation: () => Promise<unknown>) => {
-    void operation().catch((error) =>
-      ui?.notify(error instanceof Error ? error.message : String(error), "error"),
-    );
-  };
-
   const openDashboard = async (ctx: ExtensionContext) => {
     const current = requireEngine();
-    await openOrchestrationDashboard(ctx, current, {
-      create: () => runAction(() => createFromUi(ctx)),
-      settings: () => runAction(() => openOrchestrationSettings(ctx)),
-      feedback: (run) =>
-        runAction(async () => {
+    while (true) {
+      const action = await openOrchestrationDashboard(ctx, current);
+      if (action.kind === "close") return;
+      try {
+        if (action.kind === "create") {
+          await createFromUi(ctx);
+          continue;
+        }
+        if (action.kind === "settings") {
+          await openOrchestrationSettings(ctx);
+          continue;
+        }
+        const run = current.get(action.id);
+        if (!run) {
+          ctx.ui.notify(`Orchestration ${action.id} is no longer available.`, "warning");
+          continue;
+        }
+        if (action.kind === "feedback") {
           const feedback = await ctx.ui.editor("Plan feedback", "Tell the orchestrator what to change…");
           if (feedback?.trim()) await current.feedback(run.id, feedback);
-        }),
-      approve: (run) => runAction(() => current.approve(run.id)),
-      togglePause: (run) =>
-        runAction(() =>
-          ["paused", "interrupted", "blocked"].includes(run.status)
-            ? current.resume(run.id)
-            : current.pause(run.id),
-        ),
-      cancel: (run) =>
-        runAction(async () => {
-          const confirmed = await ctx.ui.confirm(
-            "Cancel orchestration?",
-            `Stop ${run.id} and preserve its run artifacts?`,
-          );
+        } else if (action.kind === "approve") {
+          await current.approve(run.id);
+        } else if (action.kind === "toggle-pause") {
+          if (["paused", "interrupted", "blocked"].includes(run.status)) await current.resume(run.id);
+          else await current.pause(run.id);
+        } else if (action.kind === "cancel") {
+          const confirmed = await ctx.ui.confirm("Cancel orchestration?", `Stop ${run.id} and preserve its run artifacts?`);
           if (confirmed) await current.cancel(run.id);
-        }),
-    });
+        }
+      } catch (error) {
+        ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+      }
+    }
   };
 
   pi.on("session_start", async (_event, ctx) => {
@@ -150,8 +177,9 @@ export default function orchestration(pi: ExtensionAPI) {
     engine?.stop();
     engine = undefined;
     coordinator = undefined;
-    context = undefined;
     ui?.setStatus("orchestration", undefined);
+    if (context) clearActivitySource(context, "orchestration");
+    context = undefined;
     ui = undefined;
   });
 
@@ -209,6 +237,14 @@ export default function orchestration(pi: ExtensionAPI) {
         details: { id: run.id, status: run.status, cwd: run.cwd },
       };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "orchestration create", oneLine(args.objective).slice(0, 100), args.cwd ?? "current workspace"), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Starting orchestration…"), 0, 0);
+      const details = result.details as { id?: string; status?: string; cwd?: string } | undefined;
+      return new Text(toolResultCard(result, expanded, theme, "active", details?.id ?? "orchestration", `${details?.status ?? "planning"} · ${details?.cwd ?? "workspace"} · /orchestration`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -238,6 +274,17 @@ export default function orchestration(pi: ExtensionAPI) {
         ],
         details: { runs },
       };
+    },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "orchestration inspect", args.id ?? "all runs"), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as { runs?: Array<{ status?: string; tasks?: Array<{ status?: string }> }> } | undefined;
+      const runs = details?.runs ?? [];
+      const attention = runs.filter((run) => run.status === "awaiting-approval" || run.status === "blocked").length;
+      const done = runs.reduce((total, run) => total + (run.tasks?.filter((task) => task.status === "completed").length ?? 0), 0);
+      const total = runs.reduce((count, run) => count + (run.tasks?.length ?? 0), 0);
+      return new Text(toolResultCard(result, expanded, theme, attention ? "warning" : runs.some((run) => run.status === "running" || run.status === "planning") ? "active" : "muted", "orchestration", `${runs.length} run${runs.length === 1 ? "" : "s"} · ${done}/${total} tasks${attention ? ` · ${attention} need attention` : ""}`), 0, 0);
     },
   });
 }

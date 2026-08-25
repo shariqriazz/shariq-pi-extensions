@@ -99,7 +99,7 @@ test("writes, reads, persists, and summarizes the complete ordered list", async 
   assert.equal(updated.details.state.tasks[0].priority, "high");
   assert.equal(updated.details.state.tasks[1].priority, "medium");
   assert.equal(h.entries.at(-1).customType, TASK_LIST_ENTRY);
-  assert.ok(h.widgets.get("task-list"));
+  assert.ok(h.widgets.get("active-work"));
   assert.match(String(h.statuses.get("task-list")), /Tasks 0\/2 · 1 active/);
 
   const read = await tool.execute("t2", {}, undefined, undefined, h.ctx);

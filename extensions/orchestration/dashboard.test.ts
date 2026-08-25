@@ -3,8 +3,9 @@ import { test } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { openOrchestrationDashboard } from "./dashboard.ts";
 
-test("orchestration dashboard stays bounded in list and detail views", async () => {
+test("orchestration dashboard stays bounded and returns actions before nested UI", async () => {
   let component: { render(width: number): string[]; handleInput(data: string): void } | undefined;
+  let action: unknown;
   const theme = {
     fg(_color: string, text: string) { return text; },
     bold(text: string) { return text; },
@@ -44,18 +45,18 @@ test("orchestration dashboard stays bounded in list and detail views", async () 
   const ctx = {
     ui: {
       custom(factory: Function) {
-        component = factory(tui, theme, keys, () => {});
+        component = factory(tui, theme, keys, (value: unknown) => { action = value; });
         return Promise.resolve();
       },
     },
   };
-  await openOrchestrationDashboard(ctx as never, engine as never, {
-    create() {}, settings() {}, feedback() {}, approve() {}, togglePause() {}, cancel() {},
-  });
+  await openOrchestrationDashboard(ctx as never, engine as never);
   assert.ok(component);
   for (const width of [28, 60, 100]) {
     assert.ok(component!.render(width).every((line) => visibleWidth(line) <= width));
   }
   component!.handleInput("\r");
   assert.ok(component!.render(40).every((line) => visibleWidth(line) <= 40));
+  component!.handleInput("x");
+  assert.deepEqual(action, { kind: "cancel", id: "orc_test" });
 });

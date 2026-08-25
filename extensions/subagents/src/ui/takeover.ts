@@ -190,6 +190,7 @@ export class SubagentDashboard implements Component {
   private done: (value: string | null) => void;
 
   private closed = false;
+  private abortArmed?: string;
   private ticker: ReturnType<typeof setInterval>;
   private unsubChange: () => void;
 
@@ -238,6 +239,11 @@ export class SubagentDashboard implements Component {
     reconcileDashboardSelection(this.selection, subs);
 
     if (this.keybindings.matches(data, "tui.select.cancel")) {
+      if (this.abortArmed) {
+        this.abortArmed = undefined;
+        this.tui.requestRender();
+        return;
+      }
       this.close(null);
       return;
     }
@@ -251,6 +257,7 @@ export class SubagentDashboard implements Component {
         this.selection.index =
           (this.selection.index - 1 + subs.length) % subs.length;
         this.selection.id = subs[this.selection.index]?.id;
+        this.abortArmed = undefined;
         this.tui.requestRender();
       }
       return;
@@ -259,13 +266,21 @@ export class SubagentDashboard implements Component {
       if (subs.length > 0) {
         this.selection.index = (this.selection.index + 1) % subs.length;
         this.selection.id = subs[this.selection.index]?.id;
+        this.abortArmed = undefined;
         this.tui.requestRender();
       }
       return;
     }
     if (data === "x") {
       const snap = subs[this.selection.index];
-      if (snap && snap.status === "running") this.view.requestAbort(snap.id);
+      if (!snap || snap.status !== "running") return;
+      if (this.abortArmed === snap.id) {
+        this.abortArmed = undefined;
+        this.view.requestAbort(snap.id);
+      } else {
+        this.abortArmed = snap.id;
+      }
+      this.tui.requestRender();
       return;
     }
   }
@@ -346,7 +361,7 @@ export class SubagentDashboard implements Component {
       truncateToWidth(
         theme.fg(
           "dim",
-          `  ${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} take over · x abort running · ${configuredKeys(this.keybindings, "tui.select.cancel")} close`,
+          `  ${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} take over · ${this.abortArmed ? "x again to abort · esc cancel" : "x abort (confirm)"} · ${configuredKeys(this.keybindings, "tui.select.cancel")} close`,
         ),
         width,
       ),

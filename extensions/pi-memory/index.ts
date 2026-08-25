@@ -288,7 +288,7 @@ export default function piMemory(pi: ExtensionAPI) {
       return;
     }
     service.initialize(ctx.cwd);
-    ctx.ui.setStatus("pi-memory", `memory ${service.status().memories}`);
+    ctx.ui.setStatus("pi-memory", undefined);
     void service.processPending(ctx, 1);
   });
 
@@ -307,9 +307,7 @@ export default function piMemory(pi: ExtensionAPI) {
   pi.on("agent_settled", async (_event, ctx) => {
     if (!active(ctx)) return;
     service.enqueueCurrentSession(ctx, projectFor(ctx));
-    void service.processPending(ctx, 1).then(() => {
-      if (ctx.hasUI) ctx.ui.setStatus("pi-memory", `memory ${service.status().memories}`);
-    });
+    void service.processPending(ctx, 1);
   });
 
   pi.on("session_before_compact", async (_event, ctx) => {

@@ -15,6 +15,7 @@ interface GenerationMetrics {
 
 const STATUS_ID = "generation-performance";
 const RENDER_INTERVAL_MS = 100;
+const DONE_LINGER_MS = 8_000;
 
 function duration(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
@@ -86,7 +87,23 @@ export function formatPerformanceStatus(
 export default function performanceStatus(pi: ExtensionAPI) {
   const metrics: GenerationMetrics = { streamedChars: 0, phase: "idle" };
   let renderTimer: ReturnType<typeof setTimeout> | undefined;
+  let doneTimer: ReturnType<typeof setTimeout> | undefined;
   let lastRenderAt = 0;
+
+  const cancelDoneTimer = () => {
+    if (!doneTimer) return;
+    clearTimeout(doneTimer);
+    doneTimer = undefined;
+  };
+
+  const scheduleDoneHide = (ctx: ExtensionContext) => {
+    cancelDoneTimer();
+    doneTimer = setTimeout(() => {
+      doneTimer = undefined;
+      if (metrics.phase === "done" && ctx.hasUI) ctx.ui.setStatus(STATUS_ID, undefined);
+    }, DONE_LINGER_MS);
+    doneTimer.unref?.();
+  };
 
   const render = (ctx: ExtensionContext, immediate = false) => {
     if (!ctx.hasUI || metrics.phase === "idle") return;
@@ -110,6 +127,7 @@ export default function performanceStatus(pi: ExtensionAPI) {
   };
 
   pi.on("turn_start", (_event, ctx) => {
+    cancelDoneTimer();
     metrics.requestStartedAt = Date.now();
     metrics.firstTokenAt = undefined;
     metrics.completedAt = undefined;
@@ -136,6 +154,7 @@ export default function performanceStatus(pi: ExtensionAPI) {
       metrics.exactOutputTokens = update.message.usage.output;
       metrics.phase = "done";
       render(ctx, true);
+      scheduleDoneHide(ctx);
     }
   });
 
@@ -145,9 +164,11 @@ export default function performanceStatus(pi: ExtensionAPI) {
     metrics.exactOutputTokens = event.message.usage.output;
     metrics.phase = "done";
     render(ctx, true);
+    scheduleDoneHide(ctx);
   });
 
   pi.on("tool_execution_start", (event, ctx) => {
+    cancelDoneTimer();
     metrics.activeTool = event.toolName;
     metrics.phase = "tool";
     render(ctx, true);
@@ -157,6 +178,7 @@ export default function performanceStatus(pi: ExtensionAPI) {
     metrics.activeTool = undefined;
     metrics.phase = metrics.completedAt ? "done" : "generating";
     render(ctx, true);
+    if (metrics.phase === "done") scheduleDoneHide(ctx);
   });
 
   pi.on("session_start", (_event, ctx) => {
@@ -166,6 +188,7 @@ export default function performanceStatus(pi: ExtensionAPI) {
   pi.on("session_shutdown", (_event, ctx) => {
     if (renderTimer) clearTimeout(renderTimer);
     renderTimer = undefined;
+    cancelDoneTimer();
     if (ctx.hasUI) ctx.ui.setStatus(STATUS_ID, undefined);
   });
 }

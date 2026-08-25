@@ -53,6 +53,10 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
 
   const read = tools.get("read_terminal");
   assert.match(read.description, /only when the user asks for progress or current output is required for immediate interaction/);
+  for (const tool of tools.values()) {
+    assert.equal(typeof tool.renderCall, "function", `${tool.name} should render a compact call card`);
+    assert.equal(typeof tool.renderResult, "function", `${tool.name} should render a compact result card`);
+  }
   assert.match(read.description, /automatically sends a follow-up/);
 
   const write = tools.get("write_terminal");

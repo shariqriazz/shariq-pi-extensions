@@ -26,7 +26,10 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { clearActivitySource, setActivitySource } from "../shared/activity-dock.ts";
 import { settlementDelivery } from "../shared/settlement-delivery.ts";
+import { toolCallCard, toolResultCard } from "../shared/tool-card.ts";
+import { oneLine } from "../shared/tui-dashboard.ts";
 import {
   formatElapsed,
   latestText,
@@ -199,6 +202,7 @@ export default function (pi: ExtensionAPI) {
   let runtime: SubagentRuntime | undefined;
   let managerPromise: Promise<SubagentManagerShape> | undefined;
   let ui: ExtensionUIContext | undefined;
+  let activityContext: ExtensionContext | undefined;
   let unsubStatus: (() => void) | undefined;
   const archived = new Map<string, ArchivedSubagent>();
   const peerHistory: PeerMessage[] = [];
@@ -509,16 +513,28 @@ export default function (pi: ExtensionAPI) {
   const updateStatus = (manager: SubagentManagerShape) => {
     if (!ui) return;
     const subs = manager.view.list();
-    if (subs.length === 0) {
+    const runningSnapshots = subs.filter((snap) => snap.status === "running");
+    const failed = subs.filter((snap) => snap.status === "error").length;
+    if (activityContext) {
+      setActivitySource(activityContext, "subagents", runningSnapshots.map((snap) => {
+        const activeTool = snap.liveTools.find((tool) => !tool.done)?.name;
+        return {
+          id: snap.id,
+          label: "Subagent",
+          title: snap.title,
+          detail: activeTool ? `${activeTool} · ${formatElapsed(snap)}` : `thinking · ${formatElapsed(snap)}`,
+          state: "active" as const,
+          priority: 55,
+        };
+      }));
+    }
+    if (runningSnapshots.length === 0 && failed === 0) {
       ui.setStatus("subagents", undefined);
       return;
     }
-    const running = subs.filter((snap) => snap.status === "running").length;
-    const failed = subs.filter((snap) => snap.status === "error").length;
-    const done = subs.length - running - failed;
     ui.setStatus(
       "subagents",
-      formatActivityStatus(ui.theme, { running, done, failed }),
+      formatActivityStatus(ui.theme, { running: runningSnapshots.length, done: 0, failed }),
     );
   };
 
@@ -640,7 +656,11 @@ export default function (pi: ExtensionAPI) {
       }
     }
     if (peerHistory.length > 256) peerHistory.splice(0, peerHistory.length - 256);
-    if (ctx.hasUI) ui = ctx.ui;
+    if (ctx.hasUI) {
+      ui = ctx.ui;
+      activityContext = ctx;
+      if (managerPromise) void managerPromise.then((manager) => updateStatus(manager));
+    }
   });
 
   pi.on("session_shutdown", async () => {
@@ -652,6 +672,8 @@ export default function (pi: ExtensionAPI) {
     unsubStatus?.();
     unsubStatus = undefined;
     ui?.setStatus("subagents", undefined);
+    if (activityContext) clearActivitySource(activityContext, "subagents");
+    activityContext = undefined;
     const closing = runtime;
     runtime = undefined;
     managerPromise = undefined;
@@ -764,6 +786,14 @@ export default function (pi: ExtensionAPI) {
         },
       };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, args.resume_from ? "subagent resume" : "subagent spawn", args.task_name ?? oneLine(args.message).slice(0, 72), `${args.agent_type ?? "general-purpose"} · ${args.capability ?? (args.readonly ? "read-only" : "all")} · ${args.isolation ?? "shared"}`), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Starting subagent…"), 0, 0);
+      const details = result.details as { id?: string; title?: string; model?: string; capability?: string; isolation?: string } | undefined;
+      return new Text(toolResultCard(result, expanded, theme, "active", details?.id ?? "subagent", `${details?.title ?? "started"} · ${details?.model ?? "inherit"} · ${details?.capability ?? "all"} · ${details?.isolation ?? "shared"}`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -859,6 +889,18 @@ export default function (pi: ExtensionAPI) {
         }),
       };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent collect", args.ids?.length ? `${args.ids.length} selected` : "available results", args.ids?.join(", ")), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Collecting subagent results…"), 0, 0);
+      const details = result.details as { results?: Array<{ status?: string }>; pending?: string[]; pendingQuestions?: string[] } | undefined;
+      const results = details?.results ?? [];
+      const failed = results.filter((item) => item.status === "error").length;
+      const pending = details?.pending?.length ?? 0;
+      const questions = details?.pendingQuestions?.length ?? 0;
+      return new Text(toolResultCard(result, expanded, theme, failed ? "error" : questions ? "warning" : pending ? "active" : "success", "subagents", `${results.length} result${results.length === 1 ? "" : "s"} · ${pending} running${questions ? ` · ${questions} need guidance` : ""}`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -903,6 +945,14 @@ export default function (pi: ExtensionAPI) {
         },
       };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent close", `${args.ids?.length ?? 0} agent${args.ids?.length === 1 ? "" : "s"}`, args.ids?.join(", ")), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Closing subagents…"), 0, 0);
+      const details = result.details as { results?: unknown[] } | undefined;
+      return new Text(toolResultCard(result, expanded, theme, "success", "subagents closed", `${details?.results?.length ?? 0} processed`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -941,6 +991,14 @@ export default function (pi: ExtensionAPI) {
         details: { id: snap.id, status: snap.status, turns: snap.turns },
       };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent inspect", args.id), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as { id?: string; status?: string; turns?: number } | undefined;
+      const state = details?.status === "error" ? "error" : details?.status === "running" ? "active" : "success";
+      return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "subagent", `${details?.status ?? "unknown"} · ${details?.turns ?? 0} turns`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -964,6 +1022,13 @@ export default function (pi: ExtensionAPI) {
         }],
         details: { maxConcurrent: config.maxConcurrent, profiles: config.profiles, personas: config.personas },
       };
+    },
+    renderCall(_args, theme) {
+      return new Text(toolCallCard(theme, "subagent profiles", "available roles and policies"), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as { maxConcurrent?: number; profiles?: object; personas?: object } | undefined;
+      return new Text(toolResultCard(result, expanded, theme, "muted", "subagent profiles", `${Object.keys(details?.profiles ?? {}).length} profiles · ${Object.keys(details?.personas ?? {}).length} personas · max ${details?.maxConcurrent ?? "?"}`), 0, 0);
     },
   });
 
@@ -989,6 +1054,16 @@ export default function (pi: ExtensionAPI) {
         },
       };
     },
+    renderCall(_args, theme) {
+      return new Text(toolCallCard(theme, "subagents", "list tracked agents"), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as { subagents?: Array<{ status?: string }> } | undefined;
+      const agents = details?.subagents ?? [];
+      const running = agents.filter((agent) => agent.status === "running").length;
+      const failed = agents.filter((agent) => agent.status === "error").length;
+      return new Text(toolResultCard(result, expanded, theme, failed ? "error" : running ? "active" : "muted", "subagents", `${agents.length} tracked · ${running} running · ${failed} failed`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -1008,6 +1083,14 @@ export default function (pi: ExtensionAPI) {
         content: [{ type: "text", text: `Sent message to ${params.id} "${snap.title}".` }],
         details: { id: params.id, status: manager.view.get(params.id)?.status },
       };
+    },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent message", args.id, oneLine(args.message).slice(0, 100)), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Messaging subagent…"), 0, 0);
+      const details = result.details as { id?: string; status?: string } | undefined;
+      return new Text(toolResultCard(result, expanded, theme, details?.status === "error" ? "error" : "success", details?.id ?? "subagent", `message delivered · ${details?.status ?? "unknown"}`), 0, 0);
     },
   });
 
@@ -1068,6 +1151,15 @@ export default function (pi: ExtensionAPI) {
             : `${params.id} has no changes to ${action}.`;
       return { content: [{ type: "text", text }], details: { id: params.id, ...result, worktree } };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent changes", args.id, args.action ?? "patch"), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Managing subagent changes…"), 0, 0);
+      const details = result.details as { id?: string; action?: string; changed?: boolean; discarded?: boolean; files?: string[] } | undefined;
+      const summary = details?.discarded ? "worktree discarded" : `${details?.action ?? "inspect"} · ${details?.files?.length ?? 0} files${details?.changed ? " changed" : ""}`;
+      return new Text(toolResultCard(result, expanded, theme, details?.changed || details?.discarded ? "success" : "muted", details?.id ?? "subagent", summary), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -1089,6 +1181,13 @@ export default function (pi: ExtensionAPI) {
         content: [{ type: "text", text: `Replied to Pi subagent "${pending.title}".` }],
         details: { questionId: id, title: pending.title },
       };
+    },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent reply", args.question_id ?? "pending question", oneLine(args.reply).slice(0, 100)), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as { title?: string; questionId?: string } | undefined;
+      return new Text(toolResultCard(result, expanded, theme, "success", "reply delivered", `${details?.title ?? "subagent"} · ${details?.questionId ?? "question"}`), 0, 0);
     },
   });
 
@@ -1172,6 +1271,15 @@ export default function (pi: ExtensionAPI) {
           agents: spawned.map((snap) => ({ id: snap.id, title: snap.title, status: snap.status })),
         },
       };
+    },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "subagent batch", `${args.tasks?.length ?? 0} task${args.tasks?.length === 1 ? "" : "s"}`, (args.tasks ?? []).slice(0, 3).map((task: { task_name?: string; message?: string }) => task.task_name ?? oneLine(task.message ?? "").slice(0, 40)).join(" · ")), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Starting subagent batch…"), 0, 0);
+      const details = result.details as { agents?: Array<{ status?: string }> } | undefined;
+      const agents = details?.agents ?? [];
+      return new Text(toolResultCard(result, expanded, theme, "active", "subagent batch", `${agents.length} started · ${agents.filter((agent) => agent.status === "running").length} running`), 0, 0);
     },
   });
 

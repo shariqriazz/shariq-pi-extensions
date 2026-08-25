@@ -44,13 +44,13 @@ State is stored in Pi session entries and reconstructed on resume, reload, and t
 
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, pre-warmed task dispatch, instant cascading cancellation, cross-session persistence, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
-The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. All completed subagent snapshots and transcripts persist across Pi restarts (`<agent-dir>/subagents/runs/`), allowing `resume_from` to resume completed workers at any point. Interruption immediately cascades across all child fibers in `<10ms`. Child settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with the summary guaranteed in model context and never rendered as user-authored or follow-up input; status tools are for explicit inspection, not waiting.
+The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. These lifecycle operations render as compact expandable main-chat cards; running children share the bounded Active work dock and completed counts no longer occupy footer space after settlement. All completed subagent snapshots and transcripts persist across Pi restarts (`<agent-dir>/subagents/runs/`), allowing `resume_from` to resume completed workers at any point. Interruption immediately cascades across all child fibers in `<10ms`. Child settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with the summary guaranteed in model context and never rendered as user-authored or follow-up input; status tools are for explicit inspection, not waiting.
 
 ### [Orchestration](../extensions/orchestration/README.md)
 
 The Orchestration extension coordinates explicitly requested large tasks through a dedicated orchestrator plus configurable explorer, frontend, backend, general-worker, and reviewer models. `/orchestration` opens the dashboard and `/orchestration settings` configures global role models. It reuses the canonical Subagents runtime, maintains a 10-worker pool per project, isolates Git writers in task worktrees, resumes the original worker for substantial review fixes, and applies final reviewed changes without committing or pushing.
 
-The model-facing `create_orchestration` tool starts planning only after an explicit orchestration request. `get_orchestration` reports status without advancing work. Interrupted runs recover paused under `<agent-dir>/orchestration/`.
+The model-facing `create_orchestration` tool starts planning only after an explicit orchestration request. `get_orchestration` reports status without advancing work. Both use compact expandable timeline cards, active runs share the Active work dock, and footer states distinguish plan-ready, blocked, running, and paused work. Dashboard editors and confirmations run outside the live overlay to avoid nested-input stalls. Interrupted runs recover paused under `<agent-dir>/orchestration/`.
 
 ### [Smart Compaction](../extensions/smart-compaction/README.md)
 
@@ -71,7 +71,7 @@ Key capabilities include:
 
 Managed PTYs support servers, watchers, long builds, downloads, and interactive processes. The extension tracks up to eight concurrent terminals, retains bounded output, stores full logs in restrictive temporary directories, and stops process groups during shutdown or reload.
 
-Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`. A model-started terminal keeps completion or failure in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with bounded output guaranteed in model context and never rendered as user-authored or follow-up input. Reading a terminal does not suppress that delivery; agents should inspect only for explicit progress requests or immediate interaction.
+Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`. All use compact expandable main-chat cards, while running PTYs share the bounded Active work dock with elapsed time and a latest-output preview. A model-started terminal keeps completion or failure in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with bounded output guaranteed in model context and never rendered as user-authored or follow-up input. Reading a terminal does not suppress that delivery; agents should inspect only for explicit progress requests or immediate interaction.
 
 ## Web access
 
@@ -91,7 +91,7 @@ Displays the estimated prompt and session contribution to the active context win
 
 ### [Performance status](../extensions/performance-status/README.md)
 
-Adds a responsive footer-area status row for each assistant message. Live TPS/output are marked as estimates; final TPS uses conventional decode throughput from first streamed token to message completion. TTFT and total elapsed time separately expose provider latency, prefill, and hidden reasoning; output tokens and active tools remain separate.
+Adds a responsive footer-area status row while each assistant message is active and for an eight-second completion linger, then clears it to avoid permanent footer noise. Live TPS/output are marked as estimates; final TPS uses conventional decode throughput from first streamed token to message completion. TTFT and total elapsed time separately expose provider latency, prefill, and hidden reasoning; output tokens and active tools remain separate.
 
 ### [Git info](../extensions/git-info/README.md)
 

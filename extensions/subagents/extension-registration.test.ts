@@ -50,6 +50,10 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
     "task",
   ]);
   assert.deepEqual(commands, ["btw", "subagents"]);
+  for (const tool of tools.values()) {
+    assert.equal(typeof tool.renderCall, "function", `${tool.name} should render a compact call card`);
+    assert.equal(typeof tool.renderResult, "function", `${tool.name} should render a compact result card`);
+  }
   assert.ok(hooks.includes("session_start"));
   assert.ok(hooks.includes("agent_start"));
   assert.ok(hooks.includes("agent_settled"));

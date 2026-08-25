@@ -18,15 +18,13 @@ const REFRESH_DEBOUNCE_MS = 150;
 function statusText(ui: ExtensionUIContext, summary: GitSummary): string | undefined {
   if (!summary.isRepository || !summary.branch) return undefined;
   const changed = summary.changedFiles === 0
-    ? ui.theme.fg("muted", "clean")
-    : ui.theme.fg(
-        "warning",
-        `${summary.changedFiles} changed ${summary.changedFiles === 1 ? "file" : "files"}`,
-      );
+    ? ui.theme.fg("muted", "✓")
+    : ui.theme.fg("warning", `+${summary.changedFiles}`);
   const pr = summary.pullRequest
     ? ` · ${ui.theme.fg("accent", `PR #${summary.pullRequest.number}${summary.pullRequest.draft ? " draft" : ""}`)}`
     : "";
-  return `${ui.theme.fg("muted", "git")} ${ui.theme.fg("accent", summary.branch)} · ${changed}${pr} · ${ui.theme.fg("dim", "/lg")}`;
+  const command = summary.changedFiles > 0 || summary.pullRequest ? ` · ${ui.theme.fg("dim", "/lg")}` : "";
+  return `${ui.theme.fg("muted", "git")} ${ui.theme.fg("accent", summary.branch)} ${changed}${pr}${command}`;
 }
 
 export default function gitInfoExtension(pi: ExtensionAPI) {

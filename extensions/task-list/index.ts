@@ -5,8 +5,9 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { clearActivitySource, setActivitySource, type ActivityState } from "../shared/activity-dock.ts";
 import { oneLine } from "../shared/tui-dashboard.ts";
 import {
   TASK_LIST_ENTRY,
@@ -34,7 +35,7 @@ import type {
 import { TASK_PRIORITIES, TASK_STATUSES } from "./types.ts";
 import { openTaskDashboard, taskGlyph } from "./ui.ts";
 
-const WIDGET_ID = "task-list";
+const ACTIVITY_SOURCE = "task-list";
 const FINISHED_LINGER_MS = 4_000;
 const WORK_TOOL_EXCLUSIONS = new Set([
   TASK_LIST_TOOL,
@@ -110,49 +111,39 @@ export default function taskListExtension(pi: ExtensionAPI) {
     lastCtx = ctx;
     cancelFinishedTimer();
     if (!ctx.hasUI || state.tasks.length === 0) {
-      ctx.ui.setWidget(WIDGET_ID, undefined);
-      ctx.ui.setStatus(WIDGET_ID, undefined);
+      clearActivitySource(ctx, ACTIVITY_SOURCE);
+      ctx.ui.setStatus(ACTIVITY_SOURCE, undefined);
       return;
     }
 
     const counts = taskCounts(state.tasks);
     const active = hasActiveTasks(state);
-    const renderWidget = (_tui: unknown, theme: ExtensionContext["ui"]["theme"]) => ({
-      render(width: number): string[] {
-        const current = state.tasks.filter((task) => !terminal(task.status));
-        const finished = counts.completed + counts.cancelled;
-        const header = truncateToWidth(
-          `${theme.fg(active ? "accent" : "success", theme.bold("Tasks"))} ${theme.fg("muted", `${finished}/${counts.total}`)}${counts.blocked ? theme.fg("warning", ` · ${counts.blocked} blocked`) : ""}`,
-          width,
-        );
-        const source = active ? current : state.tasks;
-        const shown = (active ? source.slice(0, 5) : source.slice(-3));
-        const lines = shown.map((task) => {
-          const color = statusColor(task.status);
-          const label = `${theme.fg(color, taskGlyph(task.status))} ${theme.fg(terminal(task.status) ? "muted" : "text", oneLine(task.content))}`;
-          return truncateToWidth(label, width);
-        });
-        const hidden = source.length - shown.length;
-        if (hidden > 0) lines.push(truncateToWidth(theme.fg("dim", `… +${hidden} more · /tasks`), width));
-        return [header, ...lines];
-      },
-      invalidate() {},
-    });
-    ctx.ui.setWidget(WIDGET_ID, renderWidget);
+    const finished = counts.completed + counts.cancelled;
+    const visible = (active
+      ? state.tasks.filter((task) => !terminal(task.status))
+      : state.tasks.slice(-3));
+    setActivitySource(ctx, ACTIVITY_SOURCE, visible.map((task) => ({
+      id: task.id,
+      label: `Tasks ${finished}/${counts.total}`,
+      title: task.content,
+      detail: task.status.replaceAll("_", " "),
+      state: (task.status === "in_progress" ? "active" : task.status === "completed" ? "success" : task.status === "blocked" ? "error" : "muted") as ActivityState,
+      priority: task.status === "blocked" ? 100 : task.status === "in_progress" ? 60 : 10,
+    })));
     if (active) {
       const status = counts.blocked > 0
         ? `Tasks ${counts.completed}/${counts.total} · ${counts.blocked} blocked`
         : `Tasks ${counts.completed}/${counts.total} · ${counts.inProgress} active`;
-      ctx.ui.setStatus(WIDGET_ID, ctx.ui.theme.fg(counts.blocked > 0 ? "warning" : "accent", status));
+      ctx.ui.setStatus(ACTIVITY_SOURCE, ctx.ui.theme.fg(counts.blocked > 0 ? "warning" : "accent", status));
       return;
     }
 
-    ctx.ui.setStatus(WIDGET_ID, ctx.ui.theme.fg("success", `Tasks complete ${counts.completed}/${counts.total}`));
+    ctx.ui.setStatus(ACTIVITY_SOURCE, ctx.ui.theme.fg("success", `Tasks complete ${counts.completed}/${counts.total}`));
     finishedTimer = setTimeout(() => {
       finishedTimer = undefined;
       if (lastCtx !== ctx || hasActiveTasks(state)) return;
-      ctx.ui.setWidget(WIDGET_ID, undefined);
-      ctx.ui.setStatus(WIDGET_ID, undefined);
+      clearActivitySource(ctx, ACTIVITY_SOURCE);
+      ctx.ui.setStatus(ACTIVITY_SOURCE, undefined);
     }, FINISHED_LINGER_MS);
     finishedTimer.unref?.();
   }

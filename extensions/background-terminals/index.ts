@@ -3,23 +3,27 @@ import * as path from "node:path";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
+  ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
-import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { formatSize, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { clearActivitySource, setActivitySource } from "../shared/activity-dock.ts";
 import { settlementDelivery } from "../shared/settlement-delivery.ts";
-import { oneLine, sanitizeTerminalText, stateLabel } from "../shared/tui-dashboard.ts";
+import { toolCallCard, toolResultCard } from "../shared/tool-card.ts";
+import { formatDurationMs, oneLine, sanitizeTerminalText, stateLabel } from "../shared/tui-dashboard.ts";
 import { TerminalManager, MAX_RUNNING_TERMINALS } from "./src/manager.ts";
 import {
   formatCompletion,
   formatReadResult,
   formatTerminal,
 } from "./src/presentation.ts";
-import type { TerminalReadResult, TerminalSnapshot } from "./src/types.ts";
+import { terminalElapsedMs, type TerminalReadResult, type TerminalSnapshot } from "./src/types.ts";
 import { openTerminalDashboard } from "./src/ui.ts";
 
 const STATUS_KEY = "background-terminals";
+const ACTIVITY_SOURCE = "background-terminals";
 
 function titleFrom(command: string, title?: string): string {
   const requested = oneLine(title ?? "").slice(0, 100);
@@ -39,6 +43,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
   const deliverSettlement = settlementDelivery(pi);
   let manager: TerminalManager | undefined;
   let ui: ExtensionUIContext | undefined;
+  let activityContext: ExtensionContext | undefined;
   let unsubscribe: (() => void) | undefined;
   let lastStatus = "";
   const pendingResults = new Map<string, TerminalSnapshot>();
@@ -79,6 +84,21 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     const next = running > 0
       ? `${running} background terminal${running === 1 ? "" : "s"} · /term`
       : "";
+    if (activityContext) {
+      setActivitySource(activityContext, ACTIVITY_SOURCE, terminals
+        .filter((terminal) => terminal.status === "running")
+        .map((terminal) => {
+          const latest = sanitizeTerminalText(terminal.output.text).split(/\r?\n/).filter(Boolean).at(-1);
+          return {
+            id: terminal.id,
+            label: "Terminal",
+            title: terminal.title,
+            detail: `${formatDurationMs(terminalElapsedMs(terminal))}${latest ? ` · ${oneLine(latest)}` : ""}`,
+            state: "active" as const,
+            priority: 50,
+          };
+        }));
+    }
     if (next === lastStatus) return;
     lastStatus = next;
     if (!next) ui.setStatus(STATUS_KEY, undefined);
@@ -108,7 +128,11 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", (_event, ctx) => {
-    if (ctx.hasUI) ui = ctx.ui;
+    if (ctx.hasUI) {
+      ui = ctx.ui;
+      activityContext = ctx;
+      updateStatus();
+    }
   });
 
   pi.on("session_shutdown", async () => {
@@ -118,6 +142,8 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     unsubscribe?.();
     unsubscribe = undefined;
     ui?.setStatus(STATUS_KEY, undefined);
+    if (activityContext) clearActivitySource(activityContext, ACTIVITY_SOURCE);
+    activityContext = undefined;
     ui = undefined;
     lastStatus = "";
     const closing = manager;
@@ -236,6 +262,15 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         },
       };
     },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "terminal read", args.id, `cursor ${args.cursor ?? "tail"}`), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Reading terminal…"), 0, 0);
+      const details = result.details as { id?: string; status?: string; cursor?: number; omittedBytes?: number } | undefined;
+      const state = details?.status === "failed" ? "error" : details?.status === "running" ? "active" : "success";
+      return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "terminal", `${details?.status ?? "unknown"} · cursor ${details?.cursor ?? "?"}${details?.omittedBytes ? ` · ${formatSize(details.omittedBytes)} omitted` : ""}`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -273,6 +308,16 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         },
       };
     },
+    renderCall(args, theme) {
+      const input = args.input === "\u0003" ? "Ctrl+C" : `${Array.from(args.input ?? "").length} chars${args.press_enter === false ? "" : " + Enter"}`;
+      return new Text(toolCallCard(theme, "terminal input", args.id, input), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Sending terminal input…"), 0, 0);
+      const details = result.details as { id?: string; status?: string; cursor?: number } | undefined;
+      const state = details?.status === "failed" ? "error" : details?.status === "running" ? "active" : "success";
+      return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "terminal", `${details?.status ?? "unknown"} · cursor ${details?.cursor ?? "?"}`), 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -286,6 +331,15 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         content: [{ type: "text", text: terminals.length ? terminals.map(formatTerminal).join("\n") : "No background terminals." }],
         details: { terminals: terminals.map((terminal) => ({ id: terminal.id, title: terminal.title, status: terminal.status, pid: terminal.pid })) },
       };
+    },
+    renderCall(_args, theme) {
+      return new Text(toolCallCard(theme, "terminals", "list managed PTYs"), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as { terminals?: Array<{ status?: string }> } | undefined;
+      const terminals = details?.terminals ?? [];
+      const running = terminals.filter((terminal) => terminal.status === "running").length;
+      return new Text(toolResultCard(result, expanded, theme, running ? "active" : "muted", "terminals", `${terminals.length} tracked · ${running} running`), 0, 0);
     },
   });
 
@@ -304,6 +358,16 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         content: [{ type: "text", text: terminals.map((terminal) => `${terminal.id} "${oneLine(terminal.title)}" is ${terminal.status} (exit ${terminal.exitCode ?? "?"}).`).join("\n") }],
         details: { terminals: terminals.map((terminal) => ({ id: terminal.id, status: terminal.status, exitCode: terminal.exitCode })) },
       };
+    },
+    renderCall(args, theme) {
+      return new Text(toolCallCard(theme, "terminal stop", `${args.ids?.length ?? 0} terminal${args.ids?.length === 1 ? "" : "s"}`, (args.ids ?? []).join(", ")), 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) return new Text(theme.fg("warning", "Stopping terminals…"), 0, 0);
+      const details = result.details as { terminals?: Array<{ status?: string }> } | undefined;
+      const terminals = details?.terminals ?? [];
+      const failed = terminals.some((terminal) => terminal.status === "failed");
+      return new Text(toolResultCard(result, expanded, theme, failed ? "error" : "success", "terminals stopped", `${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`), 0, 0);
     },
   });
 

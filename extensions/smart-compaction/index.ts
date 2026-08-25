@@ -25,11 +25,11 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
 
     const updateStatus = () => {
       if (!ui) return;
-      if (!config.enabled) {
+      if (!config.enabled || config.model === "inherit") {
         ui.setStatus(STATUS_KEY, undefined);
         return;
       }
-      const modelLabel = config.model === "inherit" ? "inherit" : config.model.split("/").pop() ?? config.model;
+      const modelLabel = config.model.split("/").pop() ?? config.model;
       ui.setStatus(STATUS_KEY, `compact: ${modelLabel}`);
     };
 
@@ -43,6 +43,7 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         return undefined;
       }
 
+      if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, "compacting…");
       try {
         const compaction = await runSmartCompaction({
           event,
@@ -57,6 +58,8 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         const message = error instanceof Error ? error.message : String(error);
         ctx.ui?.notify(`Smart Compaction failed: ${message}. Falling back to default compactor.`, "warning");
         return undefined;
+      } finally {
+        updateStatus();
       }
     });
 

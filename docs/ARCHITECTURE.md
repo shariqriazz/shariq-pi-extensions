@@ -17,7 +17,7 @@ docs/                            package-level maintenance documentation
 scripts/                         repository validation helpers
 ```
 
-Extension entrypoints register tools, commands, providers, events, or UI. Shared code stays in `extensions/shared` only when more than one extension owns the behavior. Provider-specific protocol and authentication code remains inside its provider directory. The background-terminal, orchestration, and subagent skills ship beside their extensions so a new machine receives the required lifecycle guidance with the tools.
+Extension entrypoints register tools, commands, providers, events, or UI. Shared code stays in `extensions/shared` only when more than one extension owns the behavior. The shared activity dock combines active Task List, terminal, subagent, and orchestration rows under one bounded widget; shared tool cards keep lifecycle operations compact in the timeline while preserving expanded output. Provider-specific protocol and authentication code remains inside its provider directory. The background-terminal, orchestration, and subagent skills ship beside their extensions so a new machine receives the required lifecycle guidance with the tools.
 
 ## Dependency model
 
