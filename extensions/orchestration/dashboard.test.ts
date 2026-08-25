@@ -53,7 +53,11 @@ test("orchestration dashboard stays bounded and returns actions before nested UI
   await openOrchestrationDashboard(ctx as never, engine as never);
   assert.ok(component);
   for (const width of [28, 60, 100]) {
-    assert.ok(component!.render(width).every((line) => visibleWidth(line) <= width));
+    const lines = component!.render(width);
+    assert.ok(lines.every((line) => visibleWidth(line) <= width));
+    assert.equal(lines.length, 29);
+    if (width >= 60) assert.match(lines.join("\n"), /ORCHESTRATION/);
+    assert.match(lines.join("\n"), /CONTROL CENTER/);
   }
   component!.handleInput("\r");
   assert.ok(component!.render(40).every((line) => visibleWidth(line) <= 40));

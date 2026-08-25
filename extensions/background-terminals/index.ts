@@ -101,13 +101,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     }
     if (next === lastStatus) return;
     lastStatus = next;
-    if (!next) ui.setStatus(STATUS_KEY, undefined);
-    else {
-      ui.setStatus(
-        STATUS_KEY,
-        stateLabel(ui.theme, "active", next),
-      );
-    }
+    ui.setStatus(STATUS_KEY, undefined);
   }
 
   function flushResult(id: string): void {

@@ -9,6 +9,7 @@ import {
   visibleWidth,
   type TUI,
 } from "@earendil-works/pi-tui";
+import { frameBottom, frameTop, framedRow, joinSides } from "../shared/tui-dashboard.ts";
 import type { OrchestrationEngine } from "./engine.ts";
 import type { OrchestrationRun } from "./types.ts";
 
@@ -102,9 +103,34 @@ class OrchestrationDashboard {
   render(width: number) {
     const runs = this.engine.list();
     this.reconcileSelection(runs);
-    const lines = this.detail && runs[this.selected]
-      ? this.renderDetail(runs[this.selected], width)
-      : this.renderList(runs, width);
+    const selected = runs[this.selected];
+    const rows = this.tui.terminal.rows || 30;
+    const bodyHeight = Math.max(8, rows - 5);
+    const innerWidth = Math.max(1, width - 2);
+    const content = this.detail && selected
+      ? this.renderDetail(selected, innerWidth)
+      : this.renderList(runs, innerWidth);
+    const body = content.length > bodyHeight
+      ? [...content.slice(0, bodyHeight - 1), this.theme.fg("dim", "… more")]
+      : content;
+    const status = runs.length
+      ? `${runs.filter((run) => ["planning", "running"].includes(run.status)).length} active · ${runs.length} total`
+      : "idle";
+    const controls = this.detail && selected
+      ? [
+          selected.status === "awaiting-approval" ? "a approve · f feedback" : "",
+          ["paused", "interrupted", "blocked"].includes(selected.status) ? "p resume" : selected.status === "running" ? "p pause" : "",
+          !["completed", "cancelled"].includes(selected.status) ? "x cancel" : "",
+          "esc back",
+        ].filter(Boolean).join(" · ")
+      : "j/k select · enter open · n new · s settings · esc close";
+    const lines = [
+      joinSides(`  ${this.theme.fg("accent", this.theme.bold("◆ ORCHESTRATION"))}`, `${this.theme.fg("muted", status)}  `, width),
+      frameTop(this.theme, width, this.detail && selected ? `${selected.id} · RUN DETAIL` : `${runs.length} RUN${runs.length === 1 ? "" : "S"} · CONTROL CENTER`),
+    ];
+    for (let row = 0; row < bodyHeight; row++) lines.push(framedRow(this.theme, body[row] ?? "", width));
+    lines.push(frameBottom(this.theme, width));
+    lines.push(truncateToWidth(this.theme.fg("dim", `  ${controls}`), width, ""));
     return lines.map((line) => truncateToWidth(line, width, ""));
   }
 
@@ -115,14 +141,7 @@ class OrchestrationDashboard {
   }
 
   private renderList(runs: OrchestrationRun[], width: number) {
-    const lines = [
-      this.split(
-        this.theme.fg("accent", this.theme.bold("Orchestration")),
-        this.theme.fg("dim", `${runs.length} run${runs.length === 1 ? "" : "s"}`),
-        width,
-      ),
-      this.theme.fg("borderMuted", "─".repeat(Math.max(0, width))),
-    ];
+    const lines: string[] = [];
     if (!runs.length) lines.push(this.theme.fg("muted", "No runs yet. Press n to create one."));
     const rows = this.tui.terminal.rows || 30;
     const visibleCount = Math.max(1, Math.floor((rows - 5) / 2));
@@ -142,13 +161,10 @@ class OrchestrationDashboard {
       );
       lines.push(`    ${this.theme.fg("dim", `${run.id} · ${run.cwd}`)}`);
     }
-    if (start > 0) lines.splice(2, 0, this.theme.fg("dim", `  ↑ ${start} more`));
+    if (start > 0) lines.unshift(this.theme.fg("dim", `  ↑ ${start} more`));
     const below = runs.length - start - visible.length;
     if (below > 0) lines.push(this.theme.fg("dim", `  ↓ ${below} more`));
-    lines.push("", this.theme.fg("dim", "j/k select · enter open · n new · s settings · esc close"));
-    const maxRows = Math.max(8, rows);
-    if (lines.length <= maxRows) return lines;
-    return [...lines.slice(0, maxRows - 2), this.theme.fg("dim", "… more runs"), lines.at(-1)!];
+    return lines;
   }
 
   private renderDetail(run: OrchestrationRun, width: number) {
@@ -179,16 +195,7 @@ class OrchestrationDashboard {
     }
     if (run.finalReviewSummary) lines.push("", this.theme.fg("accent", `Final review: ${run.finalReviewSummary}`));
     if (run.error) lines.push("", this.theme.fg("error", run.error));
-    const controls = [
-      run.status === "awaiting-approval" ? "a approve · f feedback" : "",
-      ["paused", "interrupted", "blocked"].includes(run.status) ? "p resume" : run.status === "running" ? "p pause" : "",
-      !["completed", "cancelled"].includes(run.status) ? "x cancel" : "",
-      "esc back",
-    ].filter(Boolean).join(" · ");
-    lines.push("", this.theme.fg("dim", controls));
-    const maxRows = Math.max(8, (this.tui.terminal.rows || 30) - 2);
-    if (lines.length <= maxRows) return lines;
-    return [...lines.slice(0, maxRows - 2), this.theme.fg("dim", "… more tasks in run state"), lines.at(-1)!];
+    return lines;
   }
 }
 

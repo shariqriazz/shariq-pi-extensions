@@ -39,10 +39,7 @@ import {
   type SubagentOrigin,
   type SubagentSnapshot,
 } from "./src/domain.ts";
-import {
-  formatActivityStatus,
-  formatContextUtilization,
-} from "./src/format.ts";
+import { formatContextUtilization } from "./src/format.ts";
 import { SubagentManager, type SubagentManagerShape } from "./src/manager.ts";
 import {
   buildSubagentResultMessage,
@@ -514,7 +511,6 @@ export default function (pi: ExtensionAPI) {
     if (!ui) return;
     const subs = manager.view.active();
     const runningSnapshots = subs.filter((snap) => snap.status === "running");
-    const failed = subs.filter((snap) => snap.status === "error").length;
     if (activityContext) {
       setActivitySource(activityContext, "subagents", runningSnapshots.map((snap) => {
         const activeTool = snap.liveTools.find((tool) => !tool.done)?.name;
@@ -528,14 +524,7 @@ export default function (pi: ExtensionAPI) {
         };
       }));
     }
-    if (runningSnapshots.length === 0 && failed === 0) {
-      ui.setStatus("subagents", undefined);
-      return;
-    }
-    ui.setStatus(
-      "subagents",
-      formatActivityStatus(ui.theme, { running: runningSnapshots.length, done: 0, failed }),
-    );
+    ui.setStatus("subagents", undefined);
   };
 
   const deliverResult = (snap: SubagentSnapshot) => {

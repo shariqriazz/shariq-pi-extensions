@@ -7,7 +7,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { clearActivitySource, setActivitySource } from "../shared/activity-dock.ts";
 import { toolCallCard, toolResultCard } from "../shared/tool-card.ts";
-import { oneLine, stateLabel } from "../shared/tui-dashboard.ts";
+import { oneLine } from "../shared/tui-dashboard.ts";
 import {
   requestSubagentCoordinator,
   type SubagentCoordinator,
@@ -55,18 +55,7 @@ export default function orchestration(pi: ExtensionAPI) {
       ui.setStatus("orchestration", undefined);
       return;
     }
-    const awaiting = active.filter((run) => run.status === "awaiting-approval").length;
-    const blocked = active.filter((run) => run.status === "blocked").length;
-    const running = active.filter((run) => run.status === "running" || run.status === "planning").length;
-    const paused = active.filter((run) => ["paused", "interrupted"].includes(run.status)).length;
-    const text = awaiting
-      ? `${awaiting} plan${awaiting === 1 ? "" : "s"} ready · /orchestration`
-      : blocked
-        ? `${blocked} blocked · /orchestration`
-        : running
-          ? `${running} running · /orchestration`
-          : `${paused} paused · /orchestration`;
-    ui.setStatus("orchestration", stateLabel(ui.theme, awaiting || blocked ? "warning" : running ? "active" : "muted", `Orchestration ${text}`));
+    ui.setStatus("orchestration", undefined);
   };
 
   const requireEngine = () => {
@@ -91,12 +80,12 @@ export default function orchestration(pi: ExtensionAPI) {
   };
 
   const createFromUi = async (ctx: ExtensionContext) => {
-    await ensureModels(ctx);
     const objective = await ctx.ui.editor(
       "New orchestration objective",
       "Describe the complete outcome, boundaries, and requirements…",
     );
     if (!objective?.trim()) return;
+    await ensureModels(ctx);
     try {
       const run = await requireEngine().create(objective, ctx.cwd);
       ctx.ui.notify(`Started dedicated planning agent for ${run.id}.`, "info");

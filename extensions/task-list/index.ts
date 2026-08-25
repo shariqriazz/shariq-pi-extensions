@@ -130,15 +130,9 @@ export default function taskListExtension(pi: ExtensionAPI) {
       state: (task.status === "in_progress" ? "active" : task.status === "completed" ? "success" : task.status === "blocked" ? "error" : "muted") as ActivityState,
       priority: task.status === "blocked" ? 100 : task.status === "in_progress" ? 60 : 10,
     })));
-    if (active) {
-      const status = counts.blocked > 0
-        ? `Tasks ${counts.completed}/${counts.total} · ${counts.blocked} blocked`
-        : `Tasks ${counts.completed}/${counts.total} · ${counts.inProgress} active`;
-      ctx.ui.setStatus(ACTIVITY_SOURCE, ctx.ui.theme.fg(counts.blocked > 0 ? "warning" : "accent", status));
-      return;
-    }
+    ctx.ui.setStatus(ACTIVITY_SOURCE, undefined);
+    if (active) return;
 
-    ctx.ui.setStatus(ACTIVITY_SOURCE, ctx.ui.theme.fg("success", `Tasks complete ${counts.completed}/${counts.total}`));
     finishedTimer = setTimeout(() => {
       finishedTimer = undefined;
       if (lastCtx !== ctx || hasActiveTasks(state)) return;

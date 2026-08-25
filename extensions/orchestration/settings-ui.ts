@@ -9,6 +9,7 @@ const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as 
 
 export async function openOrchestrationSettings(ctx: ExtensionContext) {
   const settings = loadOrchestrationSettings();
+  let changed = false;
   for (;;) {
     const choices = [
       ...ORCHESTRATION_ROLES.map((role) =>
@@ -35,7 +36,8 @@ export async function openOrchestrationSettings(ctx: ExtensionContext) {
       thinking: (thinking as (typeof THINKING)[number] | undefined) ?? settings.roles[role].thinking,
     };
     saveOrchestrationSettings(settings);
+    changed = true;
   }
-  saveOrchestrationSettings(settings);
-  ctx.ui.notify("Orchestration settings saved.", "info");
+  if (changed) ctx.ui.notify("Orchestration settings saved.", "info");
+  return changed;
 }

@@ -31,7 +31,7 @@ Each project has up to 10 concurrent worker, explorer, or reviewer sessions. The
 
 ## Dashboard
 
-Orchestration creation and inspection render as compact main-chat cards with expandable detail. Active runs appear in the shared bounded **Active work** dock; plan-ready and blocked runs are prioritized as attention states. `/orchestration` opens the full-screen operations dashboard. Dashboard actions close the overlay before opening editors, settings, or confirmation prompts, then return to the live dashboard so nested UI cannot stall.
+Orchestration creation and inspection render as compact main-chat cards with expandable detail. Active runs appear in the shared bounded **Active work** dock; plan-ready and blocked runs are prioritized as attention states. `/orchestration` opens a full-height framed operations dashboard with a bounded body and stable selection. Dashboard actions close the overlay before opening editors, settings, or confirmation prompts, then return to the live dashboard so nested UI cannot stall. **New** opens the objective editor before asking for missing role models, so cancelling a draft does not force configuration; cancelling unchanged settings does not claim they were saved.
 
 - `j` / `k`: select a run
 - `Enter`: inspect tasks and reviews
