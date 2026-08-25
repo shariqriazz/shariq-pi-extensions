@@ -24,7 +24,7 @@ import {
 } from "effect";
 import type { SubagentBackend, SubagentSession } from "./backend.ts";
 import { BackendRegistry } from "./backend.ts";
-import { loadPersistedSnapshots, saveSnapshot } from "./storage.ts";
+import { loadPersistedSnapshots } from "./storage.ts";
 import type {
   BackendName,
   LiveToolState,
@@ -95,6 +95,7 @@ interface Entry {
 /** Synchronous bridge for the TUI. Snapshots are live objects; do not mutate. */
 export interface SubagentReadModel {
   list(): ReadonlyArray<SubagentSnapshot>;
+  active(): ReadonlyArray<SubagentSnapshot>;
   get(id: string): SubagentSnapshot | undefined;
   size(): number;
   /** Any-change notification (footer status, dashboard). */
@@ -329,7 +330,7 @@ const makeManager = Effect.gen(function* () {
         s.finalText = outcome.partialText ?? "";
         break;
       case "Interrupted":
-        s.status = "error";
+        s.status = "cancelled";
         s.errorText = "Run was aborted";
         s.finalText = outcome.partialText ?? "";
         break;
@@ -339,7 +340,6 @@ const makeManager = Effect.gen(function* () {
     s.liveTools = [];
     s.queued = [];
     const consumed = (waitInterest.get(s.id) ?? 0) > 0;
-    saveSnapshot(s as SubagentSnapshot);
     notify(s.id);
     try {
       // During teardown, don't queue results into a shutting-down session.
@@ -776,6 +776,7 @@ const makeManager = Effect.gen(function* () {
       );
       return [...active, ...historical];
     },
+    active: () => [...entries.values()].map((entry) => entry.snapshot),
     get: (id) => entries.get(id)?.snapshot ?? persistedSnapshots.get(id),
     size: () => entries.size,
     subscribe: (listener) => {

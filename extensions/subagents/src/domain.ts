@@ -27,7 +27,7 @@ export const REASONING_EFFORTS = [
 ] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
-export type SubagentStatus = "running" | "done" | "error";
+export type SubagentStatus = "running" | "done" | "error" | "cancelled";
 
 /** Parent-session context resolved by the tool layer and passed opaquely. */
 export interface PeerAgent {

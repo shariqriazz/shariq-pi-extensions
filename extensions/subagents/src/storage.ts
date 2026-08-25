@@ -26,6 +26,20 @@ export function saveSnapshot(snapshot: SubagentSnapshot) {
   }
 }
 
+export function normalizePersistedSnapshot(snap: SubagentSnapshot): SubagentSnapshot {
+  if (snap.status === "running") {
+    return {
+      ...snap,
+      status: "cancelled",
+      errorText: "Pi exited or reloaded while this subagent was active.",
+    };
+  }
+  if (snap.status === "error" && /abort|cancel|interrupt|exited or reloaded/i.test(snap.errorText ?? "")) {
+    return { ...snap, status: "cancelled" };
+  }
+  return snap;
+}
+
 export function loadPersistedSnapshots(): SubagentSnapshot[] {
   let names: string[] = [];
   try {
@@ -38,16 +52,9 @@ export function loadPersistedSnapshots(): SubagentSnapshot[] {
     try {
       const file = path.join(rootDir(), name, "snapshot.json");
       if (!fs.existsSync(file)) continue;
-      let snap = JSON.parse(fs.readFileSync(file, "utf8")) as SubagentSnapshot;
-      if (!snap.id || !snap.title) continue;
-      if (snap.status === "running") {
-        snap = {
-          ...snap,
-          status: "error",
-          errorText: "Pi exited or reloaded while this subagent was active.",
-        };
-      }
-      snapshots.push(snap);
+      const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as SubagentSnapshot;
+      if (!parsed.id || !parsed.title) continue;
+      snapshots.push(normalizePersistedSnapshot(parsed));
     } catch {
       // Best effort recovery
     }

@@ -48,7 +48,7 @@ function validRecord(value: unknown): value is ArchivedSubagent {
     typeof record.cwd === "string" &&
     typeof record.sessionFile === "string" &&
     typeof record.updatedAt === "number" &&
-    (record.status === "running" || record.status === "done" || record.status === "error")
+    (record.status === "running" || record.status === "done" || record.status === "error" || record.status === "cancelled")
   );
 }
 

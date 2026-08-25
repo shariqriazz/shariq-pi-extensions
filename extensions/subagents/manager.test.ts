@@ -71,6 +71,12 @@ async function withManager(
   }
 }
 
+test("active read model excludes persisted historical snapshots", async () => {
+  await withManager(async (manager) => {
+    assert.deepEqual(manager.view.active(), []);
+  });
+});
+
 test("stub subagent completes and delivers a final result", async () => {
   await withManager(async (manager, runtime) => {
     const settled: Array<{ id: string; consumed: boolean }> = [];
@@ -135,8 +141,8 @@ test("runtime disposal persists running agents as interrupted without delivering
 
   await runtime.dispose();
 
-  assert.deepEqual(settled, [{ status: "error", consumed: true, error: "Run was aborted" }]);
-  assert.equal(snap.status, "error");
+  assert.deepEqual(settled, [{ status: "cancelled", consumed: true, error: "Run was aborted" }]);
+  assert.equal(snap.status, "cancelled");
   assert.equal(snap.errorText, "Run was aborted");
 });
 
@@ -148,7 +154,7 @@ test("cancel interrupts a running stub subagent", async () => {
     );
     const report = await runTool(runtime, manager.cancel([snap.id]));
     assert.deepEqual(report, [
-      { id: snap.id, title: "test", status: "error", cancelled: true },
+      { id: snap.id, title: "test", status: "cancelled", cancelled: true },
     ]);
     assert.equal(manager.view.get(snap.id)?.errorText, "Run was aborted");
   });

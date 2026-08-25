@@ -10,7 +10,7 @@ The system is deliberately flat. Only the main Pi thread can spawn subagents. Ch
 
 - **Pre-Warmed Pool Dispatch:** Pre-warms unique agent IDs and allocation buffers ahead of time, eliminating string-formatting and crypto overhead on the critical path for sub-millisecond task dispatch.
 - **Instant Cascading Cancellation:** Structured Effect-TS fiber supervision cascades immediate abort signals to all running subagents and child processes in `<10ms`, guaranteeing zero orphan processes upon interruption or parent turn cancellation.
-- **Cross-Session Snapshot Persistence:** Full subagent snapshots and transcripts are automatically persisted under `~/.pi/agent/subagents/runs/<id>/snapshot.json`, enabling discovery and resumption (`resume_from`) across Pi restarts.
+- **Cross-Session Snapshot Persistence:** Full production subagent snapshots and transcripts are automatically persisted under `~/.pi/agent/subagents/runs/<id>/snapshot.json`, enabling discovery and resumption (`resume_from`) across Pi restarts. Test-only manager backends do not write into user state.
 
 ## Parent tools
 
@@ -70,7 +70,7 @@ Project configuration is ignored when the project is not trusted. Concurrency is
 
 New children start with independent context by default. `fork_turns` may be `all` or a positive number of recent user turns. Forking keeps user messages and final assistant text while removing thinking, tool calls, and tool results so the child never inherits an unresolved tool protocol.
 
-Every child uses a persistent Pi session file. `resume_from` continues a completed child with its full transcript, tool state, and logical agent id, including after a parent `/reload` or resume. Non-secret metadata is stored both in the parent session and in `~/.pi/agent/subagents/catalog.json`, so children created by an ephemeral or different parent process remain discoverable. Existing legacy ids remain valid catalog keys.
+Every child uses a persistent Pi session file. `resume_from` continues a completed or cancelled child with its full transcript, tool state, and logical agent id, including after a parent `/reload` or resume. Cancellation and reload interruption are recorded as `cancelled`, not as failures; historical snapshots remain discoverable but only active manager entries contribute to the live footer and Active work dock. Non-secret metadata is stored both in the parent session and in `~/.pi/agent/subagents/catalog.json`, so children created by an ephemeral or different parent process remain discoverable. Existing legacy ids remain valid catalog keys.
 
 ## Worktree isolation
 
@@ -80,7 +80,7 @@ Children share the requested workspace by default. Use `isolation: "worktree"` o
 
 ## UI
 
-Subagent lifecycle tools render as compact main-chat cards with expandable detail. Running children appear in the shared bounded **Active work** dock with elapsed time and their current tool, then disappear when settled because the result card becomes the durable timeline record. `/subagents` or `/subagents agents` opens the live operations dashboard and takeover UI. `/btw <question>` starts a read-only, context-aware side investigation owned by the user; it opens directly in takeover view and records its answer without waking the parent model. Wide terminals use a split-pane agent list and selected-agent inspector with running/completed/failed counts, model/profile/access metadata, a context meter, current tool activity, queue state, elapsed time, turns, cwd, and latest output. Aborting a running child from the dashboard requires pressing `x` twice; Escape or navigation cancels an armed abort. The takeover view adds a live transcript, context meter, active-tool state, scrolling, child interruption, and follow-up input. `/subagents peers` shows the persistent peer-message audit trail. `/subagents profiles` browses profiles and personas, and `/subagents config` edits validated configuration.
+Subagent lifecycle tools render as compact main-chat cards with expandable detail. Running children appear in the shared bounded **Active work** dock with elapsed time and their current tool, then disappear when settled because the result card becomes the durable timeline record. `/subagents` or `/subagents agents` opens the live operations dashboard and takeover UI. `/btw <question>` starts a read-only, context-aware side investigation owned by the user; it opens directly in takeover view and records its answer without waking the parent model. Wide terminals use a split-pane agent list and selected-agent inspector with running/completed/cancelled/failed counts, model/profile/access metadata, a context meter, current tool activity, queue state, elapsed time, turns, cwd, and latest output. Aborting a running child from the dashboard requires pressing `x` twice; Escape or navigation cancels an armed abort. The takeover view adds a live transcript, context meter, active-tool state, scrolling, child interruption, and follow-up input. `/subagents peers` shows the persistent peer-message audit trail. `/subagents profiles` browses profiles and personas, and `/subagents config` edits validated configuration.
 
 ## Architecture
 

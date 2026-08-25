@@ -41,6 +41,8 @@ function statusGlyph(snap: SubagentSnapshot, theme: Theme): string {
       return theme.fg("success", "■");
     case "error":
       return theme.fg("error", "■");
+    case "cancelled":
+      return theme.fg("muted", "■");
   }
 }
 
@@ -52,6 +54,8 @@ function statusWord(snap: SubagentSnapshot, theme: Theme): string {
       return theme.fg("success", "done");
     case "error":
       return theme.fg("error", "failed");
+    case "cancelled":
+      return theme.fg("muted", "cancelled");
   }
 }
 
@@ -314,6 +318,7 @@ export class SubagentDashboard implements Component {
     const running = subs.filter((snap) => snap.status === "running").length;
     const done = subs.filter((snap) => snap.status === "done").length;
     const failed = subs.filter((snap) => snap.status === "error").length;
+    const cancelled = subs.filter((snap) => snap.status === "cancelled").length;
     const selected = subs[this.selection.index];
 
     const headerLeft = theme.fg("accent", theme.bold("Subagent operations"));
@@ -321,6 +326,7 @@ export class SubagentDashboard implements Component {
       running > 0 ? stateLabel(theme, "warning", `${running} running`) : "",
       done > 0 ? stateLabel(theme, "success", `${done} done`) : "",
       failed > 0 ? stateLabel(theme, "error", `${failed} failed`) : "",
+      cancelled > 0 ? stateLabel(theme, "muted", `${cancelled} cancelled`) : "",
     ].filter(Boolean).join(theme.fg("dim", " · "));
     const lines = [joinSides(`  ${headerLeft}`, `${counts || theme.fg("muted", "idle")}  `, width)];
 
@@ -416,7 +422,7 @@ export class SubagentDashboard implements Component {
     height: number,
   ): string[] {
     const theme = this.theme;
-    const state = snap.status === "running" ? "warning" : snap.status === "done" ? "success" : "error";
+    const state = snap.status === "running" ? "warning" : snap.status === "done" ? "success" : snap.status === "cancelled" ? "muted" : "error";
     const percent = contextPercent(snap.usage);
     const activeTools = snap.liveTools.filter((tool) => !tool.done);
     const lines: string[] = [

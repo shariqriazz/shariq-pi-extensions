@@ -512,7 +512,7 @@ export default function (pi: ExtensionAPI) {
 
   const updateStatus = (manager: SubagentManagerShape) => {
     if (!ui) return;
-    const subs = manager.view.list();
+    const subs = manager.view.active();
     const runningSnapshots = subs.filter((snap) => snap.status === "running");
     const failed = subs.filter((snap) => snap.status === "error").length;
     if (activityContext) {
@@ -843,7 +843,7 @@ export default function (pi: ExtensionAPI) {
       const sections: string[] = [];
       let remainingBytes = WAIT_OUTPUT_MAX_BYTES;
       for (const snap of settled) {
-        const verb = snap.status === "error" ? "failed" : "finished";
+        const verb = snap.status === "error" ? "failed" : snap.status === "cancelled" ? "was cancelled" : "finished";
         let section = `## ${snap.id} "${snap.title}" ${verb}`;
         if (snap.errorText) section += `\nError: ${snap.errorText}`;
         const headerBytes = Buffer.byteLength(section, "utf8") + 2;
@@ -996,7 +996,7 @@ export default function (pi: ExtensionAPI) {
     },
     renderResult(result, { expanded }, theme) {
       const details = result.details as { id?: string; status?: string; turns?: number } | undefined;
-      const state = details?.status === "error" ? "error" : details?.status === "running" ? "active" : "success";
+      const state = details?.status === "error" ? "error" : details?.status === "running" ? "active" : details?.status === "cancelled" ? "muted" : "success";
       return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "subagent", `${details?.status ?? "unknown"} · ${details?.turns ?? 0} turns`), 0, 0);
     },
   });
@@ -1294,13 +1294,14 @@ export default function (pi: ExtensionAPI) {
         status?: string;
       };
       const failed = details.status === "error";
-      const icon = failed ? theme.fg("error", "x") : theme.fg("success", "■");
+      const cancelled = details.status === "cancelled";
+      const icon = failed ? theme.fg("error", "x") : cancelled ? theme.fg("muted", "■") : theme.fg("success", "■");
       const header =
         `${icon} ` +
         theme.fg("accent", theme.bold(`subagent ${details.id ?? "?"}`)) +
         theme.fg(
           "muted",
-          ` · ${details.title ?? ""} · ${failed ? "failed" : "finished"}`,
+          ` · ${details.title ?? ""} · ${failed ? "failed" : cancelled ? "cancelled" : "finished"}`,
         );
 
       const content =
@@ -1340,10 +1341,11 @@ export default function (pi: ExtensionAPI) {
       const data = entry.data;
       if (!data) return new Text(theme.fg("warning", "By-the-way result unavailable"), 0, 0);
       const failed = data.status === "error";
+      const cancelled = data.status === "cancelled";
       const header =
-        `${theme.fg(failed ? "error" : "success", "■")} ` +
+        `${theme.fg(failed ? "error" : cancelled ? "muted" : "success", "■")} ` +
         theme.fg("accent", theme.bold(`by the way · ${data.title}`)) +
-        theme.fg("muted", ` · ${failed ? "failed" : "answered"} · ${data.id}`);
+        theme.fg("muted", ` · ${failed ? "failed" : cancelled ? "cancelled" : "answered"} · ${data.id}`);
       const body = [data.errorText ? `Error: ${data.errorText}` : "", data.answer]
         .filter(Boolean)
         .join("\n\n");
