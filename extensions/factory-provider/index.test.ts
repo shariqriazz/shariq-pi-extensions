@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import factoryExtension from "./index.ts";
-import { FACTORY_API_KEY_FILE_SENTINEL, classifyFactoryKeyCooldown, factoryApiKeyStatus, factoryAuthModeFromHeaders, factoryProviderRoutingSource, factoryResponsesUsesWebSocket, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed } from "./factory/api-keys.ts";
+import { FACTORY_API_KEY_FILE_SENTINEL, classifyFactoryKeyCooldown, factoryApiKeyStatus, factoryAuthModeFromHeaders, factoryProviderRoutingSource, factoryResponsesUsesWebSocket, parseFactoryApiKeyFile, selectFactoryApiKeysByLimits, sortFactoryApiKeysByLastUsed, updateFactoryApiKeyEntries } from "./factory/api-keys.ts";
 import { refreshFactoryToken } from "./factory/auth.ts";
 import { FALLBACK_DROID_VERSION, PROVIDER_ID } from "./factory/constants.ts";
 import { droidVersion } from "./factory/droid.ts";
+import { factoryCredentialId } from "./factory/limits.ts";
 import { DROID_MODELS_FALLBACK, factoryApiForModel, toPiModel } from "./factory/models.ts";
 import { FACTORY_SYSTEM_MARKER, resolvedFactoryReasoning, sanitizeFactoryContext, streamFactoryGemini } from "./factory/responses.ts";
 
@@ -227,6 +228,26 @@ test("registers native API-key auth alongside Factory account OAuth", async () =
   const { config } = await registeredFactory();
   assert.equal(config.apiKey, "$FACTORY_API_KEY");
   assert.ok(config.oauth);
+});
+
+test("rotating Factory keys can be disabled, re-enabled, and deleted without changing other keys", () => {
+  const entries = [
+    { label: "first", key: "factory-key-first" },
+    { label: "second", key: "factory-key-second" },
+  ];
+  const id = factoryCredentialId(entries[0]!.key);
+  const disabled = updateFactoryApiKeyEntries(entries, id, { kind: "enabled", enabled: false });
+  assert.equal(disabled.changed, true);
+  assert.equal(disabled.entries[0]?.disabled, true);
+  assert.equal(disabled.entries[1]?.disabled, undefined);
+
+  const enabled = updateFactoryApiKeyEntries(disabled.entries, id, { kind: "enabled", enabled: true });
+  assert.equal(enabled.entries[0]?.disabled, false);
+
+  const removed = updateFactoryApiKeyEntries(enabled.entries, id, { kind: "remove" });
+  assert.equal(removed.changed, true);
+  assert.deepEqual(removed.entries, [entries[1]]);
+  assert.equal(updateFactoryApiKeyEntries(entries, "missing", { kind: "remove" }).changed, false);
 });
 
 test("malformed rotating-key configuration becomes a warning instead of an exception", () => {

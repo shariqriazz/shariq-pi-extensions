@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { FACTORY_API_BASE_URL, FACTORY_STATE_DIR } from "./constants.ts";
@@ -23,6 +23,10 @@ export type FactoryApiKeyEntry = {
   label: string;
   key: string;
   disabled?: boolean;
+};
+
+type FactoryApiKeySourceEntry = FactoryApiKeyEntry & {
+  source: "environment" | "file";
 };
 
 type FactoryApiKeyConfig = {
@@ -69,19 +73,19 @@ export function parseFactoryApiKeyFile(raw: string): { entries: FactoryApiKeyEnt
   }
 }
 
-export function loadFactoryApiKeys(): FactoryApiKeyEntry[] {
-  const entries: FactoryApiKeyEntry[] = [];
+function configuredFactoryApiKeys(): FactoryApiKeySourceEntry[] {
+  const entries: FactoryApiKeySourceEntry[] = [];
   const envKeys = (process.env.FACTORY_API_KEYS || process.env.FACTORY_API_KEY || "")
     .split(/[\n,]+/)
     .map((key) => key.trim())
     .filter(Boolean);
-  envKeys.forEach((key, index) => entries.push({ label: `env-${index + 1}`, key }));
+  envKeys.forEach((key, index) => entries.push({ label: `env-${index + 1}`, key, source: "environment" }));
 
   lastConfigurationWarning = undefined;
   if (existsSync(FACTORY_API_KEYS_PATH)) {
     try {
       const parsed = parseFactoryApiKeyFile(readFileSync(FACTORY_API_KEYS_PATH, "utf8"));
-      entries.push(...parsed.entries);
+      entries.push(...parsed.entries.map((entry) => ({ ...entry, source: "file" as const })));
       lastConfigurationWarning = parsed.warning;
     } catch {
       lastConfigurationWarning = "Factory rotating-key configuration could not be read.";
@@ -90,11 +94,61 @@ export function loadFactoryApiKeys(): FactoryApiKeyEntry[] {
 
   const seen = new Set<string>();
   return entries.filter((entry) => {
-    if (entry.disabled) return false;
     if (seen.has(entry.key)) return false;
     seen.add(entry.key);
     return true;
   });
+}
+
+export function loadFactoryApiKeys(): FactoryApiKeyEntry[] {
+  return configuredFactoryApiKeys().filter((entry) => !entry.disabled);
+}
+
+function editableFactoryApiKeyEntries(): FactoryApiKeyEntry[] {
+  if (!existsSync(FACTORY_API_KEYS_PATH)) return [];
+  const parsed = parseFactoryApiKeyFile(readFileSync(FACTORY_API_KEYS_PATH, "utf8"));
+  if (parsed.warning) throw new Error(parsed.warning);
+  return parsed.entries;
+}
+
+function saveFactoryApiKeyEntries(entries: FactoryApiKeyEntry[]) {
+  mkdirSync(FACTORY_STATE_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(FACTORY_STATE_DIR, 0o700);
+  const temporary = `${FACTORY_API_KEYS_PATH}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify({ keys: entries }, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temporary, FACTORY_API_KEYS_PATH);
+  chmodSync(FACTORY_API_KEYS_PATH, 0o600);
+}
+
+export function updateFactoryApiKeyEntries(
+  entries: FactoryApiKeyEntry[],
+  id: string,
+  action: { kind: "enabled"; enabled: boolean } | { kind: "remove" },
+) {
+  let changed = false;
+  const next = entries.flatMap((entry): FactoryApiKeyEntry[] => {
+    if (keyId(entry) !== id) return [entry];
+    changed = true;
+    if (action.kind === "remove") return [];
+    return [{ ...entry, disabled: !action.enabled }];
+  });
+  return { entries: next, changed };
+}
+
+export function setFactoryApiKeyEnabled(id: string, enabled: boolean) {
+  const result = updateFactoryApiKeyEntries(editableFactoryApiKeyEntries(), id, { kind: "enabled", enabled });
+  if (!result.changed) return false;
+  saveFactoryApiKeyEntries(result.entries);
+  return true;
+}
+
+export function removeFactoryApiKey(id: string) {
+  const result = updateFactoryApiKeyEntries(editableFactoryApiKeyEntries(), id, { kind: "remove" });
+  if (!result.changed) return false;
+  saveFactoryApiKeyEntries(result.entries);
+  state.delete(id);
+  organizationIdCache.delete(id);
+  return true;
 }
 
 export function sortFactoryApiKeysByLastUsed(
@@ -395,7 +449,7 @@ export function streamSimpleUnifiedFactoryResponses(model: any, context: any, op
 }
 
 export function factoryApiKeyStatus() {
-  const keys = loadFactoryApiKeys();
+  const keys = configuredFactoryApiKeys();
   const now = Date.now();
   return {
     configured: keys.length,
@@ -408,6 +462,8 @@ export function factoryApiKeyStatus() {
         id: keyId(entry),
         label: entry.label,
         key: maskKey(entry.key),
+        disabled: Boolean(entry.disabled),
+        editable: entry.source === "file",
         cooldownSeconds: runtime?.cooldownUntil && runtime.cooldownUntil > now ? Math.ceil((runtime.cooldownUntil - now) / 1000) : 0,
         lastError: runtime?.lastError ? runtime.lastError.slice(0, 200) : undefined,
         lastUsedAt: runtime?.lastUsedAt ? new Date(runtime.lastUsedAt).toISOString() : undefined,

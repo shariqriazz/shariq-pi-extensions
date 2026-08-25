@@ -11,6 +11,8 @@ import {
   FACTORY_API_KEY_FILE_SENTINEL,
   factoryApiKeyStatus,
   loadFactoryApiKeys,
+  removeFactoryApiKey,
+  setFactoryApiKeyEnabled,
   streamSimpleUnifiedFactoryResponses,
 } from "./factory/api-keys.ts";
 import {
@@ -88,21 +90,35 @@ export default async function factoryExtension(pi: ExtensionAPI) {
     ctx: ExtensionContext,
   ): Promise<FactoryDashboardSnapshot> => {
     const credentials = await limitCredentials(ctx);
+    const resolved = await ctx.modelRegistry.getProviderAuth(PROVIDER_ID);
+    const fileBacked = resolved?.auth.apiKey?.trim() === FACTORY_API_KEY_FILE_SENTINEL;
     const auth = ctx.modelRegistry.getProviderAuthStatus(PROVIDER_ID);
     const apiKeys = factoryApiKeyStatus();
     const cache = loadFactoryLimitCache();
     const runtimeById = new Map(apiKeys.keys.map((key) => [key.id, key]));
-    const accounts = credentials.map((credential) => {
-      const id = factoryCredentialId(credential.secret);
-      const runtime = runtimeById.get(id);
-      return {
-        id,
-        label: credential.label,
-        record: cache.records.find((record) => record.id === id),
-        cooldownSeconds: runtime?.cooldownSeconds,
-        lastUsedAt: runtime?.lastUsedAt,
-      };
-    });
+    const accounts = fileBacked
+      ? apiKeys.keys.map((key) => ({
+          id: key.id,
+          label: key.label,
+          disabled: key.disabled,
+          editable: key.editable,
+          record: cache.records.find((record) => record.id === key.id),
+          cooldownSeconds: key.cooldownSeconds,
+          lastUsedAt: key.lastUsedAt,
+        }))
+      : credentials.map((credential) => {
+          const id = factoryCredentialId(credential.secret);
+          const runtime = runtimeById.get(id);
+          return {
+            id,
+            label: credential.label,
+            disabled: false,
+            editable: false,
+            record: cache.records.find((record) => record.id === id),
+            cooldownSeconds: runtime?.cooldownSeconds,
+            lastUsedAt: runtime?.lastUsedAt,
+          };
+        });
     return {
       version: clientVersion,
       modelCount: models.length,
@@ -110,7 +126,7 @@ export default async function factoryExtension(pi: ExtensionAPI) {
         ? auth.label || auth.source || "configured"
         : "not configured",
       configured: accounts.length,
-      active: accounts.filter((account) => !account.cooldownSeconds).length,
+      active: accounts.filter((account) => !account.disabled && !account.cooldownSeconds).length,
       warning: apiKeys.warning,
       accounts,
     };
@@ -195,10 +211,25 @@ export default async function factoryExtension(pi: ExtensionAPI) {
     description: "Open Factory account, rotation, and usage dashboard",
     handler: async (_args, ctx) => {
       const initial = await dashboardSnapshot(ctx);
-      await openFactoryDashboard(ctx, initial, async (force) => {
-        await refreshLimits(ctx, force);
-        return dashboardSnapshot(ctx);
-      });
+      await openFactoryDashboard(
+        ctx,
+        initial,
+        async (force) => {
+          await refreshLimits(ctx, force);
+          return dashboardSnapshot(ctx);
+        },
+        async (id, enabled) => {
+          if (!setFactoryApiKeyEnabled(id, enabled)) throw new Error("This Factory credential is not editable from the rotating-key file.");
+          if (enabled) await refreshLimits(ctx, true);
+          return dashboardSnapshot(ctx);
+        },
+        async (id, label) => {
+          const confirmed = await ctx.ui.confirm("Remove Factory account?", `Permanently remove ${label} from the rotating-key file?`);
+          if (!confirmed) return dashboardSnapshot(ctx);
+          if (!removeFactoryApiKey(id)) throw new Error("This Factory credential is not editable from the rotating-key file.");
+          return dashboardSnapshot(ctx);
+        },
+      );
     },
   });
 }

@@ -26,6 +26,8 @@ import { factoryWarmTheme } from "./warm-theme.ts";
 export interface FactoryDashboardAccount {
   id: string;
   label: string;
+  disabled?: boolean;
+  editable?: boolean;
   record?: FactoryLimitRecord;
   cooldownSeconds?: number;
   lastUsedAt?: string;
@@ -96,6 +98,7 @@ function compactPool(
 }
 
 function accountState(account: FactoryDashboardAccount) {
+  if (account.disabled) return "disabled";
   if (account.cooldownSeconds && account.cooldownSeconds > 0) return "cooldown";
   if (account.record?.error) return "refresh error";
   const observedAt = account.record?.fetchedAt ?? Date.now();
@@ -122,6 +125,8 @@ export class FactoryDashboard implements Component {
   private readonly keys: KeybindingsManager;
   private snapshot: FactoryDashboardSnapshot;
   private readonly refreshData: (force: boolean) => Promise<FactoryDashboardSnapshot>;
+  private readonly toggleAccount: (id: string, enabled: boolean) => Promise<FactoryDashboardSnapshot>;
+  private readonly removeAccount: (id: string, label: string) => Promise<FactoryDashboardSnapshot>;
   private readonly done: () => void;
 
   constructor(
@@ -130,6 +135,8 @@ export class FactoryDashboard implements Component {
     keys: KeybindingsManager,
     snapshot: FactoryDashboardSnapshot,
     refreshData: (force: boolean) => Promise<FactoryDashboardSnapshot>,
+    toggleAccount: (id: string, enabled: boolean) => Promise<FactoryDashboardSnapshot>,
+    removeAccount: (id: string, label: string) => Promise<FactoryDashboardSnapshot>,
     done: () => void,
   ) {
     this.tui = tui;
@@ -137,6 +144,8 @@ export class FactoryDashboard implements Component {
     this.keys = keys;
     this.snapshot = snapshot;
     this.refreshData = refreshData;
+    this.toggleAccount = toggleAccount;
+    this.removeAccount = removeAccount;
     this.done = done;
   }
 
@@ -145,17 +154,7 @@ export class FactoryDashboard implements Component {
     this.refreshing = true;
     this.tui.requestRender();
     void this.refreshData(force)
-      .then((snapshot) => {
-        if (this.closed) return;
-        const selectedId = this.snapshot.accounts[this.selected]?.id;
-        this.snapshot = snapshot;
-        const nextIndex = selectedId
-          ? snapshot.accounts.findIndex((account) => account.id === selectedId)
-          : -1;
-        this.selected = nextIndex >= 0
-          ? nextIndex
-          : Math.min(this.selected, Math.max(0, snapshot.accounts.length - 1));
-      })
+      .then((snapshot) => this.replaceSnapshot(snapshot))
       .catch((error) => {
         if (this.closed) return;
         this.snapshot = {
@@ -168,6 +167,18 @@ export class FactoryDashboard implements Component {
         this.refreshing = false;
         this.tui.requestRender();
       });
+  }
+
+  private replaceSnapshot(snapshot: FactoryDashboardSnapshot) {
+    if (this.closed) return;
+    const selectedId = this.snapshot.accounts[this.selected]?.id;
+    this.snapshot = snapshot;
+    const nextIndex = selectedId
+      ? snapshot.accounts.findIndex((account) => account.id === selectedId)
+      : -1;
+    this.selected = nextIndex >= 0
+      ? nextIndex
+      : Math.min(this.selected, Math.max(0, snapshot.accounts.length - 1));
   }
 
   dispose() {
@@ -191,6 +202,23 @@ export class FactoryDashboard implements Component {
       if (accounts.length) this.selected = (this.selected + 1) % accounts.length;
     } else if (data === "r") {
       this.startRefresh(true);
+    } else if ((data === "d" || data === "x") && accounts[this.selected]?.editable && !this.refreshing) {
+      const account = accounts[this.selected]!;
+      this.refreshing = true;
+      const action = data === "x"
+        ? this.removeAccount(account.id, account.label)
+        : this.toggleAccount(account.id, account.disabled === true);
+      void action
+        .then((snapshot) => this.replaceSnapshot(snapshot))
+        .catch((error) => {
+          if (!this.closed) this.snapshot = { ...this.snapshot, warning: error instanceof Error ? error.message : String(error) };
+        })
+        .finally(() => {
+          if (!this.closed) {
+            this.refreshing = false;
+            this.tui.requestRender();
+          }
+        });
     }
     this.tui.requestRender();
   }
@@ -242,7 +270,7 @@ export class FactoryDashboard implements Component {
     lines.push(frameBottom(this.theme, width));
     lines.push(
       truncateToWidth(
-        `${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh all")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`,
+        `${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh all")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "x")} ${this.theme.fg("dim", "remove")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`,
         width,
         "",
       ),
@@ -341,6 +369,8 @@ export async function openFactoryDashboard(
   ctx: ExtensionContext,
   initial: FactoryDashboardSnapshot,
   refresh: (force: boolean) => Promise<FactoryDashboardSnapshot>,
+  toggle: (id: string, enabled: boolean) => Promise<FactoryDashboardSnapshot>,
+  remove: (id: string, label: string) => Promise<FactoryDashboardSnapshot>,
 ) {
   await ctx.ui.custom<void>(
     (tui, theme, keys, done) => {
@@ -350,6 +380,8 @@ export async function openFactoryDashboard(
         keys,
         initial,
         refresh,
+        toggle,
+        remove,
         () => done(undefined),
       );
       queueMicrotask(() => dashboard.startRefresh(false));
