@@ -42,7 +42,7 @@ Capability modes:
 - `execute` — the read-only allowlist plus shell and background-terminal execution, without direct file edit tools
 - `all` — full child tool access
 
-Restrictive modes fail closed: newly registered extension tools remain unavailable until they are explicitly classified. This prevents another extension from silently bypassing the selected capability.
+Restrictive modes fail closed: newly registered extension tools remain unavailable until they are explicitly classified. This prevents another extension from silently bypassing the selected capability. The session-only `task_list` planning tool is explicitly classified as safe in every capability mode, so each child can maintain its own task list without receiving file-write or command-execution authority.
 
 Optional user profiles and personas can be defined in `~/.pi/agent/subagents.json`. Trusted projects may override them in `.pi/subagents.json`:
 
@@ -64,7 +64,7 @@ Optional user profiles and personas can be defined in `~/.pi/agent/subagents.jso
 }
 ```
 
-Project configuration is ignored when the project is not trusted. Concurrency is bounded to 1–50; this private package defaults to 50. `/subagents profiles` provides discovery, while `/subagents config` opens a validated editor for global or trusted-project configuration.
+Project configuration is ignored when the project is not trusted. Concurrency is bounded to 1–50; this suite defaults to 50. `/subagents profiles` provides discovery, while `/subagents config` opens a validated editor for global or trusted-project configuration.
 
 ## Context and continuation
 

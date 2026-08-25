@@ -43,6 +43,7 @@ Installed package directories are treated as immutable. Extensions resolve writa
 - Pi Memory state: `<agent-dir>/pi-memory/`
 - Subagent configuration and catalog: paths derived from `getAgentDir()`
 - Orchestration settings and run ledgers: `<agent-dir>/orchestration/`
+- Goal and Task List state: branch-local Pi session entries; neither writes a separate runtime-state file
 - project configuration: paths derived from Pi's `CONFIG_DIR_NAME`
 
 Credentials remain in Pi auth storage, environment variables, service credential stores, or ignored machine-local files. Package source never contains an API key, OAuth token, database, cache, or session.

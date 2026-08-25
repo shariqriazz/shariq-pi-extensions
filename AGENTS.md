@@ -19,6 +19,8 @@ This public repository packages the user's Pi extensions as one suite distribute
 - Keep `skills/background-terminals`, `skills/orchestration`, and `skills/subagents` aligned with their extension APIs; Pi loads them from the package and install scripts must not copy them elsewhere.
 - Put third-party runtime modules in root `dependencies`. Pi-owned packages and `typebox` remain optional peer dependencies and pinned development dependencies.
 - Keep shared runtime helpers in `extensions/shared`; do not duplicate them across extensions.
+- Keep `extensions/goal` and `extensions/task-list` independent: Goals are explicitly created long-running objectives; Task List tracks ordinary multi-step execution and may coexist with a goal. Both use branch-local Pi session entries.
+- Classify new session-only planning tools explicitly in Subagents capability filtering so restrictive child profiles can use them without receiving unrelated write or execution authority.
 - Runtime state must use Pi's `getAgentDir()` or project `CONFIG_DIR_NAME`. Never hardcode a user home, checkout path, operating-system-specific package path, or active extension directory.
 
 ## Secrets and generated state

@@ -31,6 +31,7 @@ The package contains:
 - Firecrawl search and scraping
 - Git status UI
 - persistent task goals
+- branch-safe model-maintained task lists with live progress UI and compaction continuity
 - configurable steer, interrupt, or follow-up input behavior
 - dedicated multi-agent orchestration
 - Smart Compaction with high-fidelity checkpointing, delta-merging, and custom model routing

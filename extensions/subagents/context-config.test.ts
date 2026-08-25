@@ -100,6 +100,7 @@ test("restrictive capabilities fail closed for extension execution tools", () =>
     "edit",
     "bash",
     "web_fetch",
+    "task_list",
     "start_terminal",
     "write_terminal",
     "pi_memory_save",
@@ -108,15 +109,15 @@ test("restrictive capabilities fail closed for extension execution tools", () =>
   ];
   assert.deepEqual(
     filterToolsForCapability(inventory, "read-only"),
-    ["read", "web_fetch", "message_parent"],
+    ["read", "web_fetch", "task_list", "message_parent"],
   );
   assert.deepEqual(
     filterToolsForCapability(inventory, "read-write"),
-    ["read", "write", "edit", "web_fetch", "message_parent"],
+    ["read", "write", "edit", "web_fetch", "task_list", "message_parent"],
   );
   assert.deepEqual(
     filterToolsForCapability(inventory, "execute"),
-    ["read", "bash", "web_fetch", "start_terminal", "write_terminal", "message_parent"],
+    ["read", "bash", "web_fetch", "task_list", "start_terminal", "write_terminal", "message_parent"],
   );
   assert.deepEqual(filterToolsForCapability(inventory, "all"), inventory);
 });

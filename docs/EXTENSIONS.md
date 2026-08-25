@@ -34,6 +34,12 @@ The curated catalog intentionally excludes `-fast` variants and the removals doc
 
 The goal extension adds persistent, branch-safe objectives, progress evidence, budgets, pause/resume controls, and strict completion/blocker gates. Use `/goal` for the operator UI and the `create_goal`, `get_goal`, `update_goal_progress`, and `update_goal` tools for agent-controlled state.
 
+### [Task List](../extensions/task-list/README.md)
+
+`task_list` gives the active model a branch-safe ordered checklist for ordinary multi-step work; it is separate from persistent Goals and may be used alongside them. Writes replace the full list, retain stable IDs, support pending/in-progress/completed/blocked/cancelled states and priorities, and require an active item while pending work remains. The prompt contract requires same-message list/action calls and immediate verified status updates. Runtime reminders catch missing or stale bookkeeping, with at most one same-model follow-up if an active list is still stale when Pi settles.
+
+State is stored in Pi session entries and reconstructed on resume, reload, and tree navigation. Active work is re-injected when compaction removes the latest snapshot from model context. `/tasks` opens the interactive dashboard and direct editor; the compact live widget auto-hides after all work finishes. Subagents receive the same tool under every capability policy, but each child maintains its own session-local list rather than changing the parent's list.
+
 ### [Subagents](../extensions/subagents/README.md)
 
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, pre-warmed task dispatch, instant cascading cancellation, cross-session persistence, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.

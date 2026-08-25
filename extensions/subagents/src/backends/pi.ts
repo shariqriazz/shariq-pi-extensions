@@ -65,6 +65,7 @@ const READ_CAPABILITY_TOOLS = new Set([
   "pi_memory_read",
   "pi_memory_status",
   "get_goal",
+  "task_list",
   "read_terminal",
   "list_terminals",
   "message_parent",
