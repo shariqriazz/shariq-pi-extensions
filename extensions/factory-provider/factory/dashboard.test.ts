@@ -83,6 +83,15 @@ test("Factory dashboard shows usage and supports disable and delete controls", a
   assert.match(component.render(120).join("\n"), /disabled/);
 
   component.handleInput("x");
+  assert.deepEqual(removed, []);
+  assert.match(component.render(120).join("\n"), /press x again to remove Factory account 2/);
+  assert.doesNotMatch(component.render(120).join("\n"), /refreshing/);
+  component.handleInput("escape");
+  assert.deepEqual(removed, []);
+  assert.doesNotMatch(component.render(120).join("\n"), /confirm permanent removal/);
+
+  component.handleInput("x");
+  component.handleInput("x");
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(removed, ["account-1"]);
   assert.doesNotMatch(component.render(120).join("\n"), /Factory account 2/);

@@ -74,6 +74,15 @@ test("Antigravity dashboard shows quota, stays within the viewport, and removes 
   assert.match(component.render(120).join("\n"), /x remove/);
 
   component.handleInput("x");
+  assert.deepEqual(removed, []);
+  assert.match(component.render(120).join("\n"), /press x again to remove account-1@example\.com/);
+  assert.doesNotMatch(component.render(120).join("\n"), /refreshing/);
+  component.handleInput("escape");
+  assert.deepEqual(removed, []);
+  assert.doesNotMatch(component.render(120).join("\n"), /confirm permanent removal/);
+
+  component.handleInput("x");
+  component.handleInput("x");
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(removed, ["account-1"]);
   assert.doesNotMatch(component.render(120).join("\n"), /account-1@example\.com/);

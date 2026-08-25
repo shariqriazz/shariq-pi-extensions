@@ -119,6 +119,7 @@ function stateColor(state: string) {
 export class FactoryDashboard implements Component {
   private selected = 0;
   private refreshing = false;
+  private pendingRemoval: { id: string; label: string } | undefined;
   private closed = false;
   private readonly tui: TUI;
   private readonly theme: Theme;
@@ -190,20 +191,34 @@ export class FactoryDashboard implements Component {
   handleInput(data: string) {
     const accounts = this.snapshot.accounts;
     if (this.keys.matches(data, "tui.select.cancel")) {
+      if (this.pendingRemoval) {
+        this.pendingRemoval = undefined;
+        this.tui.requestRender();
+        return;
+      }
       this.closed = true;
       this.done();
       return;
     }
     if (this.keys.matches(data, "tui.select.up") || data === "k") {
+      this.pendingRemoval = undefined;
       if (accounts.length) {
         this.selected = (this.selected - 1 + accounts.length) % accounts.length;
       }
     } else if (this.keys.matches(data, "tui.select.down") || data === "j") {
+      this.pendingRemoval = undefined;
       if (accounts.length) this.selected = (this.selected + 1) % accounts.length;
     } else if (data === "r") {
+      this.pendingRemoval = undefined;
       this.startRefresh(true);
     } else if ((data === "d" || data === "x") && accounts[this.selected]?.editable && !this.refreshing) {
       const account = accounts[this.selected]!;
+      if (data === "x" && this.pendingRemoval?.id !== account.id) {
+        this.pendingRemoval = { id: account.id, label: account.label };
+        this.tui.requestRender();
+        return;
+      }
+      this.pendingRemoval = undefined;
       this.refreshing = true;
       const action = data === "x"
         ? this.removeAccount(account.id, account.label)
@@ -232,9 +247,11 @@ export class FactoryDashboard implements Component {
     const ready = `${this.snapshot.active}/${this.snapshot.configured} active`;
     const headerRight = this.refreshing
       ? this.theme.fg("warning", "refreshing…")
-      : this.snapshot.warning
-        ? this.theme.fg("warning", oneLine(this.snapshot.warning))
-        : this.theme.fg("muted", `${ready} · ${this.snapshot.modelCount} models · Droid ${this.snapshot.version}`);
+      : this.pendingRemoval
+        ? this.theme.fg("warning", `press x again to remove ${oneLine(this.pendingRemoval.label)}`)
+        : this.snapshot.warning
+          ? this.theme.fg("warning", oneLine(this.snapshot.warning))
+          : this.theme.fg("muted", `${ready} · ${this.snapshot.modelCount} models · Droid ${this.snapshot.version}`);
     const title = `  ${this.theme.fg("accent", this.theme.bold("◆ FACTORY"))} ${this.theme.fg("dim", `· ${this.snapshot.authentication}`)}`;
     const lines = width >= 60
       ? [joinSides(title, `${headerRight}  `, width)]
@@ -268,13 +285,10 @@ export class FactoryDashboard implements Component {
       }
     }
     lines.push(frameBottom(this.theme, width));
-    lines.push(
-      truncateToWidth(
-        `${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh all")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "x")} ${this.theme.fg("dim", "remove")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`,
-        width,
-        "",
-      ),
-    );
+    const controls = this.pendingRemoval
+      ? `${this.theme.fg("warning", "  x")} ${this.theme.fg("warning", "confirm permanent removal")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "cancel")}`
+      : `${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh all")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "x")} ${this.theme.fg("dim", "remove")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`;
+    lines.push(truncateToWidth(controls, width, ""));
     return lines.map((line) => truncateToWidth(line, width, ""));
   }
 

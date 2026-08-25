@@ -71,6 +71,7 @@ function compactGroup(label: string, entries: AntigravityQuotaEntry[]) {
 export class AntigravityDashboard implements Component {
   private selected = 0;
   private refreshing = false;
+  private pendingRemoval: { id: string; label: string } | undefined;
   private closed = false;
   private readonly tui: TUI;
   private readonly theme: Theme;
@@ -132,21 +133,36 @@ export class AntigravityDashboard implements Component {
   handleInput(data: string) {
     const accounts = this.snapshot.accounts;
     if (this.keys.matches(data, "tui.select.cancel")) {
+      if (this.pendingRemoval) {
+        this.pendingRemoval = undefined;
+        this.tui.requestRender();
+        return;
+      }
       this.closed = true;
       this.done();
       return;
     }
     if (this.keys.matches(data, "tui.select.up") || data === "k") {
+      this.pendingRemoval = undefined;
       if (accounts.length) this.selected = (this.selected - 1 + accounts.length) % accounts.length;
     } else if (this.keys.matches(data, "tui.select.down") || data === "j") {
+      this.pendingRemoval = undefined;
       if (accounts.length) this.selected = (this.selected + 1) % accounts.length;
     } else if (data === "r") {
+      this.pendingRemoval = undefined;
       this.startRefresh(true);
     } else if ((data === "d" || data === "x") && accounts[this.selected] && !this.refreshing) {
       const account = accounts[this.selected]!;
+      const label = account.email || `account-${account.id.slice(0, 6)}`;
+      if (data === "x" && this.pendingRemoval?.id !== account.id) {
+        this.pendingRemoval = { id: account.id, label };
+        this.tui.requestRender();
+        return;
+      }
+      this.pendingRemoval = undefined;
       this.refreshing = true;
       const action = data === "x"
-        ? this.removeAccount(account.id, account.email || `account-${account.id.slice(0, 6)}`)
+        ? this.removeAccount(account.id, label)
         : this.toggleAccount(account.id, account.disabled === true);
       void action
         .then((snapshot) => this.replaceSnapshot(snapshot))
@@ -172,9 +188,11 @@ export class AntigravityDashboard implements Component {
     const active = accounts.filter((account) => account.active).length;
     const right = this.refreshing
       ? this.theme.fg("warning", "refreshing…")
-      : this.snapshot.warning
-        ? this.theme.fg("warning", oneLine(this.snapshot.warning))
-        : this.theme.fg("muted", `${active}/${accounts.length} active · ${this.snapshot.modelCount} models`);
+      : this.pendingRemoval
+        ? this.theme.fg("warning", `press x again to remove ${oneLine(this.pendingRemoval.label)}`)
+        : this.snapshot.warning
+          ? this.theme.fg("warning", oneLine(this.snapshot.warning))
+          : this.theme.fg("muted", `${active}/${accounts.length} active · ${this.snapshot.modelCount} models`);
     const title = `  ${this.theme.fg("accent", this.theme.bold("◆ ANTIGRAVITY"))} ${this.theme.fg("dim", `· ${this.snapshot.authentication}`)}`;
     const lines = width >= 64
       ? [joinSides(title, `${right}  `, width)]
@@ -194,7 +212,10 @@ export class AntigravityDashboard implements Component {
       for (let row = 0; row < bodyHeight; row++) lines.push(this.theme.fg("border", "│") + padLine(list[row] ?? "", inner) + this.theme.fg("border", "│"));
     }
     lines.push(frameBottom(this.theme, width));
-    lines.push(truncateToWidth(`${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "x")} ${this.theme.fg("dim", "remove")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`, width, ""));
+    const controls = this.pendingRemoval
+      ? `${this.theme.fg("warning", "  x")} ${this.theme.fg("warning", "confirm permanent removal")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "cancel")}`
+      : `${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "x")} ${this.theme.fg("dim", "remove")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`;
+    lines.push(truncateToWidth(controls, width, ""));
     return lines.map((line) => truncateToWidth(line, width, ""));
   }
 

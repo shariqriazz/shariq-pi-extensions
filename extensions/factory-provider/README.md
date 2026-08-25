@@ -59,7 +59,7 @@ There are no `-oauth` or `-api-key` model duplicates. The user-curated catalog e
 /factory
 ```
 
-`/factory` opens a full-width account dashboard combining provider status, authentication, Droid/model metadata, rotation cooldowns, and separate Standard and Droid Core usage for every credential. Percentages are explicitly labeled as **used**. Navigate with the arrow keys or `j`/`k`, press `r` to force-refresh every account, use `d` to reversibly enable or disable a rotating file-backed key, use `x` plus confirmation to remove one permanently, and press Escape to close. Environment variables and single credentials managed by Pi auth remain read-only in this dashboard.
+`/factory` opens a full-width account dashboard combining provider status, authentication, Droid/model metadata, rotation cooldowns, and separate Standard and Droid Core usage for every credential. Percentages are explicitly labeled as **used**. Navigate with the arrow keys or `j`/`k`, press `r` to force-refresh every account, use `d` to reversibly enable or disable a rotating file-backed key, press `x` twice to confirm and remove one permanently, and press Escape to cancel an armed removal or close the dashboard. Environment variables and single credentials managed by Pi auth remain read-only in this dashboard.
 
 Usage is never estimated from Pi token counts: Factory's API already applies model multipliers and cache-hit discounts. Cached records refresh at most every 15 minutes during normal sessions and after Factory runs; the manual command is the explicit force-refresh path.
 

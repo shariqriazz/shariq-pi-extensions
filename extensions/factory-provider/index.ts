@@ -223,9 +223,7 @@ export default async function factoryExtension(pi: ExtensionAPI) {
           if (enabled) await refreshLimits(ctx, true);
           return dashboardSnapshot(ctx);
         },
-        async (id, label) => {
-          const confirmed = await ctx.ui.confirm("Remove Factory account?", `Permanently remove ${label} from the rotating-key file?`);
-          if (!confirmed) return dashboardSnapshot(ctx);
+        async (id) => {
           if (!removeFactoryApiKey(id)) throw new Error("This Factory credential is not editable from the rotating-key file.");
           return dashboardSnapshot(ctx);
         },

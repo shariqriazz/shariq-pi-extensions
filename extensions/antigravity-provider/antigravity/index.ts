@@ -135,9 +135,7 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 					if (enabled) await refreshAntigravityQuotas({ force: true, signal: ctx.signal });
 					return dashboardSnapshot(ctx);
 				},
-				async (id, label) => {
-					const confirmed = await ctx.ui.confirm("Remove Antigravity account?", `Permanently remove ${label} from this Pi installation?`);
-					if (!confirmed) return dashboardSnapshot(ctx);
+				async (id) => {
 					removeAntigravityAccount(id);
 					await reconcileStoredCredential(ctx);
 					return dashboardSnapshot(ctx);
