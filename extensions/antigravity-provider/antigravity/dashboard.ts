@@ -78,6 +78,7 @@ export class AntigravityDashboard implements Component {
   private snapshot: AntigravityDashboardSnapshot;
   private readonly refreshData: (force: boolean) => Promise<AntigravityDashboardSnapshot>;
   private readonly toggleAccount: (id: string, enabled: boolean) => Promise<AntigravityDashboardSnapshot>;
+  private readonly removeAccount: (id: string, label: string) => Promise<AntigravityDashboardSnapshot>;
   private readonly done: () => void;
 
   constructor(
@@ -87,6 +88,7 @@ export class AntigravityDashboard implements Component {
     snapshot: AntigravityDashboardSnapshot,
     refreshData: (force: boolean) => Promise<AntigravityDashboardSnapshot>,
     toggleAccount: (id: string, enabled: boolean) => Promise<AntigravityDashboardSnapshot>,
+    removeAccount: (id: string, label: string) => Promise<AntigravityDashboardSnapshot>,
     done: () => void,
   ) {
     this.tui = tui;
@@ -95,6 +97,7 @@ export class AntigravityDashboard implements Component {
     this.snapshot = snapshot;
     this.refreshData = refreshData;
     this.toggleAccount = toggleAccount;
+    this.removeAccount = removeAccount;
     this.done = done;
   }
 
@@ -139,10 +142,13 @@ export class AntigravityDashboard implements Component {
       if (accounts.length) this.selected = (this.selected + 1) % accounts.length;
     } else if (data === "r") {
       this.startRefresh(true);
-    } else if (data === "d" && accounts[this.selected] && !this.refreshing) {
+    } else if ((data === "d" || data === "x") && accounts[this.selected] && !this.refreshing) {
       const account = accounts[this.selected]!;
       this.refreshing = true;
-      void this.toggleAccount(account.id, account.disabled === true)
+      const action = data === "x"
+        ? this.removeAccount(account.id, account.email || `account-${account.id.slice(0, 6)}`)
+        : this.toggleAccount(account.id, account.disabled === true);
+      void action
         .then((snapshot) => this.replaceSnapshot(snapshot))
         .catch((error) => {
           if (!this.closed) this.snapshot = { ...this.snapshot, warning: error instanceof Error ? error.message : String(error) };
@@ -188,7 +194,7 @@ export class AntigravityDashboard implements Component {
       for (let row = 0; row < bodyHeight; row++) lines.push(this.theme.fg("border", "│") + padLine(list[row] ?? "", inner) + this.theme.fg("border", "│"));
     }
     lines.push(frameBottom(this.theme, width));
-    lines.push(truncateToWidth(`${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`, width, ""));
+    lines.push(truncateToWidth(`${this.theme.fg("accent", "  ↑↓ / j k")} ${this.theme.fg("dim", "select")}  ${this.theme.fg("accent", "r")} ${this.theme.fg("dim", "refresh")}  ${this.theme.fg("accent", "d")} ${this.theme.fg("dim", "enable/disable")}  ${this.theme.fg("accent", "x")} ${this.theme.fg("dim", "remove")}  ${this.theme.fg("accent", "esc")} ${this.theme.fg("dim", "close")}`, width, ""));
     return lines.map((line) => truncateToWidth(line, width, ""));
   }
 
@@ -250,10 +256,11 @@ export async function openAntigravityDashboard(
   initial: AntigravityDashboardSnapshot,
   refresh: (force: boolean) => Promise<AntigravityDashboardSnapshot>,
   toggle: (id: string, enabled: boolean) => Promise<AntigravityDashboardSnapshot>,
+  remove: (id: string, label: string) => Promise<AntigravityDashboardSnapshot>,
 ) {
   await ctx.ui.custom<void>(
     (tui, theme, keys, done) => {
-      const dashboard = new AntigravityDashboard(tui, theme, keys, initial, refresh, toggle, () => done(undefined));
+      const dashboard = new AntigravityDashboard(tui, theme, keys, initial, refresh, toggle, remove, () => done(undefined));
       queueMicrotask(() => dashboard.startRefresh(false));
       return dashboard;
     },

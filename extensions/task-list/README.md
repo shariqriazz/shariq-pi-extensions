@@ -38,8 +38,8 @@ The tool definition and Pi prompt guidance explicitly require the model to:
 The runtime reinforces these instructions without assigning the list to another worker:
 
 - after two substantive tool calls with no list, the next model context receives a conditional reminder;
-- after substantive work makes an active list stale, the next model context asks for an immediate update paired with the next action;
-- if the model still stops with a stale active list, Pi starts at most one follow-up model turn so the same model can update it and continue or finish;
+- routine file reads, edits, commands, and tool calls do not trigger bookkeeping updates while the current task remains active;
+- the model updates only for task-level transitions: verified completion and handoff to the next task, genuine blockers or cancellations, user-requested scope changes, and final reconciliation;
 - status-only inspection tools do not count as substantive progress.
 
 The list remains a coordination aid, not evidence that implementation or verification succeeded.

@@ -30,7 +30,7 @@ function snapshot(): AntigravityDashboardSnapshot {
   };
 }
 
-test("Antigravity dashboard shows remaining quota and stays within the viewport", () => {
+test("Antigravity dashboard shows quota, stays within the viewport, and removes accounts", async () => {
   const theme = {
     fg(_color: string, text: string) { return text; },
     bg(_color: string, text: string) { return text; },
@@ -43,6 +43,7 @@ test("Antigravity dashboard shows remaining quota and stays within the viewport"
         (binding === "tui.select.down" && data === "down");
     },
   };
+  const removed: string[] = [];
   const component = new AntigravityDashboard(
     { terminal: { rows: 30 }, requestRender() {} } as never,
     theme as never,
@@ -50,6 +51,11 @@ test("Antigravity dashboard shows remaining quota and stays within the viewport"
     snapshot(),
     async () => snapshot(),
     async () => snapshot(),
+    async (id) => {
+      removed.push(id);
+      const current = snapshot();
+      return { ...current, accounts: current.accounts.filter((account) => account.id !== id) };
+    },
     () => {},
   );
   for (const width of [32, 72, 120]) {
@@ -65,4 +71,10 @@ test("Antigravity dashboard shows remaining quota and stays within the viewport"
   assert.match(wide, /CLAUDE MODELS/);
   assert.doesNotMatch(wide, /GPT|3\.6|3\.5/);
   assert.ok(component.render(120).every((line) => visibleWidth(line) <= 120));
+  assert.match(component.render(120).join("\n"), /x remove/);
+
+  component.handleInput("x");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(removed, ["account-1"]);
+  assert.doesNotMatch(component.render(120).join("\n"), /account-1@example\.com/);
 });

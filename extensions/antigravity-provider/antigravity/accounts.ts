@@ -48,6 +48,22 @@ interface AntigravityAccountFile {
   accounts: AntigravityAccount[];
 }
 
+export type AntigravityAccountStore = {
+  status: "missing" | "invalid" | "valid";
+  accounts: AntigravityAccount[];
+};
+
+export type AntigravityStoredCredential = Pick<OAuthCredentials, "refresh" | "access" | "expires"> & {
+  projectId?: string;
+  email?: string;
+};
+
+export type AntigravityCredentialReconciliation =
+  | { action: "none" }
+  | { action: "migrate"; credentials: AntigravityStoredCredential }
+  | { action: "replace"; account: AntigravityAccount }
+  | { action: "delete" };
+
 export interface AntigravityAccountStatus extends AntigravityAccount {
   active: boolean;
 }
@@ -105,15 +121,38 @@ function normalizeAccount(value: unknown): AntigravityAccount | undefined {
   };
 }
 
-export function loadAntigravityAccounts(): AntigravityAccount[] {
+export function inspectAntigravityAccountStore(): AntigravityAccountStore {
   try {
     const parsed = JSON.parse(fs.readFileSync(ANTIGRAVITY_ACCOUNTS_PATH, "utf8")) as Partial<AntigravityAccountFile>;
-    return Array.isArray(parsed.accounts)
-      ? parsed.accounts.map(normalizeAccount).filter((account): account is AntigravityAccount => Boolean(account))
-      : [];
-  } catch {
-    return [];
+    if (!Array.isArray(parsed.accounts)) return { status: "invalid", accounts: [] };
+    return {
+      status: "valid",
+      accounts: parsed.accounts.map(normalizeAccount).filter((account): account is AntigravityAccount => Boolean(account)),
+    };
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
+    return { status: code === "ENOENT" ? "missing" : "invalid", accounts: [] };
   }
+}
+
+export function loadAntigravityAccounts(): AntigravityAccount[] {
+  return inspectAntigravityAccountStore().accounts;
+}
+
+function matchesStoredCredential(account: AntigravityAccount, credentials: AntigravityStoredCredential) {
+  return account.refresh === credentials.refresh || Boolean(account.email && credentials.email && account.email === credentials.email);
+}
+
+export function reconcileAntigravityStoredCredential(
+  store: AntigravityAccountStore,
+  credentials: AntigravityStoredCredential | undefined,
+): AntigravityCredentialReconciliation {
+  if (store.status === "invalid") return { action: "none" };
+  if (store.status === "missing") return credentials ? { action: "migrate", credentials } : { action: "none" };
+  if (credentials && store.accounts.some((account) => matchesStoredCredential(account, credentials))) return { action: "none" };
+  const replacement = store.accounts.find((account) => !account.disabled) ?? store.accounts[0];
+  if (replacement) return { action: "replace", account: replacement };
+  return credentials ? { action: "delete" } : { action: "none" };
 }
 
 function saveAntigravityAccounts(accounts: AntigravityAccount[]) {

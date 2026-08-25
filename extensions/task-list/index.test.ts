@@ -82,7 +82,8 @@ test("registers a crystal-clear whole-list tool and /tasks command", () => {
   assert.ok(h.commands.has("tasks"));
   assert.match(tool.description, /COMPLETE replacement list/);
   assert.match(tool.description, /SAME assistant message as the first action tool/);
-  assert.match(tool.description, /Update the list as work happens/);
+  assert.match(tool.description, /only when task-level state changes/);
+  assert.match(tool.description, /not after every file read, edit, command, or tool call/);
   assert.match(tool.description, /Before the final response/);
   assert.ok(tool.promptGuidelines.every((line: string) => line.includes("task_list")));
 });
@@ -142,16 +143,21 @@ test("restores the latest branch-local snapshot", () => {
   assert.equal(restored.tasks[1].status, "in_progress");
 });
 
-test("injects compaction-safe state and a stale-list reminder after real work", async () => {
+test("injects compaction-safe state without treating routine tools as task transitions", async () => {
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
   await h.emit("tool_execution_start", { toolName: "task_list", toolCallId: "t1" });
   await h.tools.get("task_list").execute("t1", { tasks: initialTasks }, undefined, undefined, h.ctx);
   await h.emit("tool_execution_start", { toolName: "read", toolCallId: "r1" });
+  await h.emit("tool_execution_start", { toolName: "edit", toolCallId: "e1" });
+  await h.emit("tool_execution_start", { toolName: "bash", toolCallId: "b1" });
   const result = await h.emit("context", { messages: [] });
   const content = result.messages.map((message: any) => String(message.content)).join("\n");
   assert.match(content, /<task_list_state revision="1">/);
-  assert.match(content, /task list is stale after substantive work/i);
+  assert.doesNotMatch(content, /task list is stale|update task_list now/i);
+  await h.emit("agent_end");
+  await h.emit("agent_settled");
+  assert.equal(h.sent.length, 0);
   await h.emit("session_shutdown");
 });
 
@@ -163,25 +169,6 @@ test("nudges a model that starts multi-action work without creating the list", a
   await h.emit("tool_execution_start", { toolName: "grep" });
   const result = await h.emit("context", { messages: [] });
   assert.match(String(result.messages.at(-1).content), /started multi-action work without task_list/);
-  await h.emit("session_shutdown");
-});
-
-test("settled stale work gets one model-maintained follow-up, not a background worker loop", async () => {
-  const h = harness();
-  await h.emit("session_start", { reason: "startup" });
-  await h.emit("input", { source: "interactive" });
-  await h.emit("tool_execution_start", { toolName: "task_list" });
-  await h.tools.get("task_list").execute("t1", { tasks: initialTasks }, undefined, undefined, h.ctx);
-  await h.emit("tool_execution_start", { toolName: "bash" });
-  await h.emit("agent_end");
-  await h.emit("agent_settled");
-  assert.equal(h.sent.length, 1);
-  assert.equal(h.sent[0].options.deliverAs, "followUp");
-  assert.equal(h.sent[0].options.triggerTurn, true);
-  assert.match(h.sent[0].message.content, /Update task_list now/);
-  await h.emit("agent_end");
-  await h.emit("agent_settled");
-  assert.equal(h.sent.length, 1);
   await h.emit("session_shutdown");
 });
 

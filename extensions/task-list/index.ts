@@ -97,13 +97,8 @@ export default function taskListExtension(pi: ExtensionAPI) {
   let state = emptyTaskListState();
   let lastCtx: ExtensionContext | null = null;
   let finishedTimer: ReturnType<typeof setTimeout> | undefined;
-  let sequence = 0;
-  let lastTaskSequence = 0;
-  let lastWorkSequence = 0;
   let workCallsSinceUser = 0;
   let taskCallsSinceUser = 0;
-  let nudgeCount = 0;
-  let staleAtAgentEnd = false;
 
   function cancelFinishedTimer(): void {
     if (!finishedTimer) return;
@@ -207,9 +202,6 @@ export default function taskListExtension(pi: ExtensionAPI) {
   }
 
   function reminderText(): string | null {
-    if (hasActiveTasks(state) && lastWorkSequence > lastTaskSequence) {
-      return "The task list is stale after substantive work. Before more narration, call task_list with the complete updated list: mark finished work completed only if verified, keep current work in_progress, and pair the update with the next action tool when work remains.";
-    }
     if (state.tasks.length === 0 && taskCallsSinceUser === 0 && workCallsSinceUser >= 2) {
       return "You have started multi-action work without task_list. If this request requires at least three distinct actions or contains multiple user tasks, create the complete list now and call task_list in the same assistant message as the next action. Do not create a retroactive list if the work is already complete or was genuinely trivial.";
     }
@@ -220,21 +212,13 @@ export default function taskListExtension(pi: ExtensionAPI) {
     if (event.source === "extension") return;
     workCallsSinceUser = 0;
     taskCallsSinceUser = 0;
-    lastTaskSequence = 0;
-    lastWorkSequence = 0;
-    staleAtAgentEnd = false;
-    nudgeCount = 0;
   });
 
   pi.on("session_start", async (_event, ctx) => {
     lastCtx = ctx;
     state = restoreTaskList(ctx);
-    sequence = 0;
-    lastTaskSequence = 0;
-    lastWorkSequence = 0;
     workCallsSinceUser = 0;
     taskCallsSinceUser = 0;
-    nudgeCount = 0;
     updatePresentation(ctx);
   });
 
@@ -245,14 +229,8 @@ export default function taskListExtension(pi: ExtensionAPI) {
 
   pi.on("tool_execution_start", async (event, ctx) => {
     lastCtx = ctx;
-    sequence++;
-    if (event.toolName === TASK_LIST_TOOL) {
-      lastTaskSequence = sequence;
-      taskCallsSinceUser++;
-    } else if (!WORK_TOOL_EXCLUSIONS.has(event.toolName)) {
-      lastWorkSequence = sequence;
-      workCallsSinceUser++;
-    }
+    if (event.toolName === TASK_LIST_TOOL) taskCallsSinceUser++;
+    else if (!WORK_TOOL_EXCLUSIONS.has(event.toolName)) workCallsSinceUser++;
   });
 
   pi.on("context", async (event) => {
@@ -279,23 +257,6 @@ export default function taskListExtension(pi: ExtensionAPI) {
       });
     }
     return additions.length > 0 ? { messages: [...event.messages, ...additions] } : undefined;
-  });
-
-  pi.on("agent_end", async () => {
-    staleAtAgentEnd = hasActiveTasks(state) && lastWorkSequence > lastTaskSequence;
-  });
-
-  pi.on("agent_settled", async (_event, ctx) => {
-    lastCtx = ctx;
-    if (!staleAtAgentEnd || nudgeCount >= 1 || ctx.hasPendingMessages()) return;
-    staleAtAgentEnd = false;
-    nudgeCount++;
-    pi.sendMessage({
-      customType: "task-list-reminder",
-      content: "You stopped with a stale active task list. Update task_list now. If work remains, pair that update with the next concrete action; if work is finished, mark verified items completed and cancelled items with a reason before the final response.",
-      display: false,
-      details: { revision: state.revision, kind: "settled-stale-list" },
-    }, { deliverAs: "followUp", triggerTurn: true });
   });
 
   pi.on("session_shutdown", async () => {
@@ -398,7 +359,7 @@ Use task_list for work with at least three distinct actions, multiple user-reque
 
 Start the list before substantive work and call task_list in the SAME assistant message as the first action tool. Never spend a turn only announcing or updating the list when another action can run. Keep stable ids and preserve every user-requested item, exact command, flag, path, and success condition.
 
-Update the list as work happens, not after several steps: mark a finished item completed only after its outcome is verified, move the next sequential item to in_progress, and issue that next action in the same assistant message. Keep one in_progress task for sequential work; use several only when work is genuinely running in parallel. Use blocked only for a concrete unresolved dependency and cancelled only when an item is no longer required, with the reason in note.
+Update the list only when task-level state changes—not after every file read, edit, command, or tool call. When a task is fully verified, mark it completed, move the next sequential item to in_progress, and issue that next action in the same assistant message. Also update for genuine blockers, cancellations, or user-requested scope changes. Keep one in_progress task for sequential work; use several only when work is genuinely running in parallel.
 
 Before the final response, reconcile the whole list with actual results. No item may remain pending or in_progress if the requested work is finished. Do not claim completion from the list itself.`,
     promptSnippet: "Read or replace the current session's complete task list and progress state.",
@@ -406,7 +367,7 @@ Before the final response, reconcile the whole list with actual results. No item
       "Use task_list for requests with at least three distinct actions, multiple requested tasks, or meaningful phases; skip it for direct answers and one- or two-action work.",
       "Create task_list before substantive multi-step work and send the update in the same assistant message as the first real action; never spend a turn on task bookkeeping alone when another action exists.",
       "Every task_list write replaces the entire ordered list. Preserve stable ids, all unfinished and user-requested work, and exact commands, flags, paths, and success conditions.",
-      "Update task_list immediately as each step changes: complete only verified work, set the next sequential item in_progress, and pair the update with the next action. Multiple in_progress items require genuinely parallel work.",
+      "Update task_list only for task-level transitions: verified completion, starting the next task, a genuine blocker or cancellation, or a user-requested scope change. Do not update it after every file read, edit, command, or tool call. Pair transitions with the next action when work remains.",
       "Before a final response, reconcile task_list with observed results and leave no stale pending or in_progress items when the requested work is finished. The list is not proof of completion.",
     ],
     parameters: TaskListParams,
@@ -414,7 +375,6 @@ Before the final response, reconcile the whole list with actual results. No item
       lastCtx = ctx;
       if (params.tasks !== undefined) {
         replaceState(buildUpdatedTaskList(state, params), ctx);
-        lastTaskSequence = Math.max(lastTaskSequence, sequence);
       }
       const action = params.tasks === undefined ? "read" : "update";
       const details: TaskListDetails = {

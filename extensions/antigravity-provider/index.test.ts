@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import antigravityProviderExtension from "./index.ts";
 import { loadCodeAssist, sanitizeText } from "./antigravity/oauth.ts";
-import { classifyAntigravityFailure, eligibleAntigravityAccounts, parseAntigravityQuota } from "./antigravity/accounts.ts";
+import { classifyAntigravityFailure, eligibleAntigravityAccounts, parseAntigravityQuota, reconcileAntigravityStoredCredential } from "./antigravity/accounts.ts";
 import { ANTIGRAVITY_MODELS, ANTIGRAVITY_ROUTING } from "./antigravity/models.ts";
 
 test("preserves valid non-BMP Unicode and replaces only unpaired surrogates", () => {
@@ -83,6 +83,18 @@ test("rotation skips unavailable accounts and balances by least recent use", () 
     { ...base, id: "exhausted", quota: [{ modelId: "gemini-3.7-flash", group: "gemini", remainingFraction: 0, resetTime: new Date(now + 60_000).toISOString() }] },
   ], "gemini-3.7-flash", now);
   assert.deepEqual(selected.map((account) => account.id), ["rested", "recent"]);
+});
+
+test("keeps a valid edited account store authoritative over Pi's stored credential", () => {
+  const now = Date.now();
+  const retained = { id: "retained", email: "retained@example.com", refresh: "retained-refresh", access: "retained-access", expires: now + 60_000, projectId: "retained-project", addedAt: now };
+  const removed = { refresh: "removed-refresh", access: "removed-access", expires: now + 60_000, projectId: "removed-project", email: "removed@example.com" };
+
+  assert.equal(reconcileAntigravityStoredCredential({ status: "missing", accounts: [] }, removed).action, "migrate");
+  assert.equal(reconcileAntigravityStoredCredential({ status: "invalid", accounts: [] }, removed).action, "none");
+  assert.equal(reconcileAntigravityStoredCredential({ status: "valid", accounts: [{ ...retained, ...removed, id: "current" }] }, removed).action, "none");
+  assert.deepEqual(reconcileAntigravityStoredCredential({ status: "valid", accounts: [retained] }, removed), { action: "replace", account: retained });
+  assert.equal(reconcileAntigravityStoredCredential({ status: "valid", accounts: [] }, removed).action, "delete");
 });
 
 test("exposes only the latest Gemini and Claude model families", () => {

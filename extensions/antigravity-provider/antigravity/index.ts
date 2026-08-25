@@ -24,8 +24,12 @@ import {
 import { streamAntigravity } from "./cloud-code-assist.ts";
 import {
 	antigravityAccountStatuses,
+	inspectAntigravityAccountStore,
+	reconcileAntigravityStoredCredential,
+	removeAntigravityAccount,
 	setAntigravityAccountEnabled,
 	upsertAntigravityAccount,
+	type AntigravityStoredCredential,
 } from "./accounts.ts";
 import { refreshAntigravityQuotas } from "./quotas.ts";
 import {
@@ -43,19 +47,43 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 		};
 	};
 
-	const migrateStoredCredential = () => {
+	const readOAuthCredential = (): AntigravityStoredCredential | undefined => {
+		const credential = readStoredCredential(PROVIDER_ID) as any;
+		if (credential?.type !== "oauth" || typeof credential.refresh !== "string" || typeof credential.access !== "string") return undefined;
+		return {
+			refresh: credential.refresh,
+			access: credential.access,
+			expires: typeof credential.expires === "number" ? credential.expires : 0,
+			projectId: typeof credential.projectId === "string" ? credential.projectId : undefined,
+			email: typeof credential.email === "string" ? credential.email : undefined,
+		};
+	};
+
+	const reconcileStoredCredential = async (ctx?: ExtensionContext) => {
 		try {
-			const credential = readStoredCredential(PROVIDER_ID) as any;
-			if (credential?.type !== "oauth" || typeof credential.refresh !== "string" || typeof credential.access !== "string") return;
-			upsertAntigravityAccount({
-				refresh: credential.refresh,
-				access: credential.access,
-				expires: typeof credential.expires === "number" ? credential.expires : 0,
-				projectId: typeof credential.projectId === "string" ? credential.projectId : undefined,
-				email: typeof credential.email === "string" ? credential.email : undefined,
-			});
+			const credentials = readOAuthCredential();
+			const reconciliation = reconcileAntigravityStoredCredential(inspectAntigravityAccountStore(), credentials);
+			if (reconciliation.action === "migrate") {
+				upsertAntigravityAccount(reconciliation.credentials);
+				return;
+			}
+			const authStorage = (ctx?.modelRegistry as any)?.authStorage;
+			if (!authStorage) return;
+			if (reconciliation.action === "replace") {
+				const account = reconciliation.account;
+				await authStorage.modify(PROVIDER_ID, async () => ({
+					type: "oauth",
+					refresh: account.refresh,
+					access: account.access,
+					expires: account.expires,
+					projectId: account.projectId,
+					email: account.email,
+				}));
+			} else if (reconciliation.action === "delete") {
+				await authStorage.delete(PROVIDER_ID);
+			}
 		} catch {
-			// A malformed or unavailable Pi credential must not block extension startup.
+			// Malformed or unavailable credential state must not block extension startup.
 		}
 	};
 
@@ -67,9 +95,9 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 		oauth: {
 			name: PROVIDER_NAME,
 			login: ((callbacks: Parameters<typeof loginAntigravity>[0]) => {
-				// Pi replaces its single stored provider credential after login. Archive
-				// the current account first so signing into another account cannot lose it.
-				migrateStoredCredential();
+				// A missing account store is a legacy installation, so archive Pi's single
+				// credential before login. A valid store remains authoritative after edits.
+				void reconcileStoredCredential();
 				return loginAntigravity(callbacks);
 			}) as any,
 			refreshToken: refreshAntigravityToken as any,
@@ -78,9 +106,9 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 		streamSimple: streamAntigravity,
 	} as any);
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", async (_event, ctx) => {
 		(ctx.modelRegistry as any).authStorage?.reload?.();
-		migrateStoredCredential();
+		await reconcileStoredCredential(ctx);
 		void refreshAntigravityQuotas({ signal: ctx.signal }).catch(() => {
 			// Cached quota state remains available; /antigravity reports refresh failures.
 		});
@@ -94,7 +122,7 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 	pi.registerCommand("antigravity", {
 		description: "Open Antigravity accounts, rotation, and quota dashboard",
 		handler: async (_args, ctx) => {
-			migrateStoredCredential();
+			await reconcileStoredCredential(ctx);
 			await openAntigravityDashboard(
 				ctx,
 				dashboardSnapshot(ctx),
@@ -105,6 +133,13 @@ export default function antigravityProviderExtension(pi: ExtensionAPI) {
 				async (id, enabled) => {
 					setAntigravityAccountEnabled(id, enabled);
 					if (enabled) await refreshAntigravityQuotas({ force: true, signal: ctx.signal });
+					return dashboardSnapshot(ctx);
+				},
+				async (id, label) => {
+					const confirmed = await ctx.ui.confirm("Remove Antigravity account?", `Permanently remove ${label} from this Pi installation?`);
+					if (!confirmed) return dashboardSnapshot(ctx);
+					removeAntigravityAccount(id);
+					await reconcileStoredCredential(ctx);
 					return dashboardSnapshot(ctx);
 				},
 			);
