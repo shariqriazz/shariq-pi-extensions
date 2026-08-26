@@ -16,7 +16,7 @@ The orchestrator sleeps while agents work and wakes automatically at execution b
 
 ## Roles and settings
 
-Use `/orchestration settings` to choose a global provider/model and thinking level for:
+Use `/orchestration settings` (or `s` in the dashboard) to open the interactive role configuration panel. Navigate roles with `j`/`k`, press `Enter` to search and select models from all active providers in the Searchable Model Picker, press `t` or `Tab` to cycle thinking levels directly, and press `s` to save. Settings configure:
 
 - orchestrator
 - explorer

@@ -5,6 +5,7 @@ import type {
   ExtensionUIContext,
   SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
+import { openModelPicker } from "../shared/model-picker.ts";
 import {
   loadSmartCompactionConfig,
   saveSmartCompactionConfig,
@@ -110,25 +111,21 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         }
 
         if (cmdCtx.hasUI) {
-          const available = cmdCtx.modelRegistry.getAvailable();
-          const choices = [
-            `inherit (active session model: ${cmdCtx.model ? `${cmdCtx.model.provider}/${cmdCtx.model.id}` : "none"})`,
-            ...available.map((m) => `${m.provider}/${m.id}`),
-          ];
-
-          const selected = await cmdCtx.ui.select(
-            `Select Compaction Model (current: ${config.model})`,
-            choices,
-          );
+          const selected = await openModelPicker(cmdCtx as never, {
+            title: `Compaction Model (current: ${config.model})`,
+            currentModel: config.model,
+            extraChoices: [
+              {
+                id: "inherit",
+                label: "inherit",
+                description: `Use active session model (${cmdCtx.model ? `${cmdCtx.model.provider}/${cmdCtx.model.id}` : "none"})`,
+              },
+            ],
+          });
 
           if (!selected) return;
 
-          if (selected.startsWith("inherit")) {
-            config.model = "inherit";
-          } else {
-            config.model = selected;
-          }
-
+          config.model = selected;
           saveSmartCompactionConfig(config, options.configFile);
           updateStatus();
           cmdCtx.ui.notify(`Compaction model set to: ${config.model}`, "info");

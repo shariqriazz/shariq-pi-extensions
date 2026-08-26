@@ -28,6 +28,7 @@ class OrchestrationDashboard {
   private selected = 0;
   private selectedId?: string;
   private detail = false;
+  private detailScroll = 0;
   private unsubscribe: () => void;
   private readonly tui: TUI;
   private readonly theme: Theme;
@@ -74,28 +75,45 @@ class OrchestrationDashboard {
   handleInput(data: string) {
     const runs = this.engine.list();
     this.reconcileSelection(runs);
+    const rows = this.tui.terminal.rows || 30;
+    const bodyHeight = Math.max(8, rows - 5);
+
     if (matchesKey(data, Key.escape)) {
-      if (this.detail) this.detail = false;
-      else {
+      if (this.detail) {
+        this.detail = false;
+        this.detailScroll = 0;
+      } else {
         this.close({ kind: "close" });
         return;
       }
-    } else if (!this.detail && (this.keys.matches(data, "tui.select.up") || data === "k")) {
-      this.selected = Math.max(0, this.selected - 1);
-      this.selectedId = runs[this.selected]?.id;
-    } else if (!this.detail && (this.keys.matches(data, "tui.select.down") || data === "j")) {
-      this.selected = Math.min(Math.max(0, runs.length - 1), this.selected + 1);
-      this.selectedId = runs[this.selected]?.id;
-    } else if (!this.detail && this.keys.matches(data, "tui.select.confirm") && runs[this.selected]) {
-      this.detail = true;
-    } else if (data === "n") this.close({ kind: "create" });
-    else if (data === "s") this.close({ kind: "settings" });
-    else if (this.detail && runs[this.selected]) {
-      const run = runs[this.selected];
-      if (data === "a" && run.status === "awaiting-approval") this.close({ kind: "approve", id: run.id });
-      else if (data === "f" && run.status === "awaiting-approval") this.close({ kind: "feedback", id: run.id });
-      else if (data === "p") this.close({ kind: "toggle-pause", id: run.id });
-      else if (data === "x") this.close({ kind: "cancel", id: run.id });
+    } else if (this.detail) {
+      if (this.keys.matches(data, "tui.select.up") || data === "k" || matchesKey(data, Key.up)) {
+        this.detailScroll = Math.max(0, this.detailScroll - 1);
+      } else if (this.keys.matches(data, "tui.select.down") || data === "j" || matchesKey(data, Key.down)) {
+        this.detailScroll = this.detailScroll + 1;
+      } else if (matchesKey(data, Key.pageUp)) {
+        this.detailScroll = Math.max(0, this.detailScroll - Math.max(1, bodyHeight - 4));
+      } else if (matchesKey(data, Key.pageDown)) {
+        this.detailScroll = this.detailScroll + Math.max(1, bodyHeight - 4);
+      } else if (runs[this.selected]) {
+        const run = runs[this.selected];
+        if (data === "a" && run.status === "awaiting-approval") this.close({ kind: "approve", id: run.id });
+        else if (data === "f" && run.status === "awaiting-approval") this.close({ kind: "feedback", id: run.id });
+        else if (data === "p") this.close({ kind: "toggle-pause", id: run.id });
+        else if (data === "x") this.close({ kind: "cancel", id: run.id });
+      }
+    } else if (!this.detail) {
+      if (this.keys.matches(data, "tui.select.up") || data === "k" || matchesKey(data, Key.up)) {
+        this.selected = Math.max(0, this.selected - 1);
+        this.selectedId = runs[this.selected]?.id;
+      } else if (this.keys.matches(data, "tui.select.down") || data === "j" || matchesKey(data, Key.down)) {
+        this.selected = Math.min(Math.max(0, runs.length - 1), this.selected + 1);
+        this.selectedId = runs[this.selected]?.id;
+      } else if (this.keys.matches(data, "tui.select.confirm") && runs[this.selected]) {
+        this.detail = true;
+        this.detailScroll = 0;
+      } else if (data === "n") this.close({ kind: "create" });
+      else if (data === "s") this.close({ kind: "settings" });
     }
     this.tui.requestRender();
   }
@@ -107,12 +125,27 @@ class OrchestrationDashboard {
     const rows = this.tui.terminal.rows || 30;
     const bodyHeight = Math.max(8, rows - 5);
     const innerWidth = Math.max(1, width - 2);
-    const content = this.detail && selected
-      ? this.renderDetail(selected, innerWidth)
-      : this.renderList(runs, innerWidth);
-    const body = content.length > bodyHeight
-      ? [...content.slice(0, bodyHeight - 1), this.theme.fg("dim", "… more")]
-      : content;
+
+    let body: string[];
+    if (this.detail && selected) {
+      const allDetailLines = this.renderDetail(selected, innerWidth);
+      const maxScroll = Math.max(0, allDetailLines.length - bodyHeight);
+      this.detailScroll = Math.min(this.detailScroll, maxScroll);
+      const visible = allDetailLines.slice(this.detailScroll, this.detailScroll + bodyHeight);
+      if (this.detailScroll > 0 && visible.length > 0) {
+        visible[0] = this.theme.fg("dim", `  ↑ ${this.detailScroll} more lines`);
+      }
+      if (this.detailScroll + bodyHeight < allDetailLines.length && visible.length > 0) {
+        visible[visible.length - 1] = this.theme.fg("dim", `  ↓ ${allDetailLines.length - (this.detailScroll + bodyHeight)} more lines`);
+      }
+      body = visible;
+    } else {
+      const listContent = this.renderList(runs, innerWidth);
+      body = listContent.length > bodyHeight
+        ? [...listContent.slice(0, bodyHeight - 1), this.theme.fg("dim", "… more")]
+        : listContent;
+    }
+
     const status = runs.length
       ? `${runs.filter((run) => ["planning", "running"].includes(run.status)).length} active · ${runs.length} total`
       : "idle";
@@ -121,6 +154,7 @@ class OrchestrationDashboard {
           selected.status === "awaiting-approval" ? "a approve · f feedback" : "",
           ["paused", "interrupted", "blocked"].includes(selected.status) ? "p resume" : selected.status === "running" ? "p pause" : "",
           !["completed", "cancelled"].includes(selected.status) ? "x cancel" : "",
+          "j/k scroll",
           "esc back",
         ].filter(Boolean).join(" · ")
       : "j/k select · enter open · n new · s settings · esc close";

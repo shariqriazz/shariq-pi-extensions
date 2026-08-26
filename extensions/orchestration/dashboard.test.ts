@@ -61,6 +61,10 @@ test("orchestration dashboard stays bounded and returns actions before nested UI
   }
   component!.handleInput("\r");
   assert.ok(component!.render(40).every((line) => visibleWidth(line) <= 40));
+  assert.match(component!.render(60).join("\n"), /RUN DETAIL/);
+  // Test scrolling in detail view
+  component!.handleInput("j");
+  component!.handleInput("k");
   component!.handleInput("x");
   assert.deepEqual(action, { kind: "cancel", id: "orc_test" });
 });

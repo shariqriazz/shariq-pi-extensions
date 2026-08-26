@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
+import { openModelPicker } from "../shared/model-picker.ts";
 import {
   defaultConfig,
   MEMORY_REASONING_LEVELS,
@@ -181,22 +182,25 @@ export default function piMemory(pi: ExtensionAPI) {
           return;
         }
         const current = config.extractionModel;
-        const providers = [...new Set(available.map((model) => model.provider))].sort();
-        providers.sort((a, b) => Number(b === current.provider) - Number(a === current.provider));
-        const provider = await ctx.ui.select("Pi Memory extraction provider", providers);
-        if (!provider) return;
+        const picked = await openModelPicker(ctx, {
+          title: "Pi Memory Extraction Model",
+          currentModel: `${current.provider}/${current.model}`,
+        });
+        if (!picked) return;
 
-        const providerModels = available.filter((model) => model.provider === provider);
-        providerModels.sort((a, b) => Number(b.id === current.model && provider === current.provider) - Number(a.id === current.model && provider === current.provider) || a.id.localeCompare(b.id));
-        const modelId = await ctx.ui.select("Pi Memory extraction model", providerModels.map((model) => model.id));
-        if (!modelId) return;
-        const model = providerModels.find((candidate) => candidate.id === modelId)!;
+        const [provider, ...rest] = picked.split("/");
+        const modelId = rest.join("/");
+        const model = available.find((candidate) => candidate.provider === provider && candidate.id === modelId);
+        if (!model) {
+          ctx.ui.notify(`Model ${picked} is not available.`, "error");
+          return;
+        }
 
         const levels = model.reasoning ? [...MEMORY_REASONING_LEVELS] : ["off" as const];
         levels.sort((a, b) => Number(b === current.reasoning) - Number(a === current.reasoning));
-        const reasoning = await ctx.ui.select("Pi Memory extraction reasoning", levels);
+        const reasoning = levels.length > 1 ? await ctx.ui.select("Pi Memory extraction reasoning", levels) : "off";
         if (!reasoning) return;
-        selected = { provider, model: modelId, reasoning: reasoning as MemoryReasoningLevel };
+        selected = { provider: provider!, model: modelId, reasoning: reasoning as MemoryReasoningLevel };
       }
 
       config.extractionModel = selected;
