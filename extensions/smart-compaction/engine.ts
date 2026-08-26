@@ -292,7 +292,8 @@ const REQUIRED_SECTION_PATTERNS = [
 
 export function validateSummaryOutput(response: AssistantMessage): string {
   if (response.stopReason !== "stop") {
-    throw new Error(`Compaction model did not complete successfully (stopReason="${response.stopReason}").`);
+    const errorDetails = response.errorMessage ? `: ${response.errorMessage}` : "";
+    throw new Error(`Compaction model did not complete successfully (stopReason="${response.stopReason}"${errorDetails}).`);
   }
 
   // Reject accidental tool calls
