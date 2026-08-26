@@ -57,8 +57,10 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           throw error;
         }
         const message = error instanceof Error ? error.message : String(error);
-        ctx.ui?.notify(`Smart Compaction failed: ${message}. Falling back to default compactor.`, "warning");
-        return undefined;
+        ctx.ui?.notify(`Smart Compaction failed: ${message}. Compaction cancelled to protect context.`, "error");
+        // Fail-Closed: Return cancel: true so Pi aborts compaction and preserves all conversation context
+        // rather than silently falling back to Pi's generic compactor.
+        return { cancel: true };
       } finally {
         updateStatus();
       }

@@ -25,11 +25,11 @@ When long-running agent sessions reach context thresholds, standard compaction f
 - **Fail-Closed Validation**: Accepts only `stopReason === "stop"` and rejects tool calls, empty output, or summaries missing required section headers.
 - **Lockfile & Bundle Diff Exclusion**: Automatically excludes `package-lock.json`, `Cargo.lock`, `yarn.lock`, `pnpm-lock.yaml`, and minified assets from raw diffs, recording their status under `<modified-lockfiles-and-assets>` to preserve 100% of diff token headroom for source code.
 - **Background Daemon & Terminal Awareness**: Automatically detects running background terminals/processes and injects their status into `<active-background-processes>` so the successor agent never launches duplicate services.
-- **Retry Ladder**: If an attempt encounters output limits or transient reasoning timeouts:
+- **Retry Ladder & Extended Prefill Timeout**: Compaction requests receive an extended 10-minute timeout (600,000ms) to accommodate large 1M context prefills. If an attempt encounters output limits or transient reasoning timeouts:
   1. Primary configured model with requested reasoning.
   2. Primary model with reasoning off (unblocks reasoning/token caps).
   3. Session model with reasoning off.
-  4. Graceful fallback to Pi's default compactor if all stages fail.
+  4. Strict Fail-Closed Protection: If all stages fail, compaction is cancelled to preserve 100% of the conversation transcript rather than silently degrading to Pi's generic compactor.
 - **Two-Ended Head & Tail Truncation**: Preserves both the beginning (context) and end (stack traces, compiler errors, exit codes, test summaries) of tool results and command logs.
 - **100% Full-Fidelity Data Preservation**: Preserves all user-provided data, credentials, environment variables, tool inputs, and code verbatim across compactions without stripping or redaction.
 - **Deterministic 10+ Cycle Stability**: Persists machine-readable touch, dirty-file, bounded-patch, and cycle ledgers in `CompactionEntry.details`; hierarchical delta merging keeps immutable constraints while condensing obsolete history.

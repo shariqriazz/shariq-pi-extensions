@@ -631,6 +631,75 @@ describe("smart-compaction classified retry ladder", () => {
     assert.equal(attemptCount, 2);
     assert.ok(result.summary.includes("Never modify legacy-auth.ts"));
   });
+
+  it("enforces strict fail-closed policy (cancels compaction on failure)", async () => {
+    const { file, cleanup } = createTmpConfig();
+    const eventHandlers = new Map<string, any>();
+    const notifications: Array<{ msg: string; type?: string }> = [];
+
+    const mockPi: ExtensionAPI = {
+      on(name: string, handler: any) {
+        eventHandlers.set(name, handler);
+      },
+      registerCommand() {},
+    } as any;
+
+    const extension = createSmartCompactionExtension({ configFile: file });
+    extension(mockPi);
+
+    const dummyModel: Model<Api> = {
+      id: "session-model",
+      name: "Session Model",
+      provider: "session-provider",
+      api: "openai-responses",
+      maxTokens: 128000,
+    } as any;
+
+    const mockCtx: any = {
+      hasUI: true,
+      model: dummyModel,
+      modelRegistry: {
+        getAvailable() { return [dummyModel]; },
+        async complete() {
+          throw new Error("HTTP 500: Upstream timeout");
+        },
+      },
+      ui: {
+        setStatus() {},
+        notify(msg: string, type?: string) {
+          notifications.push({ msg, type });
+        },
+      },
+      cwd: process.cwd(),
+    };
+
+    const beforeCompactHandler = eventHandlers.get("session_before_compact");
+    assert.ok(beforeCompactHandler, "session_before_compact handler should be registered");
+
+    const event: SessionBeforeCompactEvent = {
+      type: "session_before_compact",
+      preparation: {
+        firstKeptEntryId: "entry-1",
+        messagesToSummarize: [{ role: "user", content: "Work", timestamp: Date.now() }],
+        turnPrefixMessages: [],
+        isSplitTurn: false,
+        tokensBefore: 20000,
+        fileOps: { read: new Set(), written: new Set(["a.ts"]), edited: new Set() } as any,
+        settings: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
+      },
+      branchEntries: [],
+      reason: "manual",
+      willRetry: false,
+      signal: new AbortController().signal,
+    };
+
+    const outcome = await beforeCompactHandler(event, mockCtx);
+    // Strict fail-closed: must return cancel: true rather than undefined (which would trigger fallback default compactor)
+    assert.deepEqual(outcome, { cancel: true });
+    assert.ok(notifications.some((n) => n.type === "error" && n.msg.includes("Compaction cancelled to protect context")));
+
+    cleanup();
+  });
 });
 
 describe("smart-compaction extension commands & UI validation", () => {

@@ -15,6 +15,9 @@ import {
   serializeConversationForCompaction,
 } from "./prompt.ts";
 
+// Extended 10-minute timeout for large context prefills (up to 1M+ tokens on Gemini/Claude)
+export const COMPACTION_TIMEOUT_MS = 10 * 60 * 1000;
+
 export interface DirtyFileState {
   path: string;
   status: string;
@@ -483,9 +486,21 @@ export async function runSmartCompaction(
     activeIsInherited = plan.isInherited;
 
     const tokenCeiling = computeCompactionTokenCeiling(plan.model, config, reserveTokens);
+
+    const timeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => {
+      timeoutController.abort(
+        new Error(`Compaction stage "${plan.stageLabel}" timed out after 10 minutes.`),
+      );
+    }, COMPACTION_TIMEOUT_MS);
+
+    const stageSignal = signal
+      ? AbortSignal.any([signal, timeoutController.signal])
+      : timeoutController.signal;
+
     const completeOptions: Record<string, unknown> = {
       maxTokens: tokenCeiling,
-      signal,
+      signal: stageSignal,
       cacheRetention: "none",
       sessionId: uuidv7(),
     };
@@ -496,7 +511,7 @@ export async function runSmartCompaction(
 
     try {
       const response = await ctx.modelRegistry.complete(plan.model, context, completeOptions as any);
-      signal?.throwIfAborted();
+      stageSignal.throwIfAborted();
       if (response.usage) {
         accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
       }
@@ -509,6 +524,8 @@ export async function runSmartCompaction(
         throw err instanceof Error ? err : new Error(String(err));
       }
       lastError = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      clearTimeout(timeoutTimer);
     }
   }
 
