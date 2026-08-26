@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Key } from "@earendil-works/pi-tui";
-import { ModelPickerComponent, type ModelPickerItem } from "./model-picker.ts";
+import { buildModelPickerItems, ModelPickerComponent, type ModelPickerItem } from "./model-picker.ts";
 
 const dummyTheme = {
   fg: (_name: string, text: string) => text,
@@ -68,4 +68,24 @@ test("model picker cancels with escape", () => {
   const h = harness(sampleItems);
   h.component.handleInput("\x1b");
   assert.equal(h.getResult(), undefined);
+});
+
+test("buildModelPickerItems prioritizes active/configured models from getAvailable", () => {
+  const ctx = {
+    modelRegistry: {
+      getAvailable() {
+        return [{ provider: "antigravity", id: "gemini-3.7-flash", name: "Gemini 3.7 Flash" }];
+      },
+      getAll() {
+        return [
+          { provider: "antigravity", id: "gemini-3.7-flash", name: "Gemini 3.7 Flash" },
+          { provider: "unconfigured-provider", id: "some-model", name: "Some Model" },
+        ];
+      },
+    },
+  };
+  const items = buildModelPickerItems(ctx as never);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, "gemini-3.7-flash");
+  assert.equal(items[0].provider, "antigravity");
 });

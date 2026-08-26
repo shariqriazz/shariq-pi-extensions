@@ -63,7 +63,7 @@ test("cancelling unchanged orchestration settings does not report a save", async
       async custom() { return { kind: "close" }; },
       notify(message: string) { notices.push(message); },
     },
-    modelRegistry: { getAll() { return []; } },
+    modelRegistry: { getAvailable() { return []; }, getAll() { return []; } },
   } as never);
   assert.equal(changed, false);
   assert.deepEqual(notices, []);
