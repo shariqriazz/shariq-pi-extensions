@@ -89,12 +89,25 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
 
     // In-flight context threshold guard:
     // If consecutive tool calls in a single run exceed 95% of the model's context window,
-    // immediately trigger compaction before the next step runs away.
+    // trigger compaction cleanly and continue the task from the compacted checkpoint.
+    let isCompactingInFlight = false;
+
     const checkInFlightUsage = (ctx: ExtensionContext) => {
-      if (!config.enabled) return;
+      if (!config.enabled || isCompactingInFlight) return;
       const usage = ctx.getContextUsage();
       if (usage && typeof usage.percent === "number" && usage.percent >= 95) {
-        ctx.compact();
+        isCompactingInFlight = true;
+        ctx.compact({
+          onComplete: () => {
+            isCompactingInFlight = false;
+            // After in-flight compaction completes, if the agent was interrupted mid-run,
+            // queue a follow-up continuation so the agent automatically picks up where it left off.
+            pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
+          },
+          onError: () => {
+            isCompactingInFlight = false;
+          },
+        });
       }
     };
 
