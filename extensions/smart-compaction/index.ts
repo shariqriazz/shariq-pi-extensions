@@ -76,6 +76,36 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       }
     });
 
+    // Intercept manual /compact commands in interactive or RPC inputs
+    pi.on("input", (event, ctx) => {
+      const text = event.text.trim();
+      if (text === "/compact" || text.startsWith("/compact ")) {
+        const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
+        ctx.compact(customInstructions ? { customInstructions } : undefined);
+        return { action: "handled" };
+      }
+      return { action: "continue" };
+    });
+
+    // In-flight context threshold guard:
+    // If consecutive tool calls in a single run exceed 95% of the model's context window,
+    // immediately trigger compaction before the next step runs away.
+    const checkInFlightUsage = (ctx: ExtensionContext) => {
+      if (!config.enabled) return;
+      const usage = ctx.getContextUsage();
+      if (usage && typeof usage.percent === "number" && usage.percent >= 95) {
+        ctx.compact();
+      }
+    };
+
+    pi.on("tool_result", (_event, ctx) => {
+      checkInFlightUsage(ctx);
+    });
+
+    pi.on("turn_end", (_event, ctx) => {
+      checkInFlightUsage(ctx);
+    });
+
     // Slash command: /compaction-model
     pi.registerCommand("compaction-model", {
       description: "Select or view the model used for smart context compaction (default: inherit).",
