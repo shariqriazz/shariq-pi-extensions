@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import taskListExtension from "./index.ts";
+import { activityDockSnapshot } from "../shared/activity-dock.ts";
 import { TASK_LIST_ENTRY, buildUpdatedTaskList, emptyTaskListState, restoreTaskList } from "./state.ts";
 import { TaskDashboard } from "./ui.ts";
 
@@ -100,6 +101,7 @@ test("writes, reads, persists, and summarizes the complete ordered list", async 
   assert.equal(updated.details.state.tasks[1].priority, "medium");
   assert.equal(h.entries.at(-1).customType, TASK_LIST_ENTRY);
   assert.ok(h.widgets.get("active-work"));
+  assert.deepEqual(activityDockSnapshot().map((item) => item.label), ["Tasks 1/2", "Tasks 2/2"]);
   assert.equal(h.statuses.get("task-list"), undefined);
 
   const read = await tool.execute("t2", {}, undefined, undefined, h.ctx);

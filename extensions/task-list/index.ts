@@ -118,13 +118,12 @@ export default function taskListExtension(pi: ExtensionAPI) {
 
     const counts = taskCounts(state.tasks);
     const active = hasActiveTasks(state);
-    const finished = counts.completed + counts.cancelled;
     const visible = (active
       ? state.tasks.filter((task) => !terminal(task.status))
       : state.tasks.slice(-3));
     setActivitySource(ctx, ACTIVITY_SOURCE, visible.map((task) => ({
       id: task.id,
-      label: `Tasks ${finished}/${counts.total}`,
+      label: `Tasks ${state.tasks.findIndex((item) => item.id === task.id) + 1}/${counts.total}`,
       title: task.content,
       detail: task.status.replaceAll("_", " "),
       state: (task.status === "in_progress" ? "active" : task.status === "completed" ? "success" : task.status === "blocked" ? "error" : "muted") as ActivityState,
