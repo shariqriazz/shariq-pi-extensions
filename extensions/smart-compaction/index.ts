@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { openModelPicker } from "../shared/model-picker.ts";
 import {
+  compactionThresholdTokens,
   loadSmartCompactionConfig,
   saveSmartCompactionConfig,
   type SmartCompactionConfig,
@@ -71,7 +72,14 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         const details = event.compactionEntry.details as Record<string, unknown> | undefined;
         if (details?.customCompactor === "smart-compaction") {
           const model = String(details.resolvedModel ?? details.model ?? "session model");
-          ctx.ui?.notify(`Smart Compaction completed (${model})`, "info");
+          const sourceCharacters = Number(details.sourceCharacters ?? 0);
+          const serializedCharacters = Number(details.serializedCharacters ?? 0);
+          const durationMs = Number(details.durationMs ?? 0);
+          const reduction = sourceCharacters > 0 && serializedCharacters > 0
+            ? ` · input ${Math.max(0, Math.round((1 - (serializedCharacters / sourceCharacters)) * 100))}% smaller`
+            : "";
+          const duration = durationMs > 0 ? ` · ${(durationMs / 1000).toFixed(1)}s` : "";
+          ctx.ui?.notify(`Smart Compaction completed (${model})${reduction}${duration}`, "info");
         }
       }
     });
@@ -87,36 +95,28 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       return { action: "continue" };
     });
 
-    // In-flight context threshold guard:
-    // If consecutive tool calls in a single run exceed 95% of the model's context window,
-    // trigger compaction cleanly and continue the task from the compacted checkpoint.
-    let isCompactingInFlight = false;
-
-    const checkInFlightUsage = (ctx: ExtensionContext) => {
-      if (!config.enabled || isCompactingInFlight) return;
+    // Smart Compaction's optional threshold policy is an upper-bound safeguard.
+    // It runs from the context hook, where completed tool results are already in
+    // context, rather than from tool_result itself. Pi's native reserve-token
+    // threshold may still compact earlier.
+    let thresholdCompactionPending = false;
+    pi.on("context", (_event, ctx) => {
+      if (!config.enabled || thresholdCompactionPending) return;
       const usage = ctx.getContextUsage();
-      if (usage && typeof usage.percent === "number" && usage.percent >= 95) {
-        isCompactingInFlight = true;
-        ctx.compact({
-          onComplete: () => {
-            isCompactingInFlight = false;
-            // After in-flight compaction completes, if the agent was interrupted mid-run,
-            // queue a follow-up continuation so the agent automatically picks up where it left off.
-            pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
-          },
-          onError: () => {
-            isCompactingInFlight = false;
-          },
-        });
-      }
-    };
+      if (!usage || usage.tokens === null) return;
+      const threshold = compactionThresholdTokens(config, usage.contextWindow);
+      if (threshold === undefined || usage.tokens < threshold) return;
 
-    pi.on("tool_result", (_event, ctx) => {
-      checkInFlightUsage(ctx);
-    });
-
-    pi.on("turn_end", (_event, ctx) => {
-      checkInFlightUsage(ctx);
+      thresholdCompactionPending = true;
+      ctx.compact({
+        onComplete: () => {
+          thresholdCompactionPending = false;
+          pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
+        },
+        onError: () => {
+          thresholdCompactionPending = false;
+        },
+      });
     });
 
     // Slash command: /compaction-model
@@ -204,6 +204,36 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           return;
         }
 
+        const [setting, value] = sub.split(/\s+/, 2);
+        if (setting === "threshold" && ["percent", "hard", "hybrid"].includes(value)) {
+          config.thresholdMode = value as SmartCompactionConfig["thresholdMode"];
+          saveSmartCompactionConfig(config, options.configFile);
+          cmdCtx.ui.notify(`Compaction threshold mode set to: ${value}`, "info");
+          return;
+        }
+        if (setting === "percent") {
+          const percent = Number(value);
+          if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+            cmdCtx.ui.notify("Usage: /smart-compaction percent <1-100>", "warning");
+            return;
+          }
+          config.thresholdPercent = percent;
+          saveSmartCompactionConfig(config, options.configFile);
+          cmdCtx.ui.notify(`Compaction percentage set to: ${percent}%`, "info");
+          return;
+        }
+        if (setting === "hard-limit") {
+          const tokens = Number(value?.replaceAll(",", ""));
+          if (!Number.isFinite(tokens) || tokens <= 0) {
+            cmdCtx.ui.notify("Usage: /smart-compaction hard-limit <tokens>", "warning");
+            return;
+          }
+          config.hardLimitTokens = Math.floor(tokens);
+          saveSmartCompactionConfig(config, options.configFile);
+          cmdCtx.ui.notify(`Compaction hard limit set to: ${config.hardLimitTokens.toLocaleString()} tokens`, "info");
+          return;
+        }
+
         let resolvedInfo = "inherit";
         try {
           const { model, isFallback, fallbackReason } = resolveCompactionModel(cmdCtx, config.model);
@@ -221,6 +251,12 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
         const maxTokensDesc = typeof config.maxSummaryTokens === "number"
           ? `${config.maxSummaryTokens} tokens (custom override)`
           : "dynamic (full model capacity)";
+        const thresholdMode = config.thresholdMode ?? "hybrid";
+        const thresholdDesc = thresholdMode === "percent"
+          ? `${config.thresholdPercent ?? 95}%`
+          : thresholdMode === "hard"
+            ? `${(config.hardLimitTokens ?? 400_000).toLocaleString()} tokens`
+            : `earliest of ${config.thresholdPercent ?? 95}% or ${(config.hardLimitTokens ?? 400_000).toLocaleString()} tokens`;
 
         const status = [
           `Smart Compaction: ${config.enabled ? "ENABLED" : "DISABLED"}`,
@@ -228,9 +264,13 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           `Resolved Model: ${resolvedInfo}`,
           `Thinking Level: ${currentThinkingDesc}`,
           `Summary Token Ceiling: ${maxTokensDesc}`,
+          `Threshold: ${thresholdMode} (${thresholdDesc})`,
           "",
           "Commands:",
           "  /smart-compaction enable | disable",
+          "  /smart-compaction threshold percent | hard | hybrid",
+          "  /smart-compaction percent <1-100>",
+          "  /smart-compaction hard-limit <tokens>",
           "  /compaction-model [inherit | <provider/model>]",
         ].join("\n");
 

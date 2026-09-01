@@ -2,12 +2,17 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
+export type CompactionThresholdMode = "percent" | "hard" | "hybrid";
+
 export interface SmartCompactionConfig {
   version: 1;
   enabled: boolean;
   model: string; // "inherit" or "provider/model-id"
   thinkingLevel?: "inherit" | "off" | "low" | "medium" | "high" | "max";
   maxSummaryTokens?: number; // optional override; defaults to dynamic model maxTokens
+  thresholdMode?: CompactionThresholdMode;
+  thresholdPercent?: number;
+  hardLimitTokens?: number;
 }
 
 export const DEFAULT_SMART_COMPACTION_CONFIG: SmartCompactionConfig = {
@@ -15,7 +20,20 @@ export const DEFAULT_SMART_COMPACTION_CONFIG: SmartCompactionConfig = {
   enabled: true,
   model: "inherit",
   thinkingLevel: "inherit",
+  thresholdMode: "hybrid",
+  thresholdPercent: 95,
+  hardLimitTokens: 400_000,
 };
+
+export function compactionThresholdTokens(config: SmartCompactionConfig, contextWindow: number): number | undefined {
+  const mode = config.thresholdMode ?? DEFAULT_SMART_COMPACTION_CONFIG.thresholdMode ?? "hybrid";
+  const percent = config.thresholdPercent ?? DEFAULT_SMART_COMPACTION_CONFIG.thresholdPercent ?? 95;
+  const hardLimit = config.hardLimitTokens ?? DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens ?? 400_000;
+  const percentLimit = contextWindow > 0 ? Math.floor(contextWindow * (percent / 100)) : undefined;
+  if (mode === "percent") return percentLimit;
+  if (mode === "hard") return hardLimit;
+  return percentLimit === undefined ? hardLimit : Math.min(percentLimit, hardLimit);
+}
 
 export function smartCompactionConfigPath(): string {
   return path.join(getAgentDir(), "smart-compaction.json");
@@ -35,6 +53,15 @@ export function loadSmartCompactionConfig(file = smartCompactionConfigPath()): S
       maxSummaryTokens: typeof raw.maxSummaryTokens === "number" && raw.maxSummaryTokens > 0
         ? raw.maxSummaryTokens
         : undefined,
+      thresholdMode: raw.thresholdMode && ["percent", "hard", "hybrid"].includes(raw.thresholdMode)
+        ? raw.thresholdMode as CompactionThresholdMode
+        : DEFAULT_SMART_COMPACTION_CONFIG.thresholdMode,
+      thresholdPercent: typeof raw.thresholdPercent === "number" && raw.thresholdPercent > 0 && raw.thresholdPercent <= 100
+        ? raw.thresholdPercent
+        : DEFAULT_SMART_COMPACTION_CONFIG.thresholdPercent,
+      hardLimitTokens: typeof raw.hardLimitTokens === "number" && raw.hardLimitTokens > 0
+        ? Math.floor(raw.hardLimitTokens)
+        : DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens,
     };
   } catch {
     return { ...DEFAULT_SMART_COMPACTION_CONFIG };
@@ -50,6 +77,9 @@ export function saveSmartCompactionConfig(config: SmartCompactionConfig, file = 
     enabled: config.enabled,
     model: config.model || "inherit",
     thinkingLevel: config.thinkingLevel ?? "inherit",
+    thresholdMode: config.thresholdMode ?? DEFAULT_SMART_COMPACTION_CONFIG.thresholdMode,
+    thresholdPercent: config.thresholdPercent ?? DEFAULT_SMART_COMPACTION_CONFIG.thresholdPercent,
+    hardLimitTokens: config.hardLimitTokens ?? DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens,
     ...(typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0
       ? { maxSummaryTokens: config.maxSummaryTokens }
       : {}),

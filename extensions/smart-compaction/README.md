@@ -30,9 +30,11 @@ When long-running agent sessions reach context thresholds, standard compaction f
   2. Primary model with reasoning off (unblocks reasoning/token caps).
   3. Session model with reasoning off.
   4. Strict Fail-Closed Protection: If all stages fail, compaction is cancelled to preserve 100% of the conversation transcript rather than silently degrading to Pi's generic compactor.
-- **Two-Ended Head & Tail Truncation**: Preserves both the beginning (context) and end (stack traces, compiler errors, exit codes, test summaries) of tool results and command logs.
-- **100% Full-Fidelity Data Preservation**: Preserves all user-provided data, credentials, environment variables, tool inputs, and code verbatim across compactions without stripping or redaction.
-- **Deterministic 10+ Cycle Stability**: Persists machine-readable touch, dirty-file, bounded-patch, and cycle ledgers in `CompactionEntry.details`; hierarchical delta merging keeps immutable constraints while condensing obsolete history.
+- **Bounded High-Fidelity Preservation**: Preserves user-provided constraints, identifiers, tool inputs, and code evidence within explicit serializer and patch budgets; protected facts are validated before a checkpoint is accepted.
+- **Tool-Aware Head & Tail Truncation**: Records tool identity and success/error state, gives failures and mutations more space than routine reads/searches, bounds large write/edit arguments, and preserves both the beginning and end of useful output.
+- **Terminal Noise Cleanup**: Removes ANSI/OSC control sequences, carriage-return progress rewrites, and consecutive duplicate lines from the one-off summarizer input without mutating session history or its prompt-cache prefix.
+- **Selectable Threshold Policy**: Supports percentage, hard-token, or hybrid thresholds; the default hybrid policy compacts at the earlier of 95% or 400,000 tokens without changing model catalogue context windows.
+- **Compaction Telemetry**: Stores source/serialized/summary character counts, attempt count, and elapsed time in `CompactionEntry.details`.
 
 ## Model Selection
 
@@ -42,7 +44,10 @@ Smart Compaction uses the **active session model** by default (`model: "inherit"
 
 - `/compaction-model` — Open interactive model picker to select the compaction model, or switch back to `inherit`.
 - `/compaction-model <provider/model>` — Set a specific compaction model directly.
-- `/smart-compaction` — View status and settings.
+- `/smart-compaction threshold percent | hard | hybrid` — Choose the optional threshold policy.
+- `/smart-compaction percent <1-100>` — Set the percentage threshold.
+- `/smart-compaction hard-limit <tokens>` — Set the absolute token ceiling.
+- `/smart-compaction` — View current status and settings.
 - `/smart-compaction enable | disable` — Toggle smart compaction on or off.
 
 ## Configuration
@@ -54,7 +59,12 @@ Settings are persisted in `~/.pi/agent/smart-compaction.json`:
   "version": 1,
   "enabled": true,
   "model": "inherit",
-  "thinkingLevel": "inherit"
+  "thinkingLevel": "inherit",
+  "thresholdMode": "hybrid",
+  "thresholdPercent": 95,
+  "hardLimitTokens": 400000
 }
 ```
-*Note: `maxSummaryTokens` defaults to `undefined`, dynamically allowing the summarizer model to use its full native output token capacity (e.g. up to 65,536 tokens for Gemini, 32,768 for Codex Luna, 64,000 for Claude 3.7).*
+*Threshold behavior:* `percent` uses the configured percentage of the active model's declared context window, `hard` uses the absolute token limit, and `hybrid` uses whichever limit is reached first. The extension checks this safeguard immediately before a provider request, when completed tool results are present. Pi's native reserve-token compaction can still run earlier. Threshold-triggered extension compaction uses Pi's manual compaction API and automatically resumes with a follow-up because Pi does not currently expose model-aware native threshold configuration to extensions.
+
+*Summary output behavior:* `maxSummaryTokens` defaults to `undefined`, allowing the summarizer model to use its native output capacity. The generated checkpoint remains subject to validation and the selected model's limits.

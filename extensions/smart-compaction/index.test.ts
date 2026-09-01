@@ -13,6 +13,7 @@ import type {
   SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
 import {
+  compactionThresholdTokens,
   loadSmartCompactionConfig,
   saveSmartCompactionConfig,
   type SmartCompactionConfig,
@@ -31,7 +32,9 @@ import {
   validateSummaryOutput,
 } from "./engine.ts";
 import {
+  cleanTerminalOutput,
   escapeXml,
+  extractProtectedFacts,
   formatFileOperationsXml,
   sanitizeTagContent,
   serializeConversationForCompaction,
@@ -92,6 +95,9 @@ describe("smart-compaction config", () => {
       assert.equal(config.model, "inherit");
       assert.equal(config.thinkingLevel, "inherit");
       assert.equal(config.maxSummaryTokens, undefined);
+      assert.equal(config.thresholdMode, "hybrid");
+      assert.equal(config.thresholdPercent, 95);
+      assert.equal(config.hardLimitTokens, 400_000);
     } finally {
       cleanup();
     }
@@ -106,6 +112,9 @@ describe("smart-compaction config", () => {
         model: "factory/gemini-3.7-flash",
         thinkingLevel: "high",
         maxSummaryTokens: 12288,
+        thresholdMode: "hard",
+        thresholdPercent: 90,
+        hardLimitTokens: 350_000,
       };
       saveSmartCompactionConfig(saved, file);
       const loaded = loadSmartCompactionConfig(file);
@@ -113,6 +122,19 @@ describe("smart-compaction config", () => {
     } finally {
       cleanup();
     }
+  });
+  it("resolves percent, hard, and hybrid thresholds without changing model metadata", () => {
+    const base: SmartCompactionConfig = {
+      version: 1,
+      enabled: true,
+      model: "inherit",
+      thresholdPercent: 95,
+      hardLimitTokens: 400_000,
+    };
+    assert.equal(compactionThresholdTokens({ ...base, thresholdMode: "percent" }, 200_000), 190_000);
+    assert.equal(compactionThresholdTokens({ ...base, thresholdMode: "hard" }, 1_000_000), 400_000);
+    assert.equal(compactionThresholdTokens({ ...base, thresholdMode: "hybrid" }, 200_000), 190_000);
+    assert.equal(compactionThresholdTokens({ ...base, thresholdMode: "hybrid" }, 1_000_000), 400_000);
   });
 });
 
@@ -124,6 +146,20 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
     assert.ok(truncated.startsWith("START OF BUILD"));
     assert.ok(truncated.endsWith("TEST SUITE FAILED: 1 of 5 passed"));
     assert.ok(truncated.includes("characters omitted; showing beginning and end"));
+  });
+
+  it("cleans terminal control sequences, carriage-return progress, and repeated lines", () => {
+    const cleaned = cleanTerminalOutput("\u001b[31mred\u001b[0m\n10%\r90%\nretry\nretry\nretry");
+    assert.equal(cleaned, "red\n90%\nretry\n[previous line repeated 2 more times]");
+  });
+
+  it("extracts negative constraints and opaque identifiers for validation", () => {
+    const sha = "1234567890abcdef1234567890abcdef12345678";
+    const facts = extractProtectedFacts([
+      { role: "user", content: `Never modify auth.ts. Deploy commit ${sha}.`, timestamp: Date.now() },
+    ] as AgentMessage[]);
+    assert.ok(facts.includes("Never modify auth.ts."));
+    assert.ok(facts.includes(sha));
   });
 
   it("escapes conversation tags to prevent prompt injection", () => {
@@ -218,6 +254,8 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
       {
         role: "toolResult",
         toolCallId: "call-1",
+        toolName: "read",
+        isError: false,
         content: [{ type: "text", text: "export const auth = true;" }],
       } as any,
       {
@@ -232,7 +270,8 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
     assert.match(serialized, /\[Assistant Thinking\]:\nI should inspect auth\.ts first/);
     assert.match(serialized, /\[Assistant\]:\nReading the auth file\./);
     assert.match(serialized, /\[Assistant Tool Calls\]:\nread\(path="src\/auth\.ts"\)/);
-    assert.match(serialized, /\[Tool Result\]:\nexport const auth = true;/);
+    assert.match(serialized, /\[Tool Result: read; success\]:\nexport const auth = true;/);
+    assert.match(serialized, /\[Command Executed: exit unknown\]:/);
     assert.ok(serialized.includes("<\\/conversation>"));
     assert.ok(!serialized.includes("echo '</conversation>'"));
   });
@@ -273,6 +312,18 @@ describe("smart-compaction strict fail-closed validation", () => {
     } as any;
 
     assert.throws(() => validateSummaryOutput(response), /missing required section/);
+  });
+
+  it("rejects summaries that drop protected facts", () => {
+    const response: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: VALID_SIX_SECTION_SUMMARY }],
+      stopReason: "stop",
+    } as any;
+    assert.throws(
+      () => validateSummaryOutput(response, ["Never modify another-file.ts"]),
+      /dropped protected facts/,
+    );
   });
 
   it("accepts complete 6-section summary with stopReason=stop", () => {
@@ -494,6 +545,9 @@ describe("smart-compaction 10-cycle dynamic retention test", () => {
 
       assert.ok(result.summary.includes(CANARY_CONSTRAINT), `Canary missing in summary on cycle ${cycle}`);
       assert.equal(result.details?.cycleCount, cycle);
+      assert.equal(result.details?.attemptCount, 1);
+      assert.ok((result.details?.serializedCharacters ?? 0) > 0);
+      assert.ok((result.details?.durationMs ?? -1) >= 0);
 
       branchEntries.push({
         type: "compaction",
@@ -703,6 +757,32 @@ describe("smart-compaction classified retry ladder", () => {
 });
 
 describe("smart-compaction extension commands & UI validation", () => {
+  it("uses the context hook for the optional hybrid ceiling without tool-result interception", async () => {
+    const { file, cleanup } = createTmpConfig();
+    const eventHandlers = new Map<string, any>();
+    const continuations: Array<{ content: unknown; options: unknown }> = [];
+    let compactOptions: any;
+    const mockPi: ExtensionAPI = {
+      on(name: string, handler: any) { eventHandlers.set(name, handler); },
+      registerCommand() {},
+      sendUserMessage(content: unknown, options: unknown) { continuations.push({ content, options }); },
+    } as any;
+    createSmartCompactionExtension({ configFile: file })(mockPi);
+
+    assert.equal(eventHandlers.has("tool_result"), false);
+    assert.equal(eventHandlers.has("turn_end"), false);
+    const contextHandler = eventHandlers.get("context");
+    assert.ok(contextHandler);
+    contextHandler({}, {
+      getContextUsage: () => ({ tokens: 410_000, contextWindow: 1_000_000, percent: 41 }),
+      compact(options: unknown) { compactOptions = options; },
+    });
+    assert.ok(compactOptions);
+    compactOptions.onComplete();
+    assert.deepEqual(continuations, [{ content: "Continue.", options: { deliverAs: "followUp" } }]);
+    cleanup();
+  });
+
   it("rejects invalid models on /compaction-model and saves valid ones", async () => {
     const { file, cleanup } = createTmpConfig();
     const commands = new Map<string, any>();

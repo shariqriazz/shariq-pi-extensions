@@ -7,6 +7,7 @@ import type { ExtensionContext, SessionBeforeCompactEvent } from "@earendil-work
 import type { SmartCompactionConfig } from "./config.ts";
 import {
   CHECKPOINT_RESUMPTION_PREAMBLE,
+  extractProtectedFacts,
   formatFileOperationsXml,
   sanitizeTagContent,
   SMART_COMPACTION_INITIAL_PROMPT,
@@ -45,6 +46,11 @@ export interface SmartCompactionDetails {
   activeBackgroundProcesses?: string[];
   lockfilesAndGeneratedAssets?: string[];
   cycleCount: number;
+  sourceCharacters: number;
+  serializedCharacters: number;
+  summaryCharacters: number;
+  attemptCount: number;
+  durationMs: number;
   timestamp: number;
 }
 
@@ -184,11 +190,43 @@ export function parseGitStatusPorcelainV1Z(output: string): DirtyFileState[] {
   return [...new Map(files.map((file) => [file.path, file])).values()];
 }
 
-function truncatePatch(text: string): string {
-  if (text.length <= DIRTY_PATCH_CHARS) return text;
-  const half = Math.floor(DIRTY_PATCH_CHARS / 2);
-  const omitted = text.length - (half * 2);
-  return `${text.slice(0, half)}\n\n[... ${omitted} patch characters omitted ...]\n\n${text.slice(-half)}`;
+function patchChunkPath(chunk: string): string | undefined {
+  const diffMatch = chunk.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
+  if (diffMatch) return diffMatch[2];
+  const untrackedMatch = chunk.match(/^\+\+\+ b\/(.+)$/m);
+  return untrackedMatch?.[1];
+}
+
+function truncatePatch(text: string, files: DirtyFileState[]): string {
+  const inventory = files.map((file) => `${file.status} ${file.path}`).join("\n");
+  const inventoryBlock = `## Changed-file inventory\n${inventory}\n`;
+  if (inventoryBlock.length >= DIRTY_PATCH_CHARS) {
+    const marker = "\n[Inventory truncated; the complete path list remains in <uncommitted-dirty-files>.]";
+    return `${inventoryBlock.slice(0, DIRTY_PATCH_CHARS - marker.length)}${marker}`;
+  }
+  if (text.length + inventoryBlock.length <= DIRTY_PATCH_CHARS) return `${inventoryBlock}\n${text}`;
+
+  const chunks = text.split(/(?=^diff --git )/m).filter((chunk) => chunk.trim());
+  const remaining = Math.max(0, DIRTY_PATCH_CHARS - inventoryBlock.length - 80);
+  if (chunks.length === 0 || remaining === 0) {
+    return `${inventoryBlock}\n[Patch bodies omitted: ${text.length} characters exceeded the shared budget.]`;
+  }
+
+  const labels = chunks.map((chunk) => `[Patch excerpt: ${patchChunkPath(chunk) ?? "combined patch section"}]`);
+  const labelCharacters = labels.reduce((total, label) => total + label.length + 2, 0);
+  if (labelCharacters >= remaining) {
+    return `${inventoryBlock}\n[Patch bodies omitted: ${text.length} characters exceeded the shared budget.]`;
+  }
+  const markerReserve = chunks.length * 80;
+  const bodyBudget = Math.floor(Math.max(0, remaining - labelCharacters - markerReserve) / chunks.length);
+  const excerpts = chunks.map((chunk, index) => {
+    const header = `${labels[index]}\n`;
+    if (bodyBudget < 40) return header.trimEnd();
+    if (chunk.length <= bodyBudget) return `${header}${chunk.trim()}`;
+    const half = Math.floor(bodyBudget / 2);
+    return `${header}${chunk.slice(0, half).trimEnd()}\n[... ${chunk.length - (half * 2)} characters omitted ...]\n${chunk.slice(-half).trimStart()}`;
+  });
+  return `${inventoryBlock}\n${excerpts.join("\n\n")}`;
 }
 
 async function runGit(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
@@ -217,7 +255,7 @@ async function readUntrackedPreviews(
       const metadata = await stat(absolute);
       if (!metadata.isFile()) continue;
       const buffer = await readFile(absolute);
-      const header = `\n--- /dev/null\n+++ b/${file.path}\n`;
+      const header = `\ndiff --git a/${file.path} b/${file.path}\n--- /dev/null\n+++ b/${file.path}\n`;
       if (buffer.includes(0)) {
         const binary = `${header}[binary untracked file: ${buffer.length} bytes]\n`;
         sections.push(binary.slice(0, remaining));
@@ -272,7 +310,7 @@ export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal)
     return {
       available: true,
       files,
-      patch: truncatePatch(sections.join("\n\n")),
+      patch: truncatePatch(sections.join("\n\n"), codeFiles),
       lockfilesAndGeneratedAssets: lockOrGeneratedFiles,
     };
   } catch (error) {
@@ -290,7 +328,7 @@ const REQUIRED_SECTION_PATTERNS = [
   /## 6\.\s+Resume Anchor/i,
 ];
 
-export function validateSummaryOutput(response: AssistantMessage): string {
+export function validateSummaryOutput(response: AssistantMessage, protectedFacts: readonly string[] = []): string {
   if (response.stopReason !== "stop") {
     const errorDetails = response.errorMessage ? `: ${response.errorMessage}` : "";
     throw new Error(`Compaction model did not complete successfully (stopReason="${response.stopReason}"${errorDetails}).`);
@@ -317,6 +355,10 @@ export function validateSummaryOutput(response: AssistantMessage): string {
     if (!pattern.test(rawSummaryText)) {
       throw new Error(`Compaction summary is incomplete: missing required section matching ${pattern.source}`);
     }
+  }
+  const missingFacts = protectedFacts.filter((fact) => !rawSummaryText.includes(fact));
+  if (missingFacts.length > 0) {
+    throw new Error(`Compaction summary dropped protected facts: ${missingFacts.slice(0, 3).join(" | ")}`);
   }
 
   return rawSummaryText;
@@ -401,6 +443,7 @@ export interface SmartCompactionOutput {
 export async function runSmartCompaction(
   options: RunSmartCompactionOptions,
 ): Promise<SmartCompactionOutput> {
+  const startedAt = Date.now();
   const { event, ctx, config } = options;
   const { preparation, branchEntries, signal, customInstructions } = event;
   signal?.throwIfAborted();
@@ -414,12 +457,23 @@ export async function runSmartCompaction(
   ];
 
   const conversationText = serializeConversationForCompaction(messagesToSummarize);
+  const sourceCharacters = messagesToSummarize.reduce((total, message) => {
+    try {
+      return total + JSON.stringify(message).length;
+    } catch {
+      return total;
+    }
+  }, 0);
   const previousSummary = preparation.previousSummary?.trim();
+  const protectedFacts = extractProtectedFacts(messagesToSummarize, previousSummary);
   const baseInstruction = previousSummary ? SMART_COMPACTION_UPDATE_PROMPT : SMART_COMPACTION_INITIAL_PROMPT;
 
   let promptContent = `<conversation>\n${conversationText}\n</conversation>\n\n`;
   if (previousSummary) {
     promptContent += `<previous-summary>\n${sanitizeTagContent(previousSummary)}\n</previous-summary>\n\n`;
+  }
+  if (protectedFacts.length > 0) {
+    promptContent += `<protected-facts>\n${protectedFacts.map(sanitizeTagContent).join("\n")}\n</protected-facts>\n\n`;
   }
   promptContent += baseInstruction;
 
@@ -476,6 +530,7 @@ export async function runSmartCompaction(
   let lastError: Error | undefined;
   let finalSummaryText = "";
   let accumulatedUsage: Usage | undefined;
+  let attemptCount = 0;
   let activeModel = primaryModel;
   let activeIsInherited = primaryIsInherited;
 
@@ -483,6 +538,7 @@ export async function runSmartCompaction(
 
   for (const plan of plans) {
     signal?.throwIfAborted();
+    attemptCount++;
     activeModel = plan.model;
     activeIsInherited = plan.isInherited;
 
@@ -516,7 +572,7 @@ export async function runSmartCompaction(
       if (response.usage) {
         accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
       }
-      finalSummaryText = validateSummaryOutput(response);
+      finalSummaryText = validateSummaryOutput(response, protectedFacts);
       lastError = undefined;
       break; // Success!
     } catch (err) {
@@ -583,6 +639,11 @@ export async function runSmartCompaction(
     activeBackgroundProcesses: activeBackgroundProcesses.length > 0 ? activeBackgroundProcesses : undefined,
     lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets.length > 0 ? gitState.lockfilesAndGeneratedAssets : undefined,
     cycleCount,
+    sourceCharacters,
+    serializedCharacters: conversationText.length,
+    summaryCharacters: finalSummary.length,
+    attemptCount,
+    durationMs: Date.now() - startedAt,
     timestamp: Date.now(),
   };
 
