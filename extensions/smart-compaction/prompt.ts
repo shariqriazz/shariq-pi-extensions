@@ -206,6 +206,11 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
+function cleanExtractedUrl(rawUrl: string): string {
+  // Strip trailing punctuation often attached in prose or markdown (e.g. `url`, `url`,)
+  return rawUrl.replace(/[`'",.;:!?)\]]+$/, "");
+}
+
 export function extractProtectedFacts(messages: AgentMessage[], previousSummary?: string): string[] {
   const facts = new Set<string>();
   const userSources = messages
@@ -227,16 +232,12 @@ export function extractProtectedFacts(messages: AgentMessage[], previousSummary?
     /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,
   ];
 
-  for (const source of constraintSources) {
-    for (const segment of source.split(/(?<=[.!?])\s+|\n+/)) {
-      const trimmed = segment.trim();
-      const constraint = trimmed.match(/\b(?:never|do not|don't|must not)\b.*$/i)?.[0]?.trim();
-      if (constraint && constraint.length <= 1000) facts.add(constraint);
-    }
-  }
   for (const source of identifierSources) {
     for (const pattern of identifierPatterns) {
-      for (const match of source.matchAll(pattern)) facts.add(match[0]);
+      for (const match of source.matchAll(pattern)) {
+        const val = match[0].startsWith("http") ? cleanExtractedUrl(match[0]) : match[0];
+        if (val) facts.add(val);
+      }
     }
   }
   return [...facts];

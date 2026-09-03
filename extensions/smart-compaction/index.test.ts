@@ -156,10 +156,11 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
   it("extracts negative constraints and opaque identifiers for validation", () => {
     const sha = "1234567890abcdef1234567890abcdef12345678";
     const facts = extractProtectedFacts([
-      { role: "user", content: `Never modify auth.ts. Deploy commit ${sha}.`, timestamp: Date.now() },
+      { role: "user", content: `Deploy commit ${sha} and check https://opencode.ai/zen/v1\`,`, timestamp: Date.now() },
     ] as AgentMessage[]);
-    assert.ok(facts.includes("Never modify auth.ts."));
     assert.ok(facts.includes(sha));
+    assert.ok(facts.includes("https://opencode.ai/zen/v1"));
+    assert.ok(!facts.includes("https://opencode.ai/zen/v1`,"));
   });
 
   it("escapes conversation tags to prevent prompt injection", () => {
@@ -321,7 +322,7 @@ describe("smart-compaction strict fail-closed validation", () => {
       stopReason: "stop",
     } as any;
     assert.throws(
-      () => validateSummaryOutput(response, ["Never modify another-file.ts"]),
+      () => validateSummaryOutput(response, ["0123456789abcdef0123456789abcdef01234567"]),
       /dropped protected facts/,
     );
   });
