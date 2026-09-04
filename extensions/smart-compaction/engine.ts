@@ -50,6 +50,7 @@ export interface SmartCompactionDetails {
   serializedCharacters: number;
   summaryCharacters: number;
   attemptCount: number;
+  retainedIdentifiersAppended?: number;
   durationMs: number;
   timestamp: number;
 }
@@ -328,7 +329,9 @@ const REQUIRED_SECTION_PATTERNS = [
   /## 6\.\s+Resume Anchor/i,
 ];
 
-export function validateSummaryOutput(response: AssistantMessage, protectedFacts: readonly string[] = []): string {
+export const RETAINED_IDENTIFIERS_HEADING = "### Retained Identifiers";
+
+export function extractSummaryText(response: AssistantMessage): string {
   if (response.stopReason !== "stop") {
     const errorDetails = response.errorMessage ? `: ${response.errorMessage}` : "";
     throw new Error(`Compaction model did not complete successfully (stopReason="${response.stopReason}"${errorDetails}).`);
@@ -350,18 +353,66 @@ export function validateSummaryOutput(response: AssistantMessage, protectedFacts
     throw new Error("Compaction model returned an empty summary.");
   }
 
+  return rawSummaryText;
+}
+
+export function getDroppedProtectedFacts(summaryText: string, protectedFacts: readonly string[] = []): string[] {
+  return protectedFacts.filter((fact) => fact && !summaryText.includes(fact));
+}
+
+export function withRetainedIdentifiers(summaryText: string, droppedFacts: readonly string[]): string {
+  // Protected facts are single-line opaque identifiers (hashes, UUIDs, clean
+  // URLs, IPs), so reproducing them on their own bullet lines is verbatim-safe.
+  const lines = [summaryText.trimEnd(), "", RETAINED_IDENTIFIERS_HEADING];
+  for (const fact of droppedFacts) {
+    const clean = String(fact).trim();
+    if (clean) lines.push(`- ${clean}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+export function validateSummaryText(summaryText: string, protectedFacts: readonly string[] = []): string {
+  const rawSummaryText = summaryText.trim();
+
+  if (!rawSummaryText) {
+    throw new Error("Compaction model returned an empty summary.");
+  }
+
   // Verify all 6 required sections exist
   for (const pattern of REQUIRED_SECTION_PATTERNS) {
     if (!pattern.test(rawSummaryText)) {
       throw new Error(`Compaction summary is incomplete: missing required section matching ${pattern.source}`);
     }
   }
-  const missingFacts = protectedFacts.filter((fact) => !rawSummaryText.includes(fact));
+  const missingFacts = getDroppedProtectedFacts(rawSummaryText, protectedFacts);
   if (missingFacts.length > 0) {
     throw new Error(`Compaction summary dropped protected facts: ${missingFacts.slice(0, 3).join(" | ")}`);
   }
 
   return rawSummaryText;
+}
+
+export function validateSummaryOutput(response: AssistantMessage, protectedFacts: readonly string[] = []): string {
+  return validateSummaryText(extractSummaryText(response), protectedFacts);
+}
+
+/**
+ * Return the summary text when it is structurally sound (extractable with all
+ * required sections) regardless of dropped protected facts. Identifier-only
+ * defects can be repaired deterministically with {@link withRetainedIdentifiers};
+ * structural defects cannot, so those return undefined.
+ */
+export function extractRepairableSummary(response: AssistantMessage): string | undefined {
+  let text: string;
+  try {
+    text = extractSummaryText(response);
+  } catch {
+    return undefined;
+  }
+  for (const pattern of REQUIRED_SECTION_PATTERNS) {
+    if (!pattern.test(text)) return undefined;
+  }
+  return text;
 }
 
 export function computeCompactionTokenCeiling(
@@ -529,6 +580,8 @@ export async function runSmartCompaction(
 
   let lastError: Error | undefined;
   let finalSummaryText = "";
+  let repairCandidate: string | undefined;
+  let retainedIdentifiersAppended = 0;
   let accumulatedUsage: Usage | undefined;
   let attemptCount = 0;
   let activeModel = primaryModel;
@@ -572,7 +625,16 @@ export async function runSmartCompaction(
       if (response.usage) {
         accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
       }
-      finalSummaryText = validateSummaryOutput(response, protectedFacts);
+      try {
+        finalSummaryText = validateSummaryOutput(response, protectedFacts);
+      } catch (validationError) {
+        // Structurally sound summaries that only drop protected facts are
+        // kept as deterministic-repair candidates; structural defects cannot
+        // be repaired, so those leave no candidate behind.
+        const repairable = extractRepairableSummary(response);
+        if (repairable !== undefined) repairCandidate = repairable;
+        throw validationError;
+      }
       lastError = undefined;
       break; // Success!
     } catch (err) {
@@ -583,6 +645,23 @@ export async function runSmartCompaction(
       lastError = err instanceof Error ? err : new Error(String(err));
     } finally {
       clearTimeout(timeoutTimer);
+    }
+  }
+
+  if ((lastError || !finalSummaryText) && repairCandidate !== undefined) {
+    // Every stage produced a structurally sound summary but the model
+    // deterministically refused to repeat low-signal identifiers. Restore
+    // them verbatim instead of failing the whole compaction.
+    const stillMissing = getDroppedProtectedFacts(repairCandidate, protectedFacts);
+    try {
+      finalSummaryText = validateSummaryText(
+        withRetainedIdentifiers(repairCandidate, stillMissing),
+        protectedFacts,
+      );
+      lastError = undefined;
+      retainedIdentifiersAppended = stillMissing.length;
+    } catch {
+      // Repair rejected; fall through to the original failure below.
     }
   }
 
@@ -643,6 +722,7 @@ export async function runSmartCompaction(
     serializedCharacters: conversationText.length,
     summaryCharacters: finalSummary.length,
     attemptCount,
+    retainedIdentifiersAppended: retainedIdentifiersAppended > 0 ? retainedIdentifiersAppended : undefined,
     durationMs: Date.now() - startedAt,
     timestamp: Date.now(),
   };

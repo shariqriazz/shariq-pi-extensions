@@ -22,14 +22,19 @@ import {
   combineCompactionUsage,
   computeCompactionTokenCeiling,
   extractPriorFileState,
+  extractRepairableSummary,
+  getDroppedProtectedFacts,
   getGitEngineeringState,
   isFatalCompactionError,
   isGeneratedOrLockfile,
   modelKey,
   parseGitStatusPorcelainV1Z,
   resolveCompactionModel,
+  RETAINED_IDENTIFIERS_HEADING,
   runSmartCompaction,
   validateSummaryOutput,
+  validateSummaryText,
+  withRetainedIdentifiers,
 } from "./engine.ts";
 import {
   cleanTerminalOutput,
@@ -336,6 +341,45 @@ describe("smart-compaction strict fail-closed validation", () => {
 
     const validated = validateSummaryOutput(response);
     assert.equal(validated, VALID_SIX_SECTION_SUMMARY);
+  });
+});
+
+describe("smart-compaction retained-identifiers repair", () => {
+  const fact = "a93dbf84-d608-49fb-9168-ce25cc623863";
+
+  it("reports only the facts missing verbatim", () => {
+    const dropped = getDroppedProtectedFacts(
+      `see https://example.invalid/x for details ${VALID_SIX_SECTION_SUMMARY}`,
+      ["https://example.invalid/x", fact],
+    );
+    assert.deepEqual(dropped, [fact]);
+  });
+
+  it("repairs a structurally sound summary by appending dropped facts verbatim", () => {
+    assert.throws(() => validateSummaryText(VALID_SIX_SECTION_SUMMARY, [fact]), /dropped protected facts/);
+    const repaired = withRetainedIdentifiers(VALID_SIX_SECTION_SUMMARY, [fact]);
+    assert.ok(repaired.includes(RETAINED_IDENTIFIERS_HEADING));
+    assert.ok(repaired.includes(`- ${fact}`));
+    assert.equal(validateSummaryText(repaired, [fact]), repaired.trim());
+  });
+
+  it("keeps structurally sound summaries as repair candidates even when facts drop", () => {
+    const response: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: VALID_SIX_SECTION_SUMMARY }],
+      stopReason: "stop",
+    } as any;
+    assert.throws(() => validateSummaryOutput(response, [fact]), /dropped protected facts/);
+    assert.equal(extractRepairableSummary(response), VALID_SIX_SECTION_SUMMARY);
+  });
+
+  it("rejects structurally broken summaries as repair candidates", () => {
+    const response: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "## 1. Primary Goal\nno other sections here" }],
+      stopReason: "stop",
+    } as any;
+    assert.equal(extractRepairableSummary(response), undefined);
   });
 });
 
