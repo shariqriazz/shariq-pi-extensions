@@ -1,6 +1,6 @@
 # Extension catalog
 
-Last verified: 2026-09-03
+Last verified: 2026-09-04
 
 ## Agent workflow
 
@@ -23,12 +23,6 @@ State is stored in Pi session entries and reconstructed on resume, reload, and t
 The subagent extension runs flat Pi child agents with profiles, capability policies, continuation, result delivery, optional worktrees, pre-warmed task dispatch, instant cascading cancellation, cross-session persistence, and a dashboard. Configuration lives in `<agent-dir>/subagents.json`; trusted projects may override it through their Pi config directory. The configured concurrency ceiling is 50.
 
 The extension supplies tools including `spawn_agent`, `task`, `check_agent`, `list_agents`, `wait_agent`, `send_message`, `close_agent`, `reply_question`, and `apply_agent_changes`. These lifecycle operations render as compact expandable main-chat cards; only active manager entries contribute to the bounded Active work dock, while workflow progress is intentionally omitted from the footer so persisted history cannot inflate or duplicate live status. Cancellation and reload interruption use a distinct `cancelled` state rather than `error`. All completed and cancelled production subagent snapshots and transcripts persist across Pi restarts (`<agent-dir>/subagents/runs/`), allowing `resume_from` to resume completed workers at any point. Interruption immediately cascades across all child fibers in `<10ms`. Child settlement stays in a private extension queue while the parent is active, then starts one custom-result turn at Pi's safe idle edge with the summary guaranteed in model context and never rendered as user-authored or follow-up input; status tools are for explicit inspection, not waiting.
-
-### [Orchestration](../extensions/orchestration/README.md)
-
-The Orchestration extension coordinates explicitly requested large tasks through a dedicated orchestrator plus configurable explorer, frontend, backend, general-worker, and reviewer models. `/orchestration` opens the dashboard and `/orchestration settings` opens the interactive role-configuration panel with the Searchable Model Picker. It reuses the canonical Subagents runtime, maintains a 10-worker pool per project, isolates Git writers in task worktrees, resumes the original worker for substantial review fixes, and applies final reviewed changes without committing or pushing.
-
-The model-facing `create_orchestration` tool starts planning only after an explicit orchestration request. `get_orchestration` reports status without advancing work. Both use compact expandable timeline cards, and active runs share the full-screen Active work dock with explicit plan-ready, blocked, running, and paused states instead of duplicating workflow progress in the footer. The full-height framed dashboard provides scrollable multi-task inspection and runs editors and confirmations outside its overlay to avoid nested-input stalls. Interrupted runs recover paused under `<agent-dir>/orchestration/`.
 
 ### [Smart Compaction](../extensions/smart-compaction/README.md)
 
@@ -72,14 +66,6 @@ Displays the estimated prompt and session contribution to the active context win
 ### [Performance status](../extensions/performance-status/README.md)
 
 Adds a responsive footer-area status row while each assistant message is active and for an eight-second completion linger, then clears it to avoid permanent footer noise. Live TPS/output are marked as estimates; final TPS uses conventional decode throughput from first streamed token to message completion. TTFT and total elapsed time separately expose provider latency, prefill, and hidden reasoning; output tokens and active tools remain separate.
-
-### [Git info](../extensions/git-info/README.md)
-
-Adds repository state to Pi's interface. `/lg` opens the local Git view and `/pr` exposes pull-request context when available.
-
-### [Copy all](../extensions/copy-all/README.md)
-
-`/copy-all` copies the current conversation in a readable form while omitting tool protocol noise that does not belong in the transcript.
 
 ### [Input mode](../extensions/input-mode/README.md)
 

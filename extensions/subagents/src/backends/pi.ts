@@ -107,8 +107,6 @@ const CHILD_EXCLUDED_TOOL_NAMES = [
   "task",
   "reply_question",
   "workflow",
-  "create_orchestration",
-  "get_orchestration",
   "ask_user",
 ] as const;
 

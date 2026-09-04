@@ -64,7 +64,7 @@ Run:
 /tasks
 ```
 
-While work is active, the shared bounded **Active work** dock above the editor shows progress and current items alongside any live terminals, subagents, or orchestration runs without stacking separate widgets. A finished list lingers for four seconds so the final checkmark is visible, then clears from the live chrome while remaining available in session history.
+While work is active, the shared bounded **Active work** dock above the editor shows progress and current items alongside any live terminals or subagents without stacking separate widgets. A finished list lingers for four seconds so the final checkmark is visible, then clears from the live chrome while remaining available in session history.
 
 `/tasks` opens the full-width interactive dashboard:
 

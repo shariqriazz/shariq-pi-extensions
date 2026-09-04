@@ -4,7 +4,7 @@ Internal runtime utilities used by more than one extension. This directory is no
 
 ## Modules
 
-- `activity-dock.ts` aggregates bounded urgency-ordered live rows from Task List, Background Terminals, Subagents, and Orchestration into one automatic widget.
+- `activity-dock.ts` aggregates bounded urgency-ordered live rows from Task List, Background Terminals, and Subagents into one automatic widget.
 - `activity-status.ts` formats compact running/completed/failed status counts.
 - `child-session.ts` owns trust-aware child resources and bounded session shutdown.
 - `context-utilization.ts` formats model-context usage and capacity.
