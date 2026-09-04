@@ -44,7 +44,6 @@ const WORK_TOOL_EXCLUSIONS = new Set([
   "check_agent",
   "wait_agent",
   "list_terminals",
-  "pi_memory_status",
 ]);
 
 const TaskListParams = Type.Object({

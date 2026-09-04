@@ -14,12 +14,12 @@ test("settings component renders roles and cycles thinking levels directly", () 
     version: 1,
     maxWorkersPerProject: 10,
     roles: {
-      orchestrator: { model: "antigravity/claude-opus-4-6", thinking: "medium" },
-      explorer: { model: "antigravity/claude-sonnet-4-6", thinking: "high" },
-      frontend: { model: "antigravity/claude-sonnet-4-6", thinking: "medium" },
-      backend: { model: "antigravity/claude-sonnet-4-6", thinking: "medium" },
-      general: { model: "antigravity/claude-sonnet-4-6", thinking: "medium" },
-      reviewer: { model: "antigravity/claude-opus-4-6", thinking: "high" },
+      orchestrator: { model: "anthropic/claude-opus-4-6", thinking: "medium" },
+      explorer: { model: "anthropic/claude-sonnet-4-6", thinking: "high" },
+      frontend: { model: "anthropic/claude-sonnet-4-6", thinking: "medium" },
+      backend: { model: "anthropic/claude-sonnet-4-6", thinking: "medium" },
+      general: { model: "anthropic/claude-sonnet-4-6", thinking: "medium" },
+      reviewer: { model: "anthropic/claude-opus-4-6", thinking: "high" },
     },
   };
 
@@ -42,7 +42,7 @@ test("settings component renders roles and cycles thinking levels directly", () 
   const lines = component.render(80);
   assert.ok(lines.length >= 18);
   assert.match(lines.join("\n"), /orchestrator/);
-  assert.match(lines.join("\n"), /antigravity\/claude-opus-4-6/);
+  assert.match(lines.join("\n"), /anthropic\/claude-opus-4-6/);
   assert.match(lines.join("\n"), /⚡ medium/);
 
   // Press 't' to cycle thinking level for orchestrator (medium -> high)

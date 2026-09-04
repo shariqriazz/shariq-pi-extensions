@@ -36,34 +36,33 @@ function harness(items: ModelPickerItem[], currentModel?: string) {
 
 test("model picker renders bounded frame and filters items dynamically", () => {
   const sampleItems: ModelPickerItem[] = [
-    { provider: "antigravity", id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", contextWindow: 1_000_000, reasoning: true },
-    { provider: "antigravity", id: "claude-opus-4-6", name: "Claude Opus 4.6", contextWindow: 200_000, reasoning: true },
-    { provider: "cursor", id: "cursor-grok-4.5-fast", name: "Grok 4.5 Fast", contextWindow: 128_000 },
+    { provider: "google", id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", contextWindow: 1_000_000, reasoning: true },
+    { provider: "anthropic", id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", contextWindow: 200_000, reasoning: true },
+    { provider: "openai", id: "gpt-4o", name: "GPT-4o", contextWindow: 128_000 },
   ];
 
-  const h = harness(sampleItems, "antigravity/gemini-3.7-flash");
+  const h = harness(sampleItems, "google/gemini-2.5-flash");
   const lines = h.component.render(80);
   assert.ok(lines.length >= 18);
-  assert.match(lines.join("\n"), /Gemini 3.7 Flash/);
+  assert.match(lines.join("\n"), /Gemini 2.5 Flash/);
   assert.match(lines.join("\n"), /1M ctx/);
 
-  // Type search query "grok"
+  // Type search query "gpt"
   h.component.handleInput("g");
-  h.component.handleInput("r");
-  h.component.handleInput("o");
-  h.component.handleInput("k");
+  h.component.handleInput("p");
+  h.component.handleInput("t");
 
   const filteredLines = h.component.render(80);
-  assert.match(filteredLines.join("\n"), /Grok 4.5 Fast/);
+  assert.match(filteredLines.join("\n"), /GPT-4o/);
 
   // Select item with enter
   h.component.handleInput("\r");
-  assert.equal(h.getResult(), "cursor/cursor-grok-4.5-fast");
+  assert.equal(h.getResult(), "openai/gpt-4o");
 });
 
 test("model picker cancels with escape", () => {
   const sampleItems: ModelPickerItem[] = [
-    { provider: "antigravity", id: "gemini-3.7-flash" },
+    { provider: "google", id: "gemini-2.5-flash" },
   ];
   const h = harness(sampleItems);
   h.component.handleInput("\x1b");
@@ -74,11 +73,11 @@ test("buildModelPickerItems prioritizes active/configured models from getAvailab
   const ctx = {
     modelRegistry: {
       getAvailable() {
-        return [{ provider: "antigravity", id: "gemini-3.7-flash", name: "Gemini 3.7 Flash" }];
+        return [{ provider: "google", id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" }];
       },
       getAll() {
         return [
-          { provider: "antigravity", id: "gemini-3.7-flash", name: "Gemini 3.7 Flash" },
+          { provider: "google", id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
           { provider: "unconfigured-provider", id: "some-model", name: "Some Model" },
         ];
       },
@@ -86,6 +85,6 @@ test("buildModelPickerItems prioritizes active/configured models from getAvailab
   };
   const items = buildModelPickerItems(ctx as never);
   assert.equal(items.length, 1);
-  assert.equal(items[0].id, "gemini-3.7-flash");
-  assert.equal(items[0].provider, "antigravity");
+  assert.equal(items[0].id, "gemini-2.5-flash");
+  assert.equal(items[0].provider, "google");
 });

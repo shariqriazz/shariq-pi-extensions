@@ -2,7 +2,7 @@
 
 ## Project
 
-This public repository packages the user's Pi extensions as one suite distributed through npm and Git. Every extension, including Pi Memory, lives under `extensions/` and is individually toggleable through `pi config`.
+This public repository packages the user's Pi extensions as one suite distributed through npm and Git. Every extension lives under `extensions/` and is individually toggleable through `pi config`.
 
 ## Commands
 
@@ -25,7 +25,7 @@ This public repository packages the user's Pi extensions as one suite distribute
 
 ## Secrets and generated state
 
-Never commit API keys, OAuth credentials, `.env`, `auth.json`, Factory key files, SQLite databases, caches, sessions, logs, or `node_modules`. Factory state belongs under the active Pi agent directory in `factory/`; Pi Memory data belongs in `pi-memory/`; Smart Compaction settings belong in `smart-compaction.json`; Input Mode settings belong in `input-mode.json`.
+Never commit API keys, OAuth credentials, `.env`, `auth.json`, caches, sessions, logs, or `node_modules`. Smart Compaction settings belong in `smart-compaction.json`; Input Mode settings belong in `input-mode.json`.
 
 ## Validation and releases
 

@@ -1,28 +1,6 @@
 # Extension catalog
 
-Last verified: 2026-08-20
-
-## Providers
-
-### [Antigravity Provider](../extensions/antigravity-provider/README.md)
-
-Registers the `antigravity` provider and `/login antigravity` flow for the latest Gemini Flash, Gemini Pro, Claude Sonnet, and Claude Opus families. Repeating login adds or updates accounts in the secure `<agent-dir>/antigravity/accounts.json` pool. Requests use quota-aware least-recently-used balancing, rotate before streaming on account-specific auth/rate/quota/capacity failures, honor known reset times, and refresh stored OAuth tokens. `/antigravity` shows account state plus the shared five-hour and weekly limits for the Gemini and Claude pools and can enable or disable accounts; `/antigravity.doctor` reports sanitized provider and rotation diagnostics.
-
-### [Cursor provider](../extensions/cursor-provider/README.md)
-
-Registers one `cursor` provider for Cursor-hosted Composer and Cursor Grok models through the native Cursor SDK with warm agent instance pooling (LRU pool with 10-minute idle TTL) and ambient settings suppression (`settingSources: []`) to eliminate per-turn startup latency. `/login cursor` supports browser-minted or existing user API keys, images and native Pi tool delegation are enabled, credential redaction automatically scrubs API keys and tokens from error logs, and `/cursor` shows Cursor's authoritative current-month total, Auto/Composer and named/API percentages, reset date, plan, and on-demand limits. It does not expose ACP, third-party models, or Factory-style 5-hour/weekly pools. The authenticated catalog cache belongs in `<agent-dir>/cursor/models.json`.
-
-### [Factory provider](../extensions/factory-provider/README.md)
-
-Registers one `factory` provider with Factory account OAuth, direct API keys, or rotating API keys. `/factory` opens one full-width dashboard for provider/authentication state, model metadata, rotation status, and authoritative Factory usage across every credential. Standard and Droid Core windows stay separate, percentages are labeled as used, and keys are never aggregated. Rotation applies a monthly → weekly → 5-hour eligibility waterfall, then selects the least recently used eligible key and retains same-request failover for recognized pre-output errors. Background refreshes are throttled to 15 minutes; `r` force-refreshes from the dashboard.
-
-Rotating keys belong in `<agent-dir>/factory/api-keys.json`. Droid metadata cache belongs in `<agent-dir>/factory/droid.json`. Refresh metadata explicitly after upgrading Droid:
-
-```bash
-FACTORY_DROID_REFRESH=1 pi --list-models factory
-```
-
-The curated catalog intentionally excludes `-fast` variants and the removals documented in `extensions/factory-provider/REFRESH_MODELS.md`.
+Last verified: 2026-09-03
 
 ## Agent workflow
 
@@ -67,7 +45,7 @@ Key capabilities include:
 - **Tool-Aware Bounded Serialization**: Cleans terminal control/progress noise, preserves line-safe head and tail excerpts, prioritizes failures and mutations, and bounds large write/edit arguments without modifying active session history.
 - **Selectable Threshold Policy**: Supports percentage, hard-token, and hybrid safeguards; hybrid defaults to the earlier of 95% or 400,000 tokens without changing model catalogue context windows. Pi's native reserve-token threshold may still compact earlier.
 - **Engineering-State Coverage & Telemetry**: Keeps a complete changed-file inventory before allocating bounded per-patch excerpts, and records source/serialized/summary sizes, retries, and duration in compaction details.
-- **Custom Model Routing**: `/compaction-model` selects any custom compaction model (e.g. `factory/gemini-3.7-flash`, `cursor/cursor-grok-4.5-fast`) or defaults to inheriting the active session model (`inherit`). `/smart-compaction` manages settings stored in `<agent-dir>/smart-compaction.json`.
+- **Custom Model Routing**: `/compaction-model` selects any custom compaction model (e.g. `anthropic/claude-3-5-sonnet`, `openai/gpt-4o`) or defaults to inheriting the active session model (`inherit`). `/smart-compaction` manages settings stored in `<agent-dir>/smart-compaction.json`.
 
 ### [Background terminals](../extensions/background-terminals/README.md)
 
@@ -110,10 +88,6 @@ Adds repository state to Pi's interface. `/lg` opens the local Git view and `/pr
 ### [Shell shortcuts](../extensions/shell-shortcuts/README.md)
 
 Adds `/exit` as an alias for Pi's normal quit command. Keep this extension limited to small, low-risk conveniences.
-
-## [Persistent memory](../extensions/pi-memory/README.md)
-
-Pi Memory lives at `extensions/pi-memory` as an individually toggleable resource in the main package. It injects bounded relevant memories, queues asynchronous extraction, and stores durable state in SQLite under `<agent-dir>/pi-memory/`. Enable or disable it through `pi config`; disabling it does not delete its data.
 
 ## Per-extension details
 

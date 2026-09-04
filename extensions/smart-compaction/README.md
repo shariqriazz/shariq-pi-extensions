@@ -38,7 +38,7 @@ When long-running agent sessions reach context thresholds, standard compaction f
 
 ## Model Selection
 
-Smart Compaction uses the **active session model** by default (`model: "inherit"`, `thinkingLevel: "inherit"`), or can be routed to any dedicated model (e.g. `factory/gemini-3.7-flash`, `antigravity/gemini-2.5-flash`, `cursor/cursor-grok-4.5-fast`).
+Smart Compaction uses the **active session model** by default (`model: "inherit"`, `thinkingLevel: "inherit"`), or can be routed to any dedicated model (e.g. `anthropic/claude-3-5-sonnet`, `openai/gpt-4o`).
 
 ## Commands
 

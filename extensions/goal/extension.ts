@@ -22,7 +22,6 @@ const STATUS_ONLY_TOOL_NAMES = new Set([
 	"list_agent_profiles",
 	"wait_agent",
 	"list_terminals",
-	"pi_memory_status",
 ]);
 
 function blockerSignature(progress: ReadonlyArray<GoalProgressItem>): string {

@@ -109,7 +109,7 @@ describe("smart-compaction config", () => {
       const saved: SmartCompactionConfig = {
         version: 1,
         enabled: false,
-        model: "factory/gemini-3.7-flash",
+        model: "anthropic/claude-3-5-sonnet",
         thinkingLevel: "high",
         maxSummaryTokens: 12288,
         thresholdMode: "hard",
@@ -807,7 +807,7 @@ describe("smart-compaction extension commands & UI validation", () => {
         getAvailable() {
           return [
             { id: "session-model", provider: "session-provider" },
-            { id: "gemini-flash", provider: "factory" },
+            { id: "claude-3-5-sonnet", provider: "anthropic" },
           ];
         },
       } as any,
@@ -826,8 +826,8 @@ describe("smart-compaction extension commands & UI validation", () => {
     assert.ok(notifications.some((n) => n.type === "error" && n.msg.includes("not found")));
 
     // Set valid model
-    await compactionModelCmd.handler("factory/gemini-flash", mockCtx);
-    assert.equal(loadSmartCompactionConfig(file).model, "factory/gemini-flash");
+    await compactionModelCmd.handler("anthropic/claude-3-5-sonnet", mockCtx);
+    assert.equal(loadSmartCompactionConfig(file).model, "anthropic/claude-3-5-sonnet");
 
     cleanup();
   });

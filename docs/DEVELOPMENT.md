@@ -24,7 +24,7 @@ mise exec --locked -- npm run validate
 mise exec --locked -- npm pack --dry-run
 ```
 
-The root validation checks TypeScript, runtime tests, declared extension and skill entrypoints, and forbidden runtime files. Inspect the package file list before committing. It must not contain credentials, `.env`, Factory key configuration, first-party caches, databases, sessions, logs, or unbundled `node_modules`. The audited Cursor SDK tree is the sole intentional bundled dependency; its upstream implementation directories and tests remain third-party package content.
+The root validation checks TypeScript, runtime tests, declared extension and skill entrypoints, and forbidden runtime files. Inspect the package file list before committing. It must not contain credentials, `.env`, first-party caches, databases, sessions, logs, or `node_modules`.
 
 ## Adding an extension
 
@@ -49,10 +49,6 @@ The root manifest declares `skills/background-terminals`, `skills/orchestration`
 
 When any paired skill changes, validate its structure and keep its behavior aligned with the corresponding extension tools.
 
-## Pi Memory
-
-Pi Memory is a normal root-package resource at `extensions/pi-memory`. It is declared separately in `package.json#pi.extensions`, so `pi config` can enable or disable it without affecting the other extensions. Its database stays under `<agent-dir>/pi-memory/` and must never be stored in the installed package directory.
-
 ## Current-machine cutover
 
 Do not remove a working local extension set before the managed package is available.
@@ -61,10 +57,8 @@ Do not remove a working local extension set before the managed package is availa
 2. Run `pi install git:https://github.com/shariqriazz/shariq-pi-extensions`; do not reload yet.
 3. Move old auto-discovered extension directories out of the active Pi extension directory so package and local copies cannot load together.
 4. Move the old paired skill directories out of active discovery; the Git package supplies them.
-5. Keep Pi Memory disabled through the package resource filter when memory should remain inactive; preserve its data under `<agent-dir>/pi-memory/`.
-6. Preserve Factory keys and Droid cache under `<agent-dir>/factory/` with restrictive permissions.
-7. Run `/reload` once.
-8. Verify package provenance through `pi list`, then check representative commands, tools, providers, and both packaged skills.
+5. Run `/reload` once.
+6. Verify package provenance through `pi list`, then check representative commands, tools, providers, and both packaged skills.
 
 Rollback is the reverse: remove the Git package from Pi settings, restore the local extension and skill directories, and reload. Never delete credentials or databases during rollback.
 

@@ -22,12 +22,9 @@ Run `/reload` in an existing Pi session after installation; new sessions load th
 
 The package contains:
 
-- Antigravity OAuth provider with multi-account quota-aware rotation and `/antigravity` dashboard
 - structured user questions
 - managed background terminals
 - copy-all transcript support
-- Cursor OAuth/API-key provider with native SDK transport and monthly usage dashboard
-- Factory OAuth and rotating API-key provider
 - Firecrawl search and scraping
 - Git status UI
 - persistent task goals
@@ -35,7 +32,6 @@ The package contains:
 - configurable steer, interrupt, or follow-up input behavior
 - dedicated multi-agent orchestration
 - Smart Compaction with high-fidelity checkpointing, delta-merging, and custom model routing
-- Pi Memory
 - per-response TPS, TTFT, elapsed-time, and output status
 - Context Usage display
 - small shell and command shortcuts
@@ -54,17 +50,13 @@ Open Pi's package configuration UI:
 pi config
 ```
 
-Toggle individual resources, including Pi Memory, save, and run `/reload`. Disabling Pi Memory stops capture and injection without deleting its database under `<agent-dir>/pi-memory/`. Remove the installed package to disable the whole suite:
+Toggle individual resources, save, and run `/reload`. Remove the installed package to disable the whole suite:
 
 ```bash
 pi remove npm:shariq-pi-extensions
 ```
 
 For a Git installation, use `pi remove git:https://github.com/shariqriazz/shariq-pi-extensions`.
-
-## Pi Memory
-
-Pi Memory lives at [`extensions/pi-memory`](extensions/pi-memory) inside the same package as every other extension. Use `pi config` to enable or disable it independently; no second package installation is required. Its runtime database remains under `<agent-dir>/pi-memory/` whether the extension is enabled or disabled.
 
 ## Update
 

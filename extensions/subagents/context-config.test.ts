@@ -103,7 +103,7 @@ test("restrictive capabilities fail closed for extension execution tools", () =>
     "task_list",
     "start_terminal",
     "write_terminal",
-    "pi_memory_save",
+    "unclassified_extension_tool",
     "unknown_project_tool",
     "message_parent",
   ];
