@@ -1,6 +1,6 @@
 {
   "name": "shariq-pi-extensions",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Cross-platform extension suite for the Pi coding agent.",
   "license": "MIT",
   "author": "Shariq Riaz",
@@ -62,12 +62,12 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "node scripts/run-tests.mjs",
     "validate:package": "node scripts/validate-package.mjs",
-    "validate": "npm run check && npm test && npm run validate:package",
+    "validate": "bun run check && node scripts/run-tests.mjs && bun run validate:package",
     "pack:inspect": "npm pack --dry-run",
-    "prepublishOnly": "npm run validate"
+    "prepublishOnly": "bun run validate"
   },
   "dependencies": {
-    "@lydell/node-pty": "1.1.0",
+    "@lydell/node-pty": "^1.1.0",
     "effect": "4.0.0-beta.98"
   },
   "peerDependencies": {
@@ -95,12 +95,12 @@
     }
   },
   "devDependencies": {
-    "@earendil-works/pi-agent-core": "0.84.2",
-    "@earendil-works/pi-ai": "0.84.2",
-    "@earendil-works/pi-coding-agent": "0.84.2",
-    "@earendil-works/pi-tui": "0.84.2",
-    "@types/node": "^26.1.2",
-    "typebox": "1.3.7",
+    "@earendil-works/pi-agent-core": "^0.85.1",
+    "@earendil-works/pi-ai": "^0.85.1",
+    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "@earendil-works/pi-tui": "^0.85.1",
+    "@types/node": "^26.4.1",
+    "typebox": "^1.3.27",
     "typescript": "^7.0.2"
   },
   "allowScripts": {

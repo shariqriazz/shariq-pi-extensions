@@ -19,8 +19,8 @@ jobs:
       - uses: jdx/mise-action@v3
         with:
           cache: true
-      - run: mise exec --locked -- npm ci
-      - run: mise exec --locked -- npm run validate
+      - run: mise exec --locked -- bun install --frozen-lockfile
+      - run: mise exec --locked -- bun run validate
       - name: Publish if version updated
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")

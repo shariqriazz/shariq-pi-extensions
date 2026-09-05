@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { spawn as spawnPty, type IDisposable, type IPty } from "@lydell/node-pty";
+import { spawnUniversalPty, type UniversalPty } from "./pty.ts";
 import { OutputBuffer } from "./output-buffer.ts";
 import type {
   StartTerminalOptions,
@@ -37,11 +37,11 @@ interface MutableSnapshot {
 
 interface Entry {
   readonly snapshot: MutableSnapshot;
-  readonly pty: IPty;
+  readonly pty: UniversalPty;
   readonly output: OutputBuffer;
   readonly spill: fs.WriteStream;
-  readonly dataSubscription: IDisposable;
-  readonly exitSubscription: IDisposable;
+  readonly dataSubscription: { dispose(): void };
+  readonly exitSubscription: { dispose(): void };
   readonly settled: Promise<TerminalSnapshot>;
   resolveSettled(snapshot: TerminalSnapshot): void;
   killRequested: boolean;
@@ -202,7 +202,7 @@ export class TerminalManager {
       let spillBytes = 0;
       let spillTruncated = false;
       let pausedForSpill = false;
-      let pty: IPty | undefined;
+      let pty: UniversalPty | undefined;
       let snapshot: MutableSnapshot | undefined;
       const markSpillTruncated = () => {
         if (spillTruncated) return;
@@ -223,7 +223,7 @@ export class TerminalManager {
         if (payload.length < bytes.length || spillBytes >= this.maxFullLogBytes) markSpillTruncated();
         if (!accepted && pty && !pausedForSpill) {
           pausedForSpill = true;
-          pty.pause();
+          pty.pause?.();
         }
       });
       output.spillPath = spillPath;
@@ -231,7 +231,7 @@ export class TerminalManager {
         if (!pausedForSpill) return;
         pausedForSpill = false;
         try {
-          pty?.resume();
+          pty?.resume?.();
         } catch {
           // Exit may have won the drain race.
         }
@@ -242,7 +242,7 @@ export class TerminalManager {
         if (pausedForSpill) {
           pausedForSpill = false;
           try {
-            pty?.resume();
+            pty?.resume?.();
           } catch {
             // Exit may have won the error race.
           }
@@ -253,8 +253,9 @@ export class TerminalManager {
 
       const shell = shellInvocation(options.command);
       try {
-        pty = spawnPty(shell.file, shell.args, {
-          name: "xterm-256color",
+        pty = spawnUniversalPty({
+          file: shell.file,
+          args: shell.args,
           cols,
           rows,
           cwd: options.cwd,

@@ -8,11 +8,11 @@ Last verified: 2026-09-04
 - Pi matching the pinned development dependency version
 - platform build support required by `@lydell/node-pty`
 
-Install the exact Node toolchain and dependencies:
+Install the exact toolchain and dependencies:
 
 ```bash
 mise install --locked
-mise exec --locked -- npm ci
+mise exec --locked -- bun install
 ```
 
 ## Validation
@@ -20,8 +20,8 @@ mise exec --locked -- npm ci
 Validate the complete suite and inspect the package payload:
 
 ```bash
-mise exec --locked -- npm run validate
-mise exec --locked -- npm pack --dry-run
+mise exec --locked -- bun run validate
+mise exec --locked -- bun run pack:inspect
 ```
 
 The root validation checks TypeScript, runtime tests, declared extension and skill entrypoints, and forbidden runtime files. Inspect the package file list before committing. It must not contain credentials, `.env`, first-party caches, databases, sessions, logs, or `node_modules`.
@@ -74,8 +74,8 @@ gh repo view shariqriazz/shariq-pi-extensions --json visibility,url
 Before publishing a new npm version:
 
 1. Update `package.json#version` using semantic versioning.
-2. Run `mise exec --locked -- npm ci` and `mise exec --locked -- npm run validate`.
-3. Inspect `mise exec --locked -- npm run pack:inspect` for secrets, runtime state, and accidental files.
+2. Run `mise exec --locked -- bun install` and `mise exec --locked -- bun run validate`.
+3. Inspect `mise exec --locked -- bun run pack:inspect` for secrets, runtime state, and accidental files.
 4. Run the `Publish npm package` workflow. npm trusted publishing authenticates it through GitHub OIDC and records provenance without a long-lived token.
 5. Verify the registry version and install it with `pi install npm:shariq-pi-extensions`.
 

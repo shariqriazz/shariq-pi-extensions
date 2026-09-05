@@ -6,16 +6,16 @@ This public repository packages the user's Pi extensions as one suite distribute
 
 ## Commands
 
-- `mise install --locked` — install the pinned Node toolchain.
-- `mise exec --locked -- npm ci` — install locked dependencies.
-- `mise exec --locked -- npm run validate` — typecheck and test the complete suite and validate package boundaries.
-- `mise exec --locked -- npm run pack:inspect` — inspect the package payload.
+- `mise install --locked` — install the pinned Bun and Node toolchains.
+- `mise exec --locked -- bun install` — install locked dependencies.
+- `mise exec --locked -- bun run validate` — typecheck, run runtime tests under Node, and validate package boundaries.
+- `mise exec --locked -- bun run pack:inspect` — inspect the package payload.
 
 ## Package boundaries
 
 - Declare every extension entrypoint explicitly in root `package.json#pi.extensions`; do not rely on directory auto-discovery.
 - Keep each extension under `extensions/<name>` in the single root package so `pi config` can enable or disable it individually. Do not create nested Pi packages for suite extensions.
-- Every directory under `extensions/` must have a README. Every declared extension must have a repository-native test included by the root `npm test` command.
+- Every directory under `extensions/` must have a README. Every declared extension must have a repository-native test included by the root `bun test` command.
 - Keep `skills/background-terminals` and `skills/subagents` aligned with their extension APIs; Pi loads them from the package and install scripts must not copy them elsewhere.
 - Put third-party runtime modules in root `dependencies`. Pi-owned packages and `typebox` remain optional peer dependencies and pinned development dependencies.
 - Keep shared runtime helpers in `extensions/shared`; do not duplicate them across extensions.
@@ -29,7 +29,7 @@ Never commit API keys, OAuth credentials, `.env`, `auth.json`, caches, sessions,
 
 ## Validation and releases
 
-- Before committing package or manifest changes, run the root validation (`npm run validate`) and inspect the package payload. Preserve required license files beside the code they cover.
+- Before committing package or manifest changes, run the root validation (`bun run validate`) and inspect the package payload. Preserve required license files beside the code they cover.
 - On functional changes, always bump the `version` in `package.json`. Pushing to `main` automatically triggers CI (`publish-npm.yml`) to validate and publish the new version to npm with OIDC provenance whenever the version is updated.
 
 ## Documentation

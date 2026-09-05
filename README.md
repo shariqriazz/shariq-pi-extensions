@@ -73,9 +73,9 @@ Runtime files use Pi's active agent directory rather than a fixed home or checko
 
 ```bash
 mise install --locked
-mise exec --locked -- npm ci
-mise exec --locked -- npm run validate
-mise exec --locked -- npm run pack:inspect
+mise exec --locked -- bun install
+mise exec --locked -- bun run validate
+mise exec --locked -- bun run pack:inspect
 ```
 
 See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for repository workflow and release checks, and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for package boundaries.
