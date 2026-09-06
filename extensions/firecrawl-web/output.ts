@@ -137,12 +137,13 @@ export async function formatDeveloperSearchOutput(payload: Record<string, unknow
 
   for (const [index, rawResult] of results.entries()) {
     const item = record(rawResult);
-    const type = valueText(item.type) ?? "artifact";
-    const title = valueText(item.title) ?? valueText(item.id) ?? valueText(item.url) ?? "Untitled";
-    const url = valueText(item.url);
     const id = valueText(item.id);
+    const idKind = id ? id.match(/^([a-z_]+):/i)?.[1]?.replace(/_/g, " ") : undefined;
+    const type = (valueText(item.type) ?? idKind ?? "artifact").toUpperCase();
+    const title = valueText(item.title) ?? id ?? valueText(item.url) ?? "Untitled";
+    const url = valueText(item.url);
 
-    lines.push("", `### ${index + 1}. [${type.toUpperCase()}] ${title}`);
+    lines.push("", `### ${index + 1}. [${type}] ${title}`);
     if (url) lines.push(`URL: ${url}`);
     if (id && id !== title) lines.push(`ID: ${id}`);
 
