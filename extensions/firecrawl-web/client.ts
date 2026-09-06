@@ -156,13 +156,11 @@ export function buildDeveloperSearchBody(params: DeveloperSearchParams): Record<
 
   const k = clampInteger(params.limit, 5, 1, 20);
   const passages = clampInteger(params.passages, 1, 1, 5);
-  const timeout = clampInteger(params.timeout_seconds, 60, 5, 120) * 1_000;
 
   return {
     query,
     k,
     passages,
-    timeout,
     ...(types?.length ? { types } : {}),
     ...(repos?.length ? { repos } : {}),
     ...(sources?.length ? { sources } : {}),
@@ -240,8 +238,9 @@ export async function firecrawlRequest(
   config: FirecrawlConfig,
   signal?: AbortSignal,
   fetchImpl: FetchLike = fetch,
+  options?: { timeoutMs?: number },
 ): Promise<Record<string, unknown>> {
-  const timeoutMs = Number(body.timeout) || 60_000;
+  const timeoutMs = options?.timeoutMs || Number(body.timeout) || 60_000;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {

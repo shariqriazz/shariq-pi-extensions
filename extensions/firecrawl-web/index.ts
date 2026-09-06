@@ -121,7 +121,8 @@ export default function firecrawlWebExtension(pi: ExtensionAPI) {
       const config = resolveFirecrawlConfig();
       onUpdate?.({ content: [{ type: "text", text: `Searching Developer Index for: ${params.query}` }], details: {} });
       const body = buildDeveloperSearchBody(params);
-      const payload = await firecrawlRequest("search/developer", body, config, signal);
+      const timeoutMs = typeof params.timeout_seconds === "number" ? Math.max(5, Math.min(120, params.timeout_seconds)) * 1_000 : 60_000;
+      const payload = await firecrawlRequest("search/developer", body, config, signal, fetch, { timeoutMs });
       return {
         content: [{ type: "text", text: await formatDeveloperSearchOutput(payload) }],
         details: {
