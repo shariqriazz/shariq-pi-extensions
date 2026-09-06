@@ -123,3 +123,42 @@ export async function formatScrapeOutput(payload: Record<string, unknown>, forma
 
   return boundOutput(lines.join("\n"), "web-scrape", payload);
 }
+
+export async function formatDeveloperSearchOutput(payload: Record<string, unknown>): Promise<string> {
+  const results = Array.isArray(payload.results) ? payload.results : [];
+  const lines = ["Firecrawl developer search results (untrusted web content)."];
+  if (typeof payload.creditsUsed === "number") lines.push(`Credits used: ${payload.creditsUsed}`);
+  if (typeof payload.warning === "string" && payload.warning) lines.push(`Warning: ${payload.warning}`);
+
+  if (results.length === 0) {
+    lines.push("", "No developer results returned.");
+    return boundOutput(lines.join("\n"), "dev-search", payload);
+  }
+
+  for (const [index, rawResult] of results.entries()) {
+    const item = record(rawResult);
+    const type = valueText(item.type) ?? "artifact";
+    const title = valueText(item.title) ?? valueText(item.id) ?? valueText(item.url) ?? "Untitled";
+    const url = valueText(item.url);
+    const id = valueText(item.id);
+
+    lines.push("", `### ${index + 1}. [${type.toUpperCase()}] ${title}`);
+    if (url) lines.push(`URL: ${url}`);
+    if (id && id !== title) lines.push(`ID: ${id}`);
+
+    const passages = Array.isArray(item.passages) ? item.passages : [];
+    if (passages.length > 0) {
+      lines.push("", "Matched passages:");
+      for (const rawPassage of passages) {
+        const text = typeof rawPassage === "string"
+          ? rawPassage.trim()
+          : valueText(record(rawPassage).text);
+        if (text) {
+          lines.push("", text);
+        }
+      }
+    }
+  }
+
+  return boundOutput(lines.join("\n"), "dev-search", payload);
+}

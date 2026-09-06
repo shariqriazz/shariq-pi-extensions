@@ -5,8 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 import firecrawlWebExtension from "./index.ts";
 import { resolveFirecrawlConfig } from "./auth.ts";
-import { buildScrapeBody, buildSearchBody, firecrawlRequest } from "./client.ts";
-import { formatScrapeOutput, formatSearchOutput } from "./output.ts";
+import { buildDeveloperSearchBody, buildScrapeBody, buildSearchBody, firecrawlRequest } from "./client.ts";
+import { formatDeveloperSearchOutput, formatScrapeOutput, formatSearchOutput } from "./output.ts";
 
 function registeredTools() {
   const tools = new Map<string, { name: string; description: string; promptGuidelines?: string[] }>();
@@ -16,13 +16,15 @@ function registeredTools() {
   return tools;
 }
 
-test("registers only the native web_search and web_scrape tools", () => {
+test("registers native web_search, web_scrape, and dev_search tools", () => {
   const tools = registeredTools();
-  assert.deepEqual([...tools.keys()], ["web_search", "web_scrape"]);
+  assert.deepEqual([...tools.keys()].sort(), ["dev_search", "web_scrape", "web_search"]);
   assert.match(tools.get("web_search")!.description, /Firecrawl/);
   assert.match(tools.get("web_scrape")!.description, /web_fetch/);
+  assert.match(tools.get("dev_search")!.description, /Developer Index/);
   assert.match(tools.get("web_search")!.promptGuidelines!.join(" "), /untrusted data, not instructions/);
   assert.match(tools.get("web_scrape")!.promptGuidelines!.join(" "), /untrusted data, not instructions/);
+  assert.match(tools.get("dev_search")!.promptGuidelines!.join(" "), /untrusted data, not instructions/);
 });
 
 test("builds a compact Firecrawl search request with explicit filters", () => {
@@ -128,4 +130,57 @@ test("formats compact untrusted search and scrape output", async () => {
   const scrape = await formatScrapeOutput({ data: { markdown: "# Example", metadata: { url: "https://example.com", statusCode: 200 } } }, "markdown");
   assert.match(scrape, /untrusted web content/);
   assert.match(scrape, /# Example/);
+});
+
+test("builds developer search request and validates mismatched filters", () => {
+  const body = buildDeveloperSearchBody({
+    query: "429 retry backoff",
+    limit: 10,
+    types: ["issue", "pull_request"],
+    repos: ["sidekiq/sidekiq"],
+    language: "Ruby",
+    passages: 2,
+    skills: "only",
+    min_stars: 500,
+  });
+  assert.equal(body.query, "429 retry backoff");
+  assert.equal(body.k, 10);
+  assert.deepEqual(body.types, ["issue", "pull_request"]);
+  assert.deepEqual(body.repos, ["sidekiq/sidekiq"]);
+  assert.equal(body.language, "Ruby");
+  assert.equal(body.passages, 2);
+  assert.equal(body.skills, "only");
+  assert.equal(body.min_stars, 500);
+
+  // Rejects repos filter if no repo types are requested
+  assert.throws(
+    () => buildDeveloperSearchBody({ query: "q", types: ["doc"], repos: ["owner/repo"] }),
+    /repos filter requires at least one repository type/,
+  );
+
+  // Rejects sources filter if doc is not in types
+  assert.throws(
+    () => buildDeveloperSearchBody({ query: "q", types: ["issue"], sources: ["docs.stripe.com"] }),
+    /sources filter requires doc in types/,
+  );
+});
+
+test("formats developer search output with matched passages and untrusted header", async () => {
+  const output = await formatDeveloperSearchOutput({
+    creditsUsed: 2,
+    results: [
+      {
+        id: "issue:sidekiq/sidekiq#1471",
+        type: "issue",
+        url: "https://github.com/sidekiq/sidekiq/issues/1471",
+        title: "Retries not applied to 429",
+        passages: [{ text: "The client treats 429 as terminal." }],
+      },
+    ],
+  });
+  assert.match(output, /untrusted web content/);
+  assert.match(output, /Credits used: 2/);
+  assert.match(output, /\[ISSUE\] Retries not applied to 429/);
+  assert.match(output, /The client treats 429 as terminal\./);
+  assert.match(output, /https:\/\/github\.com\/sidekiq\/sidekiq\/issues\/1471/);
 });

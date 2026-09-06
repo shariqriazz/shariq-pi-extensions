@@ -61,6 +61,7 @@ const READ_CAPABILITY_TOOLS = new Set([
   "web_search",
   "web_scrape",
   "web_fetch",
+  "dev_search",
   "get_goal",
   "task_list",
   "read_terminal",

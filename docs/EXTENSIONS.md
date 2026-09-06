@@ -51,7 +51,7 @@ Its tools are `start_terminal`, `read_terminal`, `write_terminal`, `list_termina
 
 ### [Firecrawl web](../extensions/firecrawl-web/README.md)
 
-`web_search` discovers current web, news, images, GitHub, research, and PDF sources. `web_scrape` renders difficult or JavaScript-heavy pages. Authentication resolves from environment variables, the active Pi agent `.env`, or Firecrawl CLI credentials.
+`web_search` discovers current web, news, images, GitHub, research, and PDF sources. `web_scrape` renders difficult or JavaScript-heavy pages. `dev_search` queries the Firecrawl Developer Index across 70M+ technical docs, GitHub issues, merged PRs, and READMEs with matched code passages. Authentication resolves from environment variables, the active Pi agent `.env`, or Firecrawl CLI credentials.
 
 ### [Web fetch](../extensions/web-fetch/README.md)
 

@@ -1,9 +1,10 @@
 # Native Firecrawl web tools
 
-Provides two focused Pi tools backed directly by Firecrawl API v2:
+Provides three focused Pi tools backed directly by Firecrawl API v2:
 
 - `web_search` — live web, news, image, GitHub, research, and PDF discovery; optional result extraction.
 - `web_scrape` — rendered main-content extraction from one difficult or JavaScript-heavy URL.
+- `dev_search` — search 70M+ technical docs, GitHub issues, merged pull requests, and READMEs via Firecrawl Developer Index with matched markdown code passages.
 
 Keep the separate `web_fetch` tool for lightweight exact URL and API retrieval without Firecrawl credits.
 
@@ -28,4 +29,4 @@ Credentials are read at call time, never copied into source or tool output. Full
 
 ## Validation
 
-From the repository root, run `npm run validate`.
+From the repository root, run `bun run validate`.

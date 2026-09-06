@@ -5,6 +5,7 @@ export type SearchCategory = "github" | "research" | "pdf";
 export type SearchContent = "none" | "summary" | "markdown";
 export type ScrapeFormat = "markdown" | "summary" | "links" | "question" | "highlights";
 export type ProxyMode = "basic" | "auto" | "enhanced";
+export type DeveloperSearchType = "doc" | "issue" | "pull_request" | "readme";
 
 export type WebSearchParams = {
   query: string;
@@ -19,6 +20,24 @@ export type WebSearchParams = {
   scrape?: SearchContent;
   only_main_content?: boolean;
   content_max_characters?: number;
+  timeout_seconds?: number;
+};
+
+export type DeveloperSearchParams = {
+  query: string;
+  limit?: number;
+  types?: DeveloperSearchType[];
+  repos?: string[];
+  sources?: string[];
+  language?: string;
+  topic?: string;
+  license?: string;
+  min_stars?: number;
+  max_stars?: number;
+  archived?: boolean;
+  fork?: boolean;
+  skills?: "only";
+  passages?: number;
   timeout_seconds?: number;
 };
 
@@ -120,7 +139,45 @@ export function buildScrapeBody(params: WebScrapeParams): Record<string, unknown
   };
 }
 
-function endpointUrl(config: FirecrawlConfig, endpoint: "search" | "scrape"): string {
+export function buildDeveloperSearchBody(params: DeveloperSearchParams): Record<string, unknown> {
+  const query = params.query?.trim();
+  if (!query) throw new Error("dev_search requires a query.");
+
+  const types = cleanStrings(params.types) as DeveloperSearchType[] | undefined;
+  const repos = cleanStrings(params.repos);
+  const sources = cleanStrings(params.sources);
+
+  if (types && repos && !types.some((t) => t === "issue" || t === "pull_request" || t === "readme")) {
+    throw new Error("repos filter requires at least one repository type (issue, pull_request, or readme) in types.");
+  }
+  if (types && sources && !types.includes("doc")) {
+    throw new Error("sources filter requires doc in types.");
+  }
+
+  const k = clampInteger(params.limit, 5, 1, 20);
+  const passages = clampInteger(params.passages, 1, 1, 5);
+  const timeout = clampInteger(params.timeout_seconds, 60, 5, 120) * 1_000;
+
+  return {
+    query,
+    k,
+    passages,
+    timeout,
+    ...(types?.length ? { types } : {}),
+    ...(repos?.length ? { repos } : {}),
+    ...(sources?.length ? { sources } : {}),
+    ...(params.skills === "only" ? { skills: "only" } : {}),
+    ...(params.language?.trim() ? { language: params.language.trim() } : {}),
+    ...(params.topic?.trim() ? { topic: params.topic.trim() } : {}),
+    ...(params.license?.trim() ? { license: params.license.trim() } : {}),
+    ...(typeof params.min_stars === "number" && params.min_stars >= 0 ? { min_stars: Math.floor(params.min_stars) } : {}),
+    ...(typeof params.max_stars === "number" && params.max_stars >= 0 ? { max_stars: Math.floor(params.max_stars) } : {}),
+    ...(typeof params.archived === "boolean" ? { archived: params.archived } : {}),
+    ...(typeof params.fork === "boolean" ? { fork: params.fork } : {}),
+  };
+}
+
+function endpointUrl(config: FirecrawlConfig, endpoint: "search" | "scrape" | "search/developer"): string {
   const base = config.apiUrl.replace(/\/+$/, "");
   return `${base.endsWith("/v2") ? base : `${base}/v2`}/${endpoint}`;
 }
@@ -178,7 +235,7 @@ async function readResponseBounded(response: Response): Promise<Uint8Array> {
 }
 
 export async function firecrawlRequest(
-  endpoint: "search" | "scrape",
+  endpoint: "search" | "scrape" | "search/developer",
   body: Record<string, unknown>,
   config: FirecrawlConfig,
   signal?: AbortSignal,

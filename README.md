@@ -24,7 +24,7 @@ The package contains:
 
 - structured user questions
 - managed background terminals
-- Firecrawl search and scraping
+- Firecrawl web and developer search plus scraping
 - persistent task goals
 - branch-safe model-maintained task lists with live progress UI and compaction continuity
 - configurable steer, interrupt, or follow-up input behavior
