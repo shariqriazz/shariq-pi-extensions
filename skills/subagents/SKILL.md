@@ -34,6 +34,7 @@ After dispatch:
 2. If no such work remains, end the turn immediately. A short progress note is enough when the user needs one.
 3. Do not call `wait_agent`, `list_agents`, or `check_agent` in the same turn merely because the child was just launched. Ending the turn is the waiting mechanism.
 4. When a child completion notice invokes the main agent, treat its model-visible summary as the child result and continue the original task immediately. Reconcile completed results, launch any intentionally queued work if capacity requires waves, and otherwise keep waiting through notifications. Do not wait for the user to prompt you again or call a status tool to retrieve the same result.
+5. When some children have settled and others are still running, never end the turn with an empty or whitespace-only message; to the user that looks like a freeze. Write one short line (for example `3 of 5 workers done; waiting on the rest`) and end the turn.
 
 A progress check is reasonable when the user asks for status, a child has run materially longer than expected for its task and model, an interruption left its state unclear, or current status will change an immediate coordination decision. Prefer `check_agent` for one known child and `list_agents` for a batch overview. Use `wait_agent` to collect results already expected to be available, not as a running-status probe.
 
@@ -51,22 +52,22 @@ When no parent context is forked, every child prompt must stand alone. State:
 - whether edits or execution are allowed;
 - validation and evidence required before completion.
 
-Even with `fork_turns`, keep the assignment explicit. Fork only the conversation needed for the task: `none` by default, a recent positive turn count when local history matters, and `all` only when the full sanitized conversation is materially necessary. Tool protocol and private reasoning are never inherited.
+Even with `fork_turns`, keep the assignment explicit. Use `none` by default for implementation, testing, and documentation workers: a child does not need the parent's conversational history, corrections, or reprimands to do a bounded job. Fork a recent positive turn count only when local history materially matters, and `all` only when the full sanitized conversation is genuinely necessary. Tool protocol and private reasoning are never inherited.
 
 ## Profiles, access, and isolation
 
 Choose the narrowest capability that can complete the assignment:
 
-- `read-only` for allowlisted inspection tools without command execution;
-- `execute` for allowlisted inspection plus shell/background-terminal diagnostics without direct edit tools;
+- `read-only` for allowlisted inspection tools without command execution. This strips `bash`, so the child cannot run `ls`, `find`, or `rg --files`. Use it only when the prompt already names every file the child needs; a child that has to discover files under `read-only` ends up guessing paths.
+- `execute` for allowlisted inspection plus shell/background-terminal diagnostics without direct edit tools. This is the right floor for codebase audits, consistency checks, and anything that must locate files; tell the child in its prompt to run only non-mutating commands.
 - `read-write` for allowlisted inspection plus direct file edits without command execution;
 - `all` only when implementation and validation require unclassified extension tools or unrestricted access.
 
 Restrictive capabilities fail closed for unclassified extension tools; use `all` only when that broader authority is actually required.
 
-Use an established profile or persona when it matches; do not invent names without checking the catalog. Omit model and thinking overrides unless the task needs a deliberate choice, so the child inherits the parent defaults. When an override is necessary, use only an exact model/provider exposed by the current Pi registry or profile—never copy provider examples from another harness or assume one is installed.
+Use an established profile or persona when it matches; do not invent names without checking the catalog. Omit model and thinking overrides unless the task needs a deliberate choice, so the child inherits the parent defaults. A child inherits or downgrades the parent's model tier; never escalate children to a more expensive model or higher thinking level unless the user asked for that, since a batch of ten children multiplies the cost tenfold. When an override is necessary, use only an exact model/provider exposed by the current Pi registry or profile, never a provider example copied from another harness.
 
-Keep `isolation=none` for read-only work and shared-checkout work with clear ownership. Use a worktree only when concurrent writes could overlap or interfere. Worktree isolation requires a clean source checkout because the child branch starts from `HEAD`; if the source is dirty, commit or stash first or use the shared workspace. Worktree isolation is not a reason to delegate, and it does not authorize publication.
+Keep `isolation=none` for read-only work and shared-checkout work with clear ownership. When two or more children will write concurrently to a repository that typechecks or compiles (TypeScript, Rust, Go, and similar), use `isolation=worktree` for each writer; concurrent edits in one checkout make builds and test runs fail against each other's half-finished changes. Worktree isolation requires a clean source checkout because the child branch starts from `HEAD`; if the source is dirty, commit or stash first or serialize the writers. Worktree isolation is not a reason to delegate, and it does not authorize publication.
 
 ## Coordinate without losing ownership
 
