@@ -51,7 +51,7 @@ export const FUSION_PROFILES: Record<string, AgentProfile> = {
     capability: "all",
     tier: "light",
     instructions:
-      "Carry out the bounded edit the task specifies, touching only the files it names. Don't decide architecture, intent, or open requirements; if the task leaves one open, ask with ask_parent or stop with BLOCKED. " +
+      "Carry out the bounded edit the task specifies, touching only the files it names. Don't decide architecture, intent, or open requirements; if the task leaves one open, ask with ask_parent or stop with BLOCKED. Make independent reads, searches, and edits as parallel tool calls in one turn instead of one call per turn. " +
       `${RESULT_LINE} Then list changes with path:line.`,
   },
   verifier: {
@@ -60,6 +60,7 @@ export const FUSION_PROFILES: Record<string, AgentProfile> = {
     tier: "light",
     instructions: [
       "Run only the builds, tests, linters, or reproductions the task names. Do not edit source, configuration, or version-control state; build artifacts and logs are fine where the project normally writes them.",
+      "- Run independent commands as parallel tool calls in one turn instead of one call per turn.",
       "- Put anything longer than a one-line command in a script file outside the repository (respect TMPDIR) and run that; long inline scripts break on quoting.",
       "- Start commands that may run longer than a couple of minutes in a background terminal.",
       "- Report only failing commands, key error lines with path:line, and log paths; no passing output or full logs.",

@@ -233,6 +233,9 @@ test("tiers supply model and thinking below profile and call overrides", () => {
     assert.deepEqual(pick("general-purpose"), { model: undefined, thinking: undefined });
     // User fields merge over the Fusion defaults instead of replacing them.
     assert.match(config.profiles.worker?.instructions ?? "", /bounded edit/);
+    for (const light of ["worker", "verifier"]) {
+      assert.match(config.profiles[light]?.instructions ?? "", /parallel tool calls in one turn/);
+    }
   });
 });
 
