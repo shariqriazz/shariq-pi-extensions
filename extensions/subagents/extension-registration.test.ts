@@ -141,8 +141,9 @@ test("fusion mode swaps the lead's delegation rule and shows the fusion skill on
     saveConfigDocument("global", cwd, JSON.stringify({ fusion: true }));
     const lead = run(["read", "spawn_agent"]);
     assert.match(lead.guidelines, /Fusion mode is on, so delegate without being asked/);
+    assert.match(lead.guidelines, /results you report or act on; a feature that computes metrics is still a sidekick build/);
     assert.match(lead.guidelines, /self-contained .*hand it to the sidekick/);
-    assert.match(lead.guidelines, /wrong result looks plausible/);
+    assert.match(lead.guidelines, /wrong result looks plausible.*you draw and check the conclusions/);
     assert.doesNotMatch(lead.guidelines, /only when the user asks to delegate/);
     assert.match(lead.guidelines, /instead of polling wait_agent/);
     assert.deepEqual(lead.skills, ["fusion", "other"]);
