@@ -293,7 +293,7 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
 
       if (thinkingBlocks.length > 0) {
         const combinedThinking = thinkingBlocks.join("\n");
-        parts.push(`[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, isRecent ? 800 : 400, isRecent ? 800 : 400))}`);
+        parts.push(`[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, isRecent ? 2000 : 1000, isRecent ? 2000 : 1000))}`);
       }
       if (textBlocks.length > 0) {
         parts.push(`[Assistant]:\n${sanitizeTagContent(textBlocks.join("\n"))}`);

@@ -51,6 +51,7 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           event,
           ctx,
           config,
+          tools: () => pi.getAllTools(),
         });
         return { compaction };
       } catch (error) {

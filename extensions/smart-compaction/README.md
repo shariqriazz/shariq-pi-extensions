@@ -29,15 +29,17 @@ A summary is accepted only when the model stopped normally, made no tool calls, 
 
 Each attempt has a 10-minute timeout. The attempts are:
 
-1. the configured model with the configured thinking level;
+1. the configured model with the configured thinking level, first with the structured tail described below when it applies, then with the text transcript;
 2. the same model with thinking off;
 3. the session model with thinking off, when it differs.
 
 Authentication, permission, quota, and cancellation errors stop the ladder immediately. If every attempt fails, compaction is cancelled and the full conversation is kept; the extension does not fall back to Pi's default summarizer.
 
-The conversation is serialized for the summarizer with head and tail excerpts of long tool output, more room for failures and edits than for routine reads, bounded write and edit arguments, and terminal control sequences and repeated lines removed. Session history itself is never modified.
+The conversation is serialized for the summarizer with head and tail excerpts of long tool output, more room for failures and edits than for routine reads, bounded write and edit arguments, readable thinking cut to its first and last 2,000 characters in the 14 newest messages and 1,000 in older ones, and terminal control sequences and repeated lines removed. Session history itself is never modified.
 
-Each compaction entry records its source, serialized, and summary sizes, attempt count, and duration in `details`.
+When the summarizer is the same provider, API, and model that wrote the summarized turns, and thinking is on, the first attempt sends the newest of those turns as the original messages instead, with their thinking blocks and encrypted reasoning, so the model reads its own reasoning while it writes the checkpoint. Older turns stay in the text transcript. The structured part holds whole turns, newest first, up to 2.5 MB, and the whole request is kept under an estimated 3.5 MB, below gateway body limits of about 4.5 MB. Tools those turns called are declared with tool calls disabled. Turns written by a different model than the summarizer (including a configured compaction model that differs from the session model), the later attempts, and a rejected structured request all use the text transcript.
+
+Each compaction entry records its source, serialized, and summary sizes, attempt count, duration, and, when the structured tail was used, its message count and size in `details`.
 
 ## Threshold
 

@@ -47,6 +47,7 @@ import {
   truncateHeadAndTail,
 } from "./prompt.ts";
 import { createSmartCompactionExtension } from "./index.ts";
+import { selectStructuredTail, STRUCTURED_MAX_BYTES } from "./structured.ts";
 
 function createTmpConfig(): { dir: string; file: string; cleanup: () => void } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "smart-compaction-test-"));
@@ -958,5 +959,142 @@ describe("smart-compaction extension commands & UI validation", () => {
     assert.equal(loadSmartCompactionConfig(file).model, "inherit");
 
     cleanup();
+  });
+});
+
+describe("smart-compaction same-model structured tail", () => {
+  const sessionModel: Model<Api> = {
+    id: "session-model", name: "Session Model", provider: "session-provider",
+    api: "openai-responses", maxTokens: 128000, reasoning: true,
+  } as any;
+  const signature = (id: string) => JSON.stringify({ type: "reasoning", id, encrypted_content: `ENC-${id}` });
+  const user = (text: string): any => ({ role: "user", content: text, timestamp: 1 });
+  const assistant = (content: any[], model = "session-model"): any => ({
+    role: "assistant", content, provider: "session-provider", api: "openai-responses", model,
+    stopReason: "toolUse", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    timestamp: 1,
+  });
+  const thinking = (id: string) => ({ type: "thinking", thinking: "", thinkingSignature: signature(id) });
+  const call = (id: string, name = "read") => ({ type: "toolCall", id, name, arguments: { path: `${id}.ts` } });
+  const result = (id: string, name = "read"): any => ({ role: "toolResult", toolCallId: id, toolName: name, content: [{ type: "text", text: `body of ${id}` }], isError: false, timestamp: 1 });
+
+  const conversation = (): any[] => [
+    user("Start the migration"),
+    assistant([thinking("rs_old"), call("call_old")], "other-model"),
+    result("call_old"),
+    user("Use the new schema"),
+    assistant([thinking("rs_1"), call("call_1")]),
+    result("call_1"),
+    assistant([{ type: "text", text: "Schema updated." }]),
+    assistant([thinking("rs_2"), call("call_2", "bash")]),
+  ];
+
+  it("selects the newest complete same-model turns and declares the tools they used", () => {
+    const messages = conversation();
+    const tail = selectStructuredTail(messages, sessionModel, [{ name: "read", description: "Read a file", parameters: { type: "object", properties: { path: { type: "string" } } } }]);
+    assert.ok(tail);
+    assert.equal(tail.start, 3, "starts after the other model's turn, at a user message");
+    assert.equal(tail.end, 7, "a trailing call answered only in the kept part stays text");
+    assert.deepEqual(tail.messages.map((message) => message.role), ["user", "assistant", "toolResult", "assistant"]);
+    const replayed = (tail.messages[1] as any).content[0];
+    assert.equal(replayed.thinkingSignature, signature("rs_1"));
+    assert.deepEqual(tail.tools.map((tool) => [tool.name, tool.description]), [["read", "Read a file"]]);
+
+    assert.equal(selectStructuredTail(messages.slice(0, 3), sessionModel), undefined, "no signed thinking from this model");
+    const small = selectStructuredTail(messages, sessionModel, [], 900);
+    assert.ok(!small || small.start > 3, "a smaller byte cap keeps only newer turns");
+    assert.ok(STRUCTURED_MAX_BYTES <= 2_500_000);
+  });
+
+  const compactionEvent = (messages: any[]): SessionBeforeCompactEvent => ({
+    type: "session_before_compact",
+    preparation: {
+      firstKeptEntryId: "entry-kept",
+      messagesToSummarize: messages,
+      turnPrefixMessages: [],
+      isSplitTurn: false,
+      tokensBefore: 40000,
+      fileOps: { read: new Set(), written: new Set(), edited: new Set() } as any,
+      settings: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
+    },
+    branchEntries: [],
+    reason: "threshold",
+    willRetry: false,
+    signal: new AbortController().signal,
+  });
+
+  const recordingRegistry = (responses: Array<Partial<AssistantMessage>>) => {
+    const calls: Array<{ context: Context; options: any }> = [];
+    return {
+      calls,
+      registry: {
+        find() { return undefined; },
+        getAvailable() { return [sessionModel]; },
+        async complete(_model: any, context: Context, options: any) {
+          calls.push({ context, options });
+          const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+          return { role: "assistant", content: [{ type: "text", text: VALID_SIX_SECTION_SUMMARY }], stopReason: "stop", ...next };
+        },
+      },
+    };
+  };
+
+  it("sends the newest turns with their reasoning when the summarizer wrote them", async () => {
+    const { calls, registry } = recordingRegistry([{}]);
+    const result = await runSmartCompaction({
+      event: compactionEvent(conversation()),
+      ctx: { model: sessionModel, modelRegistry: registry as any, thinkingLevel: "high" as const, cwd: os.tmpdir() },
+      config: { version: 1, enabled: true, model: "inherit" },
+      tools: () => [{ name: "read", description: "Read a file", parameters: { type: "object" } }],
+    });
+
+    assert.equal(calls.length, 1);
+    const { context, options } = calls[0]!;
+    const texts = context.messages.map((message: any) => typeof message.content === "string" ? message.content : message.content.map((block: any) => block.text ?? block.type).join("|"));
+    assert.match(texts[0]!, /Start the migration/, "older turns stay in the text transcript");
+    assert.ok(texts[0]!.startsWith("<conversation>"));
+    assert.ok(context.messages.some((message: any) => message.role === "assistant" && message.content.some((block: any) => block.thinkingSignature === signature("rs_1"))));
+    const closing = texts.at(-1)!;
+    assert.match(closing, /call_2/, "the unfinished trailing turn is kept as text");
+    assert.match(closing, /## 6\. Resume Anchor/);
+    assert.deepEqual(context.tools?.map((tool) => tool.name), ["read"]);
+    assert.equal(options.toolChoice, "none");
+    assert.equal(result.details?.structuredMessages, 4);
+    assert.ok((result.details?.structuredBytes ?? 0) > 0);
+  });
+
+  it("falls back to the text transcript on the same model when the structured request is rejected", async () => {
+    const { calls, registry } = recordingRegistry([
+      { stopReason: "error", content: [], errorMessage: "status 413: request_too_large: Factory said: Request Entity Too Large" } as any,
+      {},
+    ]);
+    const result = await runSmartCompaction({
+      event: compactionEvent(conversation()),
+      ctx: { model: sessionModel, modelRegistry: registry as any, thinkingLevel: "high" as const, cwd: os.tmpdir() },
+      config: { version: 1, enabled: true, model: "inherit" },
+    });
+
+    assert.equal(calls.length, 2);
+    const fallback = calls[1]!;
+    assert.equal(fallback.context.messages.length, 1, "one text transcript message");
+    assert.equal(fallback.context.tools, undefined);
+    assert.equal(fallback.options.toolChoice, undefined);
+    assert.equal(fallback.options.reasoning, "high", "same plan, same reasoning");
+    assert.equal(result.details?.structuredMessages, undefined);
+    assert.equal(result.details?.attemptCount, 2);
+  });
+
+  it("uses only the text transcript when the turns came from another model or reasoning is off", async () => {
+    const otherModelTurns = conversation().map((message) => message.role === "assistant" ? { ...message, model: "other-model" } : message);
+    for (const [messages, thinkingLevel] of [[otherModelTurns, "high"], [conversation(), "off"]] as const) {
+      const { calls, registry } = recordingRegistry([{}]);
+      await runSmartCompaction({
+        event: compactionEvent(messages as any[]),
+        ctx: { model: sessionModel, modelRegistry: registry as any, thinkingLevel: thinkingLevel as any, cwd: os.tmpdir() },
+        config: { version: 1, enabled: true, model: "inherit" },
+      });
+      assert.equal(calls[0]!.context.messages.length, 1);
+      assert.equal(calls[0]!.context.tools, undefined);
+    }
   });
 });
