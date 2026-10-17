@@ -255,13 +255,80 @@ export function extractProtectedFacts(messages: AgentMessage[], previousSummary?
 export const CHECKPOINT_RESUMPTION_PREAMBLE =
   `> **Context Checkpoint**: This is an automatically generated checkpoint condensing earlier conversation turns to free up context. Treat this captured context as established ground truth and continue the task directly without acknowledging or discussing this summary. Historical items under "Done" are closed records and must not be re-executed.\n\n`;
 
+/** One labelled transcript entry and the summarized message it came from. */
+export interface TranscriptPart {
+  /** Index of the source message in the serialized list. */
+  index: number;
+  text: string;
+}
+
+export const TRANSCRIPT_SEPARATOR = "\n\n---\n\n";
+
+/** The serialized transcript of `messages`, with exact repeats collapsed. */
 export function serializeConversationForCompaction(messages: AgentMessage[]): string {
-  const parts: string[] = [];
+  return serializeConversationParts(messages).parts.map((part) => part.text).join(TRANSCRIPT_SEPARATOR);
+}
+
+function minuteUtc(timestamp: unknown): string | undefined {
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) return undefined;
+  return `${new Date(timestamp).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/**
+ * Exact repeats of an entry (the same tool call, the same tool result, a resent
+ * prompt) are kept once, at the first occurrence, with a note giving the number
+ * of copies and the time of the last one. Nothing else is dropped.
+ */
+export function collapseRepeatedParts(parts: ReadonlyArray<TranscriptPart & { timestamp?: unknown }>): {
+  parts: TranscriptPart[];
+  collapsed: number;
+} {
+  const groups = new Map<string, { first: number; count: number; last?: unknown }>();
+  parts.forEach((part, position) => {
+    const group = groups.get(part.text);
+    if (group) {
+      group.count++;
+      group.last = part.timestamp;
+    } else {
+      groups.set(part.text, { first: position, count: 1, last: part.timestamp });
+    }
+  });
+  const kept: TranscriptPart[] = [];
+  let collapsed = 0;
+  parts.forEach((part, position) => {
+    const group = groups.get(part.text)!;
+    if (group.first !== position) {
+      collapsed++;
+      return;
+    }
+    if (group.count === 1) {
+      kept.push({ index: part.index, text: part.text });
+      return;
+    }
+    const last = minuteUtc(group.last);
+    kept.push({
+      index: part.index,
+      text: `${part.text}\n[Repeated: this exact entry occurs ${group.count} times in this stretch${last ? `; the last copy at ${last}` : ""}.]`,
+    });
+  });
+  return { parts: kept, collapsed };
+}
+
+/** Labelled transcript entries for `messages`, in order, with exact repeats collapsed. */
+export function serializeConversationParts(messages: AgentMessage[]): { parts: TranscriptPart[]; collapsed: number } {
+  return collapseRepeatedParts(rawConversationParts(messages));
+}
+
+function rawConversationParts(messages: AgentMessage[]): Array<TranscriptPart & { timestamp?: unknown }> {
+  const raw: Array<TranscriptPart & { timestamp?: unknown }> = [];
   const totalMessages = messages.length;
 
   for (let i = 0; i < totalMessages; i++) {
     const msg = messages[i];
     const isRecent = (totalMessages - i) <= 14;
+    const parts = {
+      push: (text: string) => raw.push({ index: i, text, timestamp: (msg as any).timestamp }),
+    };
 
     if (msg.role === "user") {
       const text = extractTextContent((msg as any).content);
@@ -325,7 +392,7 @@ export function serializeConversationForCompaction(messages: AgentMessage[]): st
     }
   }
 
-  return parts.join("\n\n---\n\n");
+  return raw;
 }
 
 export const RUNNING_SUBAGENTS_NOTE =

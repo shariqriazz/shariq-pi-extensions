@@ -13,6 +13,8 @@ export interface SmartCompactionConfig {
   thresholdMode?: CompactionThresholdMode;
   thresholdPercent?: number;
   hardLimitTokens?: number;
+  /** Optional ceiling on the estimated size of a request, for gateways that limit body size. */
+  maxRequestBytes?: number;
 }
 
 export const DEFAULT_SMART_COMPACTION_CONFIG: SmartCompactionConfig = {
@@ -62,6 +64,9 @@ export function loadSmartCompactionConfig(file = smartCompactionConfigPath()): S
       hardLimitTokens: typeof raw.hardLimitTokens === "number" && raw.hardLimitTokens > 0
         ? Math.floor(raw.hardLimitTokens)
         : DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens,
+      ...(typeof raw.maxRequestBytes === "number" && raw.maxRequestBytes > 0
+        ? { maxRequestBytes: Math.floor(raw.maxRequestBytes) }
+        : {}),
     };
   } catch {
     return { ...DEFAULT_SMART_COMPACTION_CONFIG };
@@ -82,6 +87,9 @@ export function saveSmartCompactionConfig(config: SmartCompactionConfig, file = 
     hardLimitTokens: config.hardLimitTokens ?? DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens,
     ...(typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0
       ? { maxSummaryTokens: config.maxSummaryTokens }
+      : {}),
+    ...(typeof config.maxRequestBytes === "number" && config.maxRequestBytes > 0
+      ? { maxRequestBytes: config.maxRequestBytes }
       : {}),
   };
   try {

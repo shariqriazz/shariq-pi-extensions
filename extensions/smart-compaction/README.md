@@ -35,11 +35,13 @@ Each attempt has a 10-minute timeout. The attempts are:
 
 Authentication, permission, quota, and cancellation errors stop the ladder immediately. If every attempt fails, compaction is cancelled and the full conversation is kept; the extension does not fall back to Pi's default summarizer.
 
-The conversation is serialized for the summarizer with head and tail excerpts of long tool output, more room for failures and edits than for routine reads, bounded write and edit arguments, readable thinking cut to its first and last 2,000 characters in the 14 newest messages and 1,000 in older ones, and terminal control sequences and repeated lines removed. Session history itself is never modified.
+The conversation is serialized for the summarizer with head and tail excerpts of long tool output, more room for failures and edits than for routine reads, bounded write and edit arguments, readable thinking cut to its first and last 2,000 characters in the 14 newest messages and 1,000 in older ones, and terminal control sequences and repeated lines removed. An entry repeated exactly (the same tool call, the same tool result, a resent prompt) appears once, with the number of copies and the time of the last one. Session history itself is never modified.
+
+When the transcript does not fit one summarizer request, it is summarized in stretches of whole messages, oldest first, and each stretch is folded into the running checkpoint; every message is still summarized. A stretch holds at most an estimated 3.5 MB including the prompt, and no more than the summarizer's context window allows after its output allowance, counting three bytes per token. Each stretch goes through the attempts above and is checked for its own protected facts; the last stretch must carry all of them. If any stretch fails every attempt, compaction is cancelled.
 
 When the summarizer is the same provider, API, and model that wrote the summarized turns, and thinking is on, the first attempt sends the newest of those turns as the original messages instead, with their thinking blocks and encrypted reasoning, so the model reads its own reasoning while it writes the checkpoint. Older turns stay in the text transcript. The structured part holds whole turns, newest first, up to 2.5 MB, and the whole request is kept under an estimated 3.5 MB, below gateway body limits of about 4.5 MB. Tools those turns called are declared with tool calls disabled. Turns written by a different model than the summarizer (including a configured compaction model that differs from the session model), the later attempts, and a rejected structured request all use the text transcript.
 
-Each compaction entry records its source, serialized, and summary sizes, attempt count, duration, and, when the structured tail was used, its message count and size in `details`.
+Only the last stretch may use the structured tail. Each compaction entry records its source, serialized, and summary sizes, attempt count, duration, the number of stretches and collapsed repeats when there were any, and, when the structured tail was used, its message count and size in `details`.
 
 ## Threshold
 
@@ -48,6 +50,8 @@ Pi's own reserve-token threshold still applies. Smart Compaction adds an upper b
 - `percent`: a percentage of the model's context window;
 - `hard`: an absolute token count;
 - `hybrid` (default): whichever comes first of 95% and 400,000 tokens.
+
+The size checked is the larger of the usage the provider last reported and Pi's local estimate of the messages about to be sent, so usage a provider misreports cannot hide growth. The optional `maxRequestBytes` also starts compaction when the serialized messages reach that many bytes, for gateways whose body limit is hit before the token bound, for example by encrypted reasoning.
 
 When the bound is reached, the extension starts compaction and then sends "Continue." as a follow-up so the run resumes. Manual `/compact` input is routed through the same compaction path.
 
@@ -60,6 +64,7 @@ When the bound is reached, the extension starts compaction and then sends "Conti
 - `/smart-compaction threshold percent | hard | hybrid`
 - `/smart-compaction percent <1-100>`
 - `/smart-compaction hard-limit <tokens>`
+- `/smart-compaction max-bytes <bytes|off>`
 
 ## Configuration
 
@@ -77,4 +82,4 @@ Settings live in `<agent-dir>/smart-compaction.json`:
 }
 ```
 
-`maxSummaryTokens` is optional. Without it, the summary may use the model's full output limit.
+`maxSummaryTokens` is optional. Without it, the summary may use the model's full output limit. `maxRequestBytes` is optional and off by default.

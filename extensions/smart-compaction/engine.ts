@@ -17,6 +17,9 @@ import {
   SMART_COMPACTION_SYSTEM_PROMPT,
   SMART_COMPACTION_UPDATE_PROMPT,
   serializeConversationForCompaction,
+  serializeConversationParts,
+  TRANSCRIPT_SEPARATOR,
+  type TranscriptPart,
 } from "./prompt.ts";
 import {
   REQUEST_MAX_BYTES,
@@ -61,6 +64,10 @@ export interface SmartCompactionDetails {
   serializedCharacters: number;
   summaryCharacters: number;
   attemptCount: number;
+  /** Summarizer requests used when the transcript was split into stretches. */
+  chunkCount?: number;
+  /** Exact repeats collapsed into one transcript entry with a count. */
+  collapsedRepeats?: number;
   /** Summarized messages sent in structured form, with their reasoning, by the successful attempt. */
   structuredMessages?: number;
   structuredBytes?: number;
@@ -558,6 +565,60 @@ export interface SmartCompactionOutput {
   details?: SmartCompactionDetails;
 }
 
+const CONVERSATION_OPEN = "<conversation>";
+const CONVERSATION_CLOSE = "</conversation>";
+
+// Conservative for code, logs, and JSON, so the token estimate errs high.
+const TRANSCRIPT_BYTES_PER_TOKEN = 3;
+// Room for the system prompt, the previous checkpoint, protected facts, and instructions.
+const REQUEST_OVERHEAD_BYTES = 200_000;
+const MIN_TRANSCRIPT_BUDGET_BYTES = 50_000;
+
+/**
+ * Transcript bytes one summarizer request can carry: under the whole-request
+ * byte ceiling that gateway body limits require, and under the model's input
+ * room once the summary's output allowance is set aside.
+ */
+export function transcriptBudgetBytes(model: Model<Api>, config: SmartCompactionConfig): number {
+  const window = model.contextWindow > 0 ? model.contextWindow : 200_000;
+  const inputTokens = Math.max(0, window - computeCompactionTokenCeiling(model, config) - 16_000);
+  const bytes = Math.min(REQUEST_MAX_BYTES, inputTokens * TRANSCRIPT_BYTES_PER_TOKEN) - REQUEST_OVERHEAD_BYTES;
+  return Math.max(MIN_TRANSCRIPT_BUDGET_BYTES, bytes);
+}
+
+/**
+ * Consecutive stretches of whole messages whose transcript fits `budget`
+ * bytes, oldest first. One stretch when everything fits; a single message
+ * larger than the budget becomes its own stretch.
+ */
+export function splitTranscript(
+  parts: readonly TranscriptPart[],
+  messageCount: number,
+  budget: number,
+): Array<{ start: number; end: number; text: string }> {
+  const separator = Buffer.byteLength(TRANSCRIPT_SEPARATOR);
+  const segments: Array<{ start: number; end: number; texts: string[]; bytes: number }> = [];
+  let current = { start: 0, end: 0, texts: [] as string[], bytes: 0 };
+  let position = 0;
+  while (position < parts.length) {
+    // All parts of one message stay in the same stretch.
+    const index = parts[position]!.index;
+    const group: string[] = [];
+    while (position < parts.length && parts[position]!.index === index) group.push(parts[position++]!.text);
+    const bytes = group.reduce((total, text) => total + Buffer.byteLength(text) + separator, 0);
+    if (current.texts.length > 0 && current.bytes + bytes > budget) {
+      current.end = index;
+      segments.push(current);
+      current = { start: index, end: index, texts: [], bytes: 0 };
+    }
+    current.texts.push(...group);
+    current.bytes += bytes;
+  }
+  current.end = messageCount;
+  segments.push(current);
+  return segments.map((segment) => ({ start: segment.start, end: segment.end, text: segment.texts.join(TRANSCRIPT_SEPARATOR) }));
+}
+
 function userText(text: string): Message {
   return { role: "user", content: [{ type: "text", text }], timestamp: Date.now() };
 }
@@ -620,7 +681,8 @@ export async function runSmartCompaction(
     ...(preparation.turnPrefixMessages ?? []),
   ];
 
-  const conversationText = serializeConversationForCompaction(messagesToSummarize);
+  const serialized = serializeConversationParts(messagesToSummarize);
+  const conversationText = serialized.parts.map((part) => part.text).join(TRANSCRIPT_SEPARATOR);
   const sourceCharacters = messagesToSummarize.reduce((total, message) => {
     try {
       return total + JSON.stringify(message).length;
@@ -630,25 +692,21 @@ export async function runSmartCompaction(
   }, 0);
   const previousSummary = preparation.previousSummary?.trim();
   const protectedFacts = extractProtectedFacts(messagesToSummarize, previousSummary);
-  const baseInstruction = previousSummary ? SMART_COMPACTION_UPDATE_PROMPT : SMART_COMPACTION_INITIAL_PROMPT;
 
   // The previous checkpoint, protected facts, and instruction close every request.
-  let instructions = "";
-  if (previousSummary) {
-    instructions += `<previous-summary>\n${sanitizeTagContent(semanticSummary(previousSummary))}\n</previous-summary>\n\n`;
-  }
-  if (protectedFacts.length > 0) {
-    instructions += `<protected-facts>\n${protectedFacts.map(sanitizeTagContent).join("\n")}\n</protected-facts>\n\n`;
-  }
-  instructions += baseInstruction;
-
-  if (customInstructions?.trim()) {
-    instructions += `\n\n## Additional User Instructions:\n${sanitizeTagContent(customInstructions.trim())}`;
-  }
-
-  const textContext: Context = {
-    systemPrompt: SMART_COMPACTION_SYSTEM_PROMPT,
-    messages: [userText(`<conversation>\n${conversationText}\n</conversation>\n\n${instructions}`)],
+  const buildInstructions = (previous: string | undefined, facts: readonly string[]) => {
+    let instructions = "";
+    if (previous) {
+      instructions += `<previous-summary>\n${sanitizeTagContent(semanticSummary(previous))}\n</previous-summary>\n\n`;
+    }
+    if (facts.length > 0) {
+      instructions += `<protected-facts>\n${facts.map(sanitizeTagContent).join("\n")}\n</protected-facts>\n\n`;
+    }
+    instructions += previous ? SMART_COMPACTION_UPDATE_PROMPT : SMART_COMPACTION_INITIAL_PROMPT;
+    if (customInstructions?.trim()) {
+      instructions += `\n\n## Additional User Instructions:\n${sanitizeTagContent(customInstructions.trim())}`;
+    }
+    return instructions;
   };
 
   type AttemptPlan = {
@@ -686,119 +744,162 @@ export async function runSmartCompaction(
     });
   }
 
-  // The first stage tries the structured tail when the summarizer wrote those turns,
-  // then the text transcript on the same plan, so a rejected structured request
-  // costs one attempt and never the compaction.
   type Attempt = { plan: AttemptPlan; context: Context; characters: number; structured?: StructuredTail };
-  const attempts: Attempt[] = [];
-  for (const [index, plan] of plans.entries()) {
-    if (index === 0 && plan.reasoning && plan.reasoning !== "off") {
-      const request = buildStructuredContext(messagesToSummarize, plan.model, options.tools?.() ?? [], instructions);
-      if (request) attempts.push({ plan, ...request });
-    }
-    attempts.push({ plan, context: textContext, characters: conversationText.length });
-  }
 
-  let lastError: Error | undefined;
   let finalSummaryText = "";
   let succeeded: Attempt | undefined;
-  let repairCandidate: string | undefined;
   let retainedIdentifiersAppended = 0;
   let accumulatedUsage: Usage | undefined;
   let attemptCount = 0;
+  let serializedCharacters = 0;
   let activeModel = primaryModel;
   let activeIsInherited = primaryIsInherited;
 
-  for (const attempt of attempts) {
-    const { plan, context } = attempt;
-    const stageLabel = attempt.structured ? `${plan.stageLabel}, structured tail` : plan.stageLabel;
-    signal?.throwIfAborted();
-    attemptCount++;
-    activeModel = plan.model;
-    activeIsInherited = plan.isInherited;
-
-    const tokenCeiling = computeCompactionTokenCeiling(plan.model, config);
-
-    const timeoutController = new AbortController();
-    const timeoutTimer = setTimeout(() => {
-      timeoutController.abort(
-        new Error(`Compaction stage "${stageLabel}" timed out after 10 minutes.`),
-      );
-    }, COMPACTION_TIMEOUT_MS);
-
-    const stageSignal = signal
-      ? AbortSignal.any([signal, timeoutController.signal])
-      : timeoutController.signal;
-
-    const completeOptions: Record<string, unknown> = {
-      maxTokens: tokenCeiling,
-      signal: stageSignal,
-      cacheRetention: "none",
-      sessionId: uuidv7(),
+  /**
+   * Summarize one stretch of the conversation into a checkpoint that folds in
+   * `previous`. The first stage tries the structured tail when allowed and the
+   * summarizer wrote those turns, then the text transcript on the same plan, so
+   * a rejected structured request costs one attempt and never the compaction.
+   */
+  const summarizeSegment = async (segment: {
+    transcript: string;
+    messages: readonly AgentMessage[];
+    previous: string | undefined;
+    facts: readonly string[];
+    allowStructured: boolean;
+  }): Promise<string> => {
+    const protectedFacts = segment.facts;
+    const instructions = buildInstructions(segment.previous, protectedFacts);
+    const textContext: Context = {
+      systemPrompt: SMART_COMPACTION_SYSTEM_PROMPT,
+      messages: [userText(`${CONVERSATION_OPEN}\n${segment.transcript}\n${CONVERSATION_CLOSE}\n\n${instructions}`)],
     };
-
-    if (plan.reasoning && plan.reasoning !== "off") {
-      completeOptions.reasoning = plan.reasoning;
-    }
-    // Tools are declared only so the structured turns' calls are valid; the summary must not call them.
-    if (context.tools?.length) completeOptions.toolChoice = "none";
-
-    try {
-      const response = await ctx.modelRegistry.complete(plan.model, context, completeOptions as any);
-      stageSignal.throwIfAborted();
-      if (response.usage) {
-        accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
+    const attempts: Attempt[] = [];
+    for (const [index, plan] of plans.entries()) {
+      if (segment.allowStructured && index === 0 && plan.reasoning && plan.reasoning !== "off") {
+        const request = buildStructuredContext(segment.messages, plan.model, options.tools?.() ?? [], instructions);
+        if (request) attempts.push({ plan, ...request });
       }
+      attempts.push({ plan, context: textContext, characters: segment.transcript.length });
+    }
+
+    let lastError: Error | undefined;
+    let finalSummaryText = "";
+    let repairCandidate: string | undefined;
+
+    for (const attempt of attempts) {
+      const { plan, context } = attempt;
+      const stageLabel = attempt.structured ? `${plan.stageLabel}, structured tail` : plan.stageLabel;
+      signal?.throwIfAborted();
+      attemptCount++;
+      activeModel = plan.model;
+      activeIsInherited = plan.isInherited;
+
+      const tokenCeiling = computeCompactionTokenCeiling(plan.model, config);
+
+      const timeoutController = new AbortController();
+      const timeoutTimer = setTimeout(() => {
+        timeoutController.abort(
+          new Error(`Compaction stage "${stageLabel}" timed out after 10 minutes.`),
+        );
+      }, COMPACTION_TIMEOUT_MS);
+
+      const stageSignal = signal
+        ? AbortSignal.any([signal, timeoutController.signal])
+        : timeoutController.signal;
+
+      const completeOptions: Record<string, unknown> = {
+        maxTokens: tokenCeiling,
+        signal: stageSignal,
+        cacheRetention: "none",
+        sessionId: uuidv7(),
+      };
+
+      if (plan.reasoning && plan.reasoning !== "off") {
+        completeOptions.reasoning = plan.reasoning;
+      }
+      // Tools are declared only so the structured turns' calls are valid; the summary must not call them.
+      if (context.tools?.length) completeOptions.toolChoice = "none";
+
       try {
-        finalSummaryText = validateSummaryOutput(response, protectedFacts);
-      } catch (validationError) {
-        // Structurally sound summaries that only drop protected facts are
-        // kept as deterministic-repair candidates; structural defects cannot
-        // be repaired, so those leave no candidate behind.
-        const repairable = extractRepairableSummary(response);
-        if (repairable !== undefined) repairCandidate = repairable;
-        throw validationError;
-      }
-      lastError = undefined;
-      succeeded = attempt;
-      break; // Success!
-    } catch (err) {
-      if (signal?.aborted) throw err;
-      // A stage timeout aborts the request too; that is retryable on the next
-      // stage, not a user cancellation.
-      if (timeoutController.signal.aborted) {
+        const response = await ctx.modelRegistry.complete(plan.model, context, completeOptions as any);
+        stageSignal.throwIfAborted();
+        if (response.usage) {
+          accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
+        }
+        try {
+          finalSummaryText = validateSummaryOutput(response, protectedFacts);
+        } catch (validationError) {
+          // Structurally sound summaries that only drop protected facts are
+          // kept as deterministic-repair candidates; structural defects cannot
+          // be repaired, so those leave no candidate behind.
+          const repairable = extractRepairableSummary(response);
+          if (repairable !== undefined) repairCandidate = repairable;
+          throw validationError;
+        }
+        lastError = undefined;
+        succeeded = attempt;
+        serializedCharacters += attempt.characters;
+        break; // Success!
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        // A stage timeout aborts the request too; that is retryable on the next
+        // stage, not a user cancellation.
+        if (timeoutController.signal.aborted) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          continue;
+        }
+        if (isFatalCompactionError(err)) {
+          throw err instanceof Error ? err : new Error(String(err));
+        }
         lastError = err instanceof Error ? err : new Error(String(err));
-        continue;
+      } finally {
+        clearTimeout(timeoutTimer);
       }
-      if (isFatalCompactionError(err)) {
-        throw err instanceof Error ? err : new Error(String(err));
+    }
+
+    if ((lastError || !finalSummaryText) && repairCandidate !== undefined) {
+      // Every stage produced a structurally sound summary but the model
+      // deterministically refused to repeat low-signal identifiers. Restore
+      // them verbatim instead of failing the whole compaction.
+      const stillMissing = getDroppedProtectedFacts(repairCandidate, protectedFacts);
+      try {
+        finalSummaryText = validateSummaryText(
+          withRetainedIdentifiers(repairCandidate, stillMissing),
+          protectedFacts,
+        );
+        lastError = undefined;
+        retainedIdentifiersAppended += stillMissing.length;
+      } catch {
+        // Repair rejected; fall through to the original failure below.
       }
-      lastError = err instanceof Error ? err : new Error(String(err));
-    } finally {
-      clearTimeout(timeoutTimer);
     }
-  }
 
-  if ((lastError || !finalSummaryText) && repairCandidate !== undefined) {
-    // Every stage produced a structurally sound summary but the model
-    // deterministically refused to repeat low-signal identifiers. Restore
-    // them verbatim instead of failing the whole compaction.
-    const stillMissing = getDroppedProtectedFacts(repairCandidate, protectedFacts);
-    try {
-      finalSummaryText = validateSummaryText(
-        withRetainedIdentifiers(repairCandidate, stillMissing),
-        protectedFacts,
-      );
-      lastError = undefined;
-      retainedIdentifiersAppended = stillMissing.length;
-    } catch {
-      // Repair rejected; fall through to the original failure below.
+    if (lastError || !finalSummaryText) {
+      throw lastError ?? new Error("All smart compaction retry stages failed.");
     }
-  }
+    return finalSummaryText;
+  };
 
-  if (lastError || !finalSummaryText) {
-    throw lastError ?? new Error("All smart compaction retry stages failed.");
+  // A transcript too large for one summarizer request is summarized in
+  // stretches, oldest first, each folded into the running checkpoint. Every
+  // stretch is summarized; only the number of requests changes.
+  const budget = Math.min(...plans.map((plan) => transcriptBudgetBytes(plan.model, config)));
+  const segments = splitTranscript(serialized.parts, messagesToSummarize.length, budget);
+  let running = previousSummary;
+  for (const [index, segment] of segments.entries()) {
+    const last = index === segments.length - 1;
+    const messages = messagesToSummarize.slice(segment.start, segment.end);
+    running = await summarizeSegment({
+      transcript: segment.text,
+      messages,
+      previous: running,
+      // The last stretch must carry every protected fact; earlier ones carry theirs forward.
+      facts: last ? protectedFacts : extractProtectedFacts(messages, running),
+      allowStructured: last,
+    });
   }
+  finalSummaryText = running ?? "";
 
   // Deterministic file operation accumulation across cycles
   const prior = extractPriorFileState(branchEntries);
@@ -842,9 +943,11 @@ export async function runSmartCompaction(
     lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets.length > 0 ? gitState.lockfilesAndGeneratedAssets : undefined,
     cycleCount,
     sourceCharacters,
-    serializedCharacters: succeeded?.characters ?? conversationText.length,
+    serializedCharacters: serializedCharacters || conversationText.length,
     summaryCharacters: finalSummary.length,
     attemptCount,
+    chunkCount: segments.length > 1 ? segments.length : undefined,
+    collapsedRepeats: serialized.collapsed > 0 ? serialized.collapsed : undefined,
     structuredMessages: succeeded?.structured?.messages.length,
     structuredBytes: succeeded?.structured?.bytes,
     retainedIdentifiersAppended: retainedIdentifiersAppended > 0 ? retainedIdentifiersAppended : undefined,

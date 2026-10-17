@@ -1,3 +1,5 @@
+import { estimateTokens } from "@earendil-works/pi-coding-agent";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
@@ -15,6 +17,31 @@ import {
 import { resolveCompactionModel, runSmartCompaction } from "./engine.ts";
 
 const STATUS_KEY = "smart-compaction";
+
+// Per-message sizes, cached because the context hook sees the same message objects on every request.
+const messageSizes = new WeakMap<object, { tokens: number; bytes: number }>();
+
+/** Pi's local token estimate and the serialized byte size of the messages a request will carry. */
+export function measureMessages(messages: readonly AgentMessage[]): { tokens: number; bytes: number } {
+  let tokens = 0;
+  let bytes = 0;
+  for (const message of messages) {
+    let size = messageSizes.get(message);
+    if (!size) {
+      let serialized = 0;
+      try {
+        serialized = Buffer.byteLength(JSON.stringify(message) ?? "");
+      } catch {
+        // Unserializable messages count only toward the token estimate.
+      }
+      size = { tokens: estimateTokens(message), bytes: serialized };
+      messageSizes.set(message, size);
+    }
+    tokens += size.tokens;
+    bytes += size.bytes;
+  }
+  return { tokens, bytes };
+}
 
 export interface SmartCompactionExtensionOptions {
   configFile?: string;
@@ -101,14 +128,21 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
     // context, rather than from tool_result itself. ctx.compact() aborts the
     // active run synchronously, before this hook returns, so the over-threshold
     // request is cancelled rather than sent. Pi's native reserve-token threshold
-    // may still compact earlier.
+    // may still compact earlier. The size is the larger of the provider-reported
+    // usage and Pi's local estimate, so usage a provider misreports cannot hide
+    // growth; the optional byte ceiling catches requests that encrypted reasoning
+    // makes large in bytes but not in tokens.
     let thresholdCompactionPending = false;
-    pi.on("context", (_event, ctx) => {
+    pi.on("context", (event, ctx) => {
       if (!config.enabled || thresholdCompactionPending) return;
+      const size = measureMessages(event.messages ?? []);
       const usage = ctx.getContextUsage();
-      if (!usage || usage.tokens === null) return;
-      const threshold = compactionThresholdTokens(config, usage.contextWindow);
-      if (threshold === undefined || usage.tokens < threshold) return;
+      const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
+      const threshold = compactionThresholdTokens(config, contextWindow);
+      const tokens = Math.max(usage?.tokens ?? 0, size.tokens);
+      const overTokens = threshold !== undefined && tokens >= threshold;
+      const overBytes = config.maxRequestBytes !== undefined && size.bytes >= config.maxRequestBytes;
+      if (!overTokens && !overBytes) return;
 
       thresholdCompactionPending = true;
       ctx.compact({
@@ -237,6 +271,24 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           cmdCtx.ui.notify(`Compaction percentage set to: ${percent}%`, "info");
           return;
         }
+        if (setting === "max-bytes") {
+          if (value === "off") {
+            config.maxRequestBytes = undefined;
+          } else {
+            const bytes = Number(value?.replaceAll(",", ""));
+            if (!Number.isFinite(bytes) || bytes <= 0) {
+              cmdCtx.ui.notify("Usage: /smart-compaction max-bytes <bytes|off>", "warning");
+              return;
+            }
+            config.maxRequestBytes = Math.floor(bytes);
+          }
+          saveSmartCompactionConfig(config, options.configFile);
+          cmdCtx.ui.notify(
+            `Request byte ceiling: ${config.maxRequestBytes === undefined ? "off" : `${config.maxRequestBytes.toLocaleString()} bytes`}`,
+            "info",
+          );
+          return;
+        }
         if (setting === "hard-limit") {
           const tokens = Number(value?.replaceAll(",", ""));
           if (!Number.isFinite(tokens) || tokens <= 0) {
@@ -280,12 +332,14 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           `Thinking Level: ${currentThinkingDesc}`,
           `Summary Token Ceiling: ${maxTokensDesc}`,
           `Threshold: ${thresholdMode} (${thresholdDesc})`,
+          `Request Byte Ceiling: ${config.maxRequestBytes === undefined ? "off" : `${config.maxRequestBytes.toLocaleString()} bytes`}`,
           "",
           "Commands:",
           "  /smart-compaction enable | disable",
           "  /smart-compaction threshold percent | hard | hybrid",
           "  /smart-compaction percent <1-100>",
           "  /smart-compaction hard-limit <tokens>",
+          "  /smart-compaction max-bytes <bytes|off>",
           "  /compaction-model [inherit | <provider/model>]",
         ].join("\n");
 
