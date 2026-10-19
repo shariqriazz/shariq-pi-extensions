@@ -5,7 +5,13 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { uuidv7, type Api, type Context, type Message, type Model, type Usage, type AssistantMessage } from "@earendil-works/pi-ai";
-import type { ExtensionContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
+import {
+  buildSessionProjection,
+  estimateTokens,
+  type ExtensionContext,
+  type SessionBeforeCompactEvent,
+  type SessionEntry,
+} from "@earendil-works/pi-coding-agent";
 import type { SmartCompactionConfig } from "./config.ts";
 import {
   CHECKPOINT_RESUMPTION_PREAMBLE,
@@ -64,6 +70,8 @@ export interface SmartCompactionDetails {
   serializedCharacters: number;
   summaryCharacters: number;
   attemptCount: number;
+  /** Messages summarized beyond Pi's cut so the kept messages fit the request byte ceiling. */
+  bytesCutMessages?: number;
   /** Summarizer requests used when the transcript was split into stretches. */
   chunkCount?: number;
   /** Exact repeats collapsed into one transcript entry with a count. */
@@ -565,6 +573,132 @@ export interface SmartCompactionOutput {
   details?: SmartCompactionDetails;
 }
 
+// Per-message sizes, cached because the context hook sees the same message objects on every request.
+const messageSizes = new WeakMap<object, { tokens: number; bytes: number }>();
+
+/** Pi's local token estimate and the serialized byte size of `messages`. */
+export function measureMessages(messages: readonly AgentMessage[]): { tokens: number; bytes: number } {
+  let tokens = 0;
+  let bytes = 0;
+  for (const message of messages) {
+    let size = messageSizes.get(message);
+    if (!size) {
+      let serialized = 0;
+      try {
+        serialized = Buffer.byteLength(JSON.stringify(message) ?? "");
+      } catch {
+        // Unserializable messages count only toward the token estimate.
+      }
+      size = { tokens: estimateTokens(message), bytes: serialized };
+      messageSizes.set(message, size);
+    }
+    tokens += size.tokens;
+    bytes += size.bytes;
+  }
+  return { tokens, bytes };
+}
+
+export const OMITTED_IMAGE_NOTE =
+  "[Image left out of this request to stay under the request size limit; the session keeps it.]";
+
+/**
+ * For one request only: copies of `messages` with the oldest images replaced by
+ * a short note until the serialized messages fit `maxBytes`. Session history is
+ * not changed. Undefined when nothing needs to be left out.
+ */
+export function omitOldestImages(messages: readonly AgentMessage[], maxBytes: number): AgentMessage[] | undefined {
+  let total = measureMessages(messages).bytes;
+  if (total <= maxBytes) return undefined;
+  const result = [...messages];
+  let changed = false;
+  for (let index = 0; index < result.length && total > maxBytes; index++) {
+    const message = result[index] as any;
+    if (!Array.isArray(message?.content) || !message.content.some((block: any) => block?.type === "image")) continue;
+    const before = measureMessages([message]).bytes;
+    const content: unknown[] = [];
+    let saved = 0;
+    for (const block of message.content) {
+      if (block?.type === "image" && total - saved > maxBytes) {
+        content.push({ type: "text", text: OMITTED_IMAGE_NOTE });
+        saved += Buffer.byteLength(JSON.stringify(block));
+      } else {
+        content.push(block);
+      }
+    }
+    if (saved === 0) continue;
+    const replacement = { ...message, content } as AgentMessage;
+    result[index] = replacement;
+    total += measureMessages([replacement]).bytes - before;
+    changed = true;
+  }
+  return changed ? result : undefined;
+}
+
+// Share of the request byte ceiling the kept messages may fill, leaving room
+// for the checkpoint, system prompt, tools, and the turns before the next compaction.
+export const KEPT_SHARE_OF_REQUEST_BYTES = 0.5;
+
+const CUT_POINT_ROLES = new Set(["user", "assistant", "bashExecution", "custom", "branchSummary", "compactionSummary"]);
+
+/**
+ * Pi keeps recent messages by estimated tokens, and an image counts for little
+ * there while its data can fill megabytes. When the kept messages exceed
+ * `maxBytes`, the cut moves to the earliest later cut point (never a tool
+ * result) whose kept messages fit, or to the newest cut point; the messages
+ * passed over are summarized instead. Undefined when the kept messages fit.
+ */
+export function byteBoundedCut(
+  branchEntries: readonly SessionEntry[],
+  firstKeptEntryId: string,
+  maxBytes: number,
+): { firstKeptEntryId: string; messages: AgentMessage[] } | undefined {
+  const projected = buildSessionProjection([...branchEntries]).entries;
+  const start = projected.findIndex((entry) => entry.sourceEntry.id === firstKeptEntryId);
+  if (start < 0) return undefined;
+  const visible = (index: number) =>
+    projected[index]!.sourceEntry.type === "compaction"
+      ? []
+      : projected[index]!.messages.filter((message) => message.role !== "system");
+  const suffixBytes: number[] = new Array(projected.length + 1).fill(0);
+  for (let index = projected.length - 1; index >= start; index--) {
+    suffixBytes[index] = suffixBytes[index + 1]! + measureMessages(visible(index)).bytes;
+  }
+  if (suffixBytes[start]! <= maxBytes) return undefined;
+  let cut = -1;
+  for (let index = start + 1; index < projected.length; index++) {
+    if (!visible(index).some((message) => CUT_POINT_ROLES.has(message.role))) continue;
+    cut = index;
+    if (suffixBytes[index]! <= maxBytes) break;
+  }
+  if (cut < 0) return undefined;
+  const id = projected[cut]!.sourceEntry.id;
+  if (!id) return undefined;
+  const messages: AgentMessage[] = [];
+  for (let index = start; index < cut; index++) messages.push(...visible(index));
+  return { firstKeptEntryId: id, messages };
+}
+
+/** Pi's file-operation rule: read, write, and edit calls with a path, including calls nested in codemode results. */
+function addFileOperations(
+  messages: readonly AgentMessage[],
+  fileOps: { read: Set<string>; written: Set<string>; edited: Set<string> },
+): void {
+  const add = (name: unknown, args: any) => {
+    const file = typeof args?.path === "string" ? args.path : undefined;
+    if (!file) return;
+    if (name === "read") fileOps.read.add(file);
+    else if (name === "write") fileOps.written.add(file);
+    else if (name === "edit") fileOps.edited.add(file);
+  };
+  for (const message of messages as any[]) {
+    if (message.role === "toolResult") {
+      for (const call of message.nestedCalls?.calls ?? []) add(call.name, call.arguments);
+    } else if (message.role === "assistant" && Array.isArray(message.content)) {
+      for (const block of message.content) if (block?.type === "toolCall") add(block.name, block.arguments);
+    }
+  }
+}
+
 const CONVERSATION_OPEN = "<conversation>";
 const CONVERSATION_CLOSE = "</conversation>";
 
@@ -676,10 +810,21 @@ export async function runSmartCompaction(
   const { model: primaryModel, isInherited: primaryIsInherited } = resolveCompactionModel(ctx, config.model);
   const sessionModel = ctx.model;
 
+  // With a request byte ceiling, the kept messages must fit within part of it.
+  const extendedCut = config.maxRequestBytes
+    ? byteBoundedCut(branchEntries, preparation.firstKeptEntryId, Math.floor(config.maxRequestBytes * KEPT_SHARE_OF_REQUEST_BYTES))
+    : undefined;
   const messagesToSummarize = [
     ...(preparation.messagesToSummarize ?? []),
     ...(preparation.turnPrefixMessages ?? []),
+    ...(extendedCut?.messages ?? []),
   ];
+  const fileOps = {
+    read: new Set<string>(preparation.fileOps?.read ?? []),
+    written: new Set<string>(preparation.fileOps?.written ?? []),
+    edited: new Set<string>(preparation.fileOps?.edited ?? []),
+  };
+  if (extendedCut) addFileOperations(extendedCut.messages, fileOps);
 
   const serialized = serializeConversationParts(messagesToSummarize);
   const conversationText = serialized.parts.map((part) => part.text).join(TRANSCRIPT_SEPARATOR);
@@ -905,7 +1050,7 @@ export async function runSmartCompaction(
   const prior = extractPriorFileState(branchEntries);
   const { readFiles: readFilesList, touchedModifiedFiles: touchedModifiedFilesList } = accumulateFileLists(
     prior,
-    preparation.fileOps,
+    fileOps,
   );
   const gitState = await getGitEngineeringState(ctx.cwd, signal);
   const activeDirtyFilesList = gitState.files.map((file) => file.path);
@@ -946,6 +1091,7 @@ export async function runSmartCompaction(
     serializedCharacters: serializedCharacters || conversationText.length,
     summaryCharacters: finalSummary.length,
     attemptCount,
+    bytesCutMessages: extendedCut ? extendedCut.messages.length : undefined,
     chunkCount: segments.length > 1 ? segments.length : undefined,
     collapsedRepeats: serialized.collapsed > 0 ? serialized.collapsed : undefined,
     structuredMessages: succeeded?.structured?.messages.length,
@@ -957,7 +1103,7 @@ export async function runSmartCompaction(
 
   return {
     summary: finalSummary,
-    firstKeptEntryId: preparation.firstKeptEntryId,
+    firstKeptEntryId: extendedCut?.firstKeptEntryId ?? preparation.firstKeptEntryId,
     tokensBefore: preparation.tokensBefore,
     usage: accumulatedUsage,
     details,

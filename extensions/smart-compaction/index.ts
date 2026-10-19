@@ -1,5 +1,3 @@
-import { estimateTokens } from "@earendil-works/pi-coding-agent";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
@@ -14,34 +12,13 @@ import {
   saveSmartCompactionConfig,
   type SmartCompactionConfig,
 } from "./config.ts";
-import { resolveCompactionModel, runSmartCompaction } from "./engine.ts";
+import { measureMessages, omitOldestImages, resolveCompactionModel, runSmartCompaction } from "./engine.ts";
 
 const STATUS_KEY = "smart-compaction";
 
-// Per-message sizes, cached because the context hook sees the same message objects on every request.
-const messageSizes = new WeakMap<object, { tokens: number; bytes: number }>();
-
-/** Pi's local token estimate and the serialized byte size of the messages a request will carry. */
-export function measureMessages(messages: readonly AgentMessage[]): { tokens: number; bytes: number } {
-  let tokens = 0;
-  let bytes = 0;
-  for (const message of messages) {
-    let size = messageSizes.get(message);
-    if (!size) {
-      let serialized = 0;
-      try {
-        serialized = Buffer.byteLength(JSON.stringify(message) ?? "");
-      } catch {
-        // Unserializable messages count only toward the token estimate.
-      }
-      size = { tokens: estimateTokens(message), bytes: serialized };
-      messageSizes.set(message, size);
-    }
-    tokens += size.tokens;
-    bytes += size.bytes;
-  }
-  return { tokens, bytes };
-}
+// Pi's default keepRecentTokens: once the estimate grows this far past a
+// compaction that could not get under the limit, Pi has new history to summarize.
+const REARM_AFTER_TOKENS = 20_000;
 
 export interface SmartCompactionExtensionOptions {
   configFile?: string;
@@ -95,7 +72,14 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       }
     });
 
+    // Set by every compaction, Pi's own included; read by the threshold's context hook.
+    let compactedSinceLastRequest = false;
+    // Estimated tokens when a compaction could not bring the context under the
+    // limit; the threshold waits until enough new history exists to summarize.
+    let stuckAtTokens: number | undefined;
+
     pi.on("session_compact", (event, ctx) => {
+      compactedSinceLastRequest = true;
       if (event.fromExtension) {
         const details = event.compactionEntry.details as Record<string, unknown> | undefined;
         if (details?.customCompactor === "smart-compaction") {
@@ -131,7 +115,9 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
     // may still compact earlier. The size is the larger of the provider-reported
     // usage and Pi's local estimate, so usage a provider misreports cannot hide
     // growth; the optional byte ceiling catches requests that encrypted reasoning
-    // makes large in bytes but not in tokens.
+    // makes large in bytes but not in tokens. A request still over the limit
+    // right after a compaction cannot be helped by compacting again, so the
+    // threshold waits until the context is back under it instead of looping.
     let thresholdCompactionPending = false;
     pi.on("context", (event, ctx) => {
       if (!config.enabled || thresholdCompactionPending) return;
@@ -142,7 +128,28 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       const tokens = Math.max(usage?.tokens ?? 0, size.tokens);
       const overTokens = threshold !== undefined && tokens >= threshold;
       const overBytes = config.maxRequestBytes !== undefined && size.bytes >= config.maxRequestBytes;
-      if (!overTokens && !overBytes) return;
+      const justCompacted = compactedSinceLastRequest;
+      compactedSinceLastRequest = false;
+      if (!overTokens && !overBytes) {
+        stuckAtTokens = undefined;
+        return;
+      }
+      if (justCompacted && stuckAtTokens === undefined) {
+        stuckAtTokens = size.tokens;
+        const measured = overBytes ? `${size.bytes.toLocaleString()} bytes` : `${tokens.toLocaleString()} tokens`;
+        ctx.ui?.notify(
+          `Context is still over the Smart Compaction threshold after compacting (${measured})${overBytes ? "; the oldest images are left out of requests while it is" : ""}.`,
+          "warning",
+        );
+      }
+      if (stuckAtTokens !== undefined && size.tokens < stuckAtTokens + REARM_AFTER_TOKENS) {
+        // Recent images can exceed the byte ceiling while counting for little
+        // in Pi's token estimate, so they survive compaction; this request
+        // leaves out the oldest of them instead.
+        const trimmed = overBytes ? omitOldestImages(event.messages, config.maxRequestBytes!) : undefined;
+        return trimmed ? { messages: trimmed } : undefined;
+      }
+      stuckAtTokens = undefined;
 
       thresholdCompactionPending = true;
       ctx.compact({
@@ -150,8 +157,15 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           thresholdCompactionPending = false;
           pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
         },
-        onError: () => {
+        onError: (error) => {
           thresholdCompactionPending = false;
+          // Retrying on every request would abort each one; the next request
+          // is treated like one right after a compaction that did not help.
+          compactedSinceLastRequest = true;
+          // When Pi had nothing to summarize, the aborted run resumes.
+          if (/nothing to compact/i.test(error?.message ?? "")) {
+            pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
+          }
         },
       });
     });

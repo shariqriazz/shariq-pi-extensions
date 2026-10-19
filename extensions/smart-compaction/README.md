@@ -41,7 +41,7 @@ When the transcript does not fit one summarizer request, it is summarized in str
 
 When the summarizer is the same provider, API, and model that wrote the summarized turns, and thinking is on, the first attempt sends the newest of those turns as the original messages instead, with their thinking blocks and encrypted reasoning, so the model reads its own reasoning while it writes the checkpoint. Older turns stay in the text transcript. The structured part holds whole turns, newest first, up to 2.5 MB, and the whole request is kept under an estimated 3.5 MB, below gateway body limits of about 4.5 MB. Tools those turns called are declared with tool calls disabled. Turns written by a different model than the summarizer (including a configured compaction model that differs from the session model), the later attempts, and a rejected structured request all use the text transcript.
 
-Only the last stretch may use the structured tail. Each compaction entry records its source, serialized, and summary sizes, attempt count, duration, the number of stretches and collapsed repeats when there were any, and, when the structured tail was used, its message count and size in `details`.
+Only the last stretch may use the structured tail. Each compaction entry records its source, serialized, and summary sizes, attempt count, duration, the number of stretches, collapsed repeats, and messages summarized to fit the byte ceiling when there were any, and, when the structured tail was used, its message count and size in `details`.
 
 ## Threshold
 
@@ -52,6 +52,10 @@ Pi's own reserve-token threshold still applies. Smart Compaction adds an upper b
 - `hybrid` (default): whichever comes first of 95% and 400,000 tokens.
 
 The size checked is the larger of the usage the provider last reported and Pi's local estimate of the messages about to be sent, so usage a provider misreports cannot hide growth. The optional `maxRequestBytes` also starts compaction when the serialized messages reach that many bytes, for gateways whose body limit is hit before the token bound, for example by encrypted reasoning.
+
+With `maxRequestBytes` set, the messages kept after compaction must fit in half of it. Pi keeps recent messages by estimated tokens, and an image counts for about 1,200 there however many bytes it holds, so when the kept messages are larger, the cut moves to a later message (never a tool result) and the messages passed over are summarized too.
+
+If a request is still over the limit right after a compaction, or Pi had nothing to summarize, compacting again cannot help, so the extension warns once and does not compact again until the context is back under the limit or Pi's estimate has grown by 20,000 tokens. When Pi had nothing to summarize, the interrupted run resumes. While the context stays over `maxRequestBytes`, each request leaves out its oldest images, replaced by a short note, until it fits; the session keeps them.
 
 When the bound is reached, the extension starts compaction and then sends "Continue." as a follow-up so the run resumes. Manual `/compact` input is routed through the same compaction path.
 
