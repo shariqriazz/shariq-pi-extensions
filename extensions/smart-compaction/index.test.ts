@@ -510,6 +510,7 @@ describe("smart-compaction 10-cycle dynamic retention test", () => {
     const mockRegistry = {
       find() { return undefined; },
       getAvailable() { return [dummyModel]; },
+      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
       async complete(_m: any, context: Context) {
         const userPrompt = context.messages[0]?.content[0];
         const promptText = typeof userPrompt === "object" && "text" in userPrompt ? userPrompt.text : "";
@@ -648,6 +649,7 @@ describe("smart-compaction classified retry ladder", () => {
     const mockRegistry = {
       find() { return undefined; },
       getAvailable() { return [dummyModel]; },
+      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
       async complete() {
         calls++;
         throw new Error("HTTP 401: Unauthorized API key");
@@ -697,6 +699,7 @@ describe("smart-compaction classified retry ladder", () => {
     const mockRegistry = {
       find() { return undefined; },
       getAvailable() { return [dummyModel]; },
+      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
       async complete(_m: any, _c: any, options: any) {
         attempts++;
         if (attempts === 1) {
@@ -750,6 +753,7 @@ describe("smart-compaction classified retry ladder", () => {
     const mockRegistry = {
       find() { return undefined; },
       getAvailable() { return [dummyModel]; },
+      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
       async complete(_m: any, _c: any, options: any) {
         attemptCount++;
         if (attemptCount === 1) {
@@ -830,6 +834,7 @@ describe("smart-compaction classified retry ladder", () => {
       model: dummyModel,
       modelRegistry: {
         getAvailable() { return [dummyModel]; },
+        streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
         async complete() {
           throw new Error("HTTP 500: Upstream timeout");
         },
@@ -1030,6 +1035,7 @@ describe("smart-compaction same-model structured tail", () => {
       registry: {
         find() { return undefined; },
         getAvailable() { return [sessionModel]; },
+        streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
         async complete(_model: any, context: Context, options: any) {
           calls.push({ context, options });
           const next = responses[Math.min(calls.length - 1, responses.length - 1)];

@@ -29,7 +29,7 @@ A summary is accepted only when the model stopped normally, made no tool calls, 
 
 Each attempt has a 10-minute timeout. The first is the cached conversation described below, when it applies. The others are:
 
-1. the configured model with the configured thinking level, first with the structured tail described below when it applies, then with the text transcript;
+1. the configured model with the configured thinking level (`inherit` follows the session's current level), first with the structured tail described below when it applies, then with the text transcript;
 2. the same model with thinking off;
 3. the session model with thinking off, when it differs.
 
@@ -43,7 +43,7 @@ When the transcript does not fit one summarizer request, it is summarized in str
 
 The first attempt sends the live conversation again exactly as the last request sent it (system prompt, tools, and every message in full) and asks for the checkpoint as the next turn. The provider reads almost all of it from its prompt cache, and the summarizer sees full tool output, reasoning, and images instead of excerpts. The instruction quotes the start of the first kept message, and the checkpoint covers only what came before it.
 
-It applies when the last request was the session model's own, under five minutes ago, the summarizer is that model, the conversation has only grown since, the compaction is not for a context overflow, and the conversation is under `maxRequestBytes`. Before anything is sent, the rebuilt request must repeat the last one field for field and message for message up to its new part. When any condition fails, or the checkpoint fails validation, the attempts above run as before. `details.cachedRequest` records whether the cached conversation was used, its cache-read and other input tokens, or why it was not.
+It applies when the last request was the session model's own, under five minutes ago, the summarizer is that model, the conversation has only grown since, the compaction is not for a context overflow, and the conversation is under `maxRequestBytes`. The cache matches only at the session's thinking level, so with a configured `thinkingLevel` other than `inherit` the attempts above run instead. Before anything is sent, the rebuilt request must repeat the last one field for field and message for message up to its new part. When any condition fails, or the checkpoint fails validation, the attempts above run as before. `details.cachedRequest` records whether the cached conversation was used, its cache-read and other input tokens, or why it was not.
 
 ### Structured tail
 

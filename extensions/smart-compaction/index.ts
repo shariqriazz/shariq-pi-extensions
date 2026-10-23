@@ -60,8 +60,9 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           config,
           tools: () => pi.getAllTools(),
           ...(ctx.sessionManager?.getSessionId
-            ? { cached: { request: requests.last(), sessionId: ctx.sessionManager.getSessionId(), thinkingLevel: pi.getThinkingLevel() } }
+            ? { cached: { request: requests.last(), sessionId: ctx.sessionManager.getSessionId() } }
             : {}),
+          sessionThinkingLevel: pi.getThinkingLevel?.(),
         });
         return { compaction };
       } catch (error) {

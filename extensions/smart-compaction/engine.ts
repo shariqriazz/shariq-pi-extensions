@@ -568,7 +568,9 @@ export interface RunSmartCompactionOptions {
   /** Session tool definitions, used to declare tools the structured tail's turns called. */
   tools?: () => readonly ToolDefinitionSource[];
   /** The last main-agent request, which the cached attempt repeats, and the session's cache key. */
-  cached?: { request: CapturedRequest | undefined; sessionId: string; thinkingLevel: string };
+  cached?: { request: CapturedRequest | undefined; sessionId: string };
+  /** The session's thinking level, which `inherit` follows; the context does not always carry it. */
+  sessionThinkingLevel?: string;
 }
 
 // Anthropic's default prompt cache lasts five minutes; an older request may no longer be cached.
@@ -871,7 +873,7 @@ export async function runSmartCompaction(
   };
 
   const desiredThinking = config.thinkingLevel === "inherit" || !config.thinkingLevel
-    ? ctx.thinkingLevel
+    ? options.sessionThinkingLevel ?? ctx.thinkingLevel
     : config.thinkingLevel;
 
   const plans: AttemptPlan[] = [
@@ -976,7 +978,8 @@ export async function runSmartCompaction(
       if (context.tools?.length) completeOptions.toolChoice = "none";
 
       try {
-        const response = await ctx.modelRegistry.complete(plan.model, context, completeOptions as any);
+        // streamSimple maps the thinking level to the provider's effort; complete would ignore it.
+        const response = await ctx.modelRegistry.streamSimple(plan.model, context, completeOptions as any).result();
         stageSignal.throwIfAborted();
         if (response.usage) {
           accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
@@ -1087,7 +1090,8 @@ export async function runSmartCompaction(
       4_096,
       Math.min(computeCompactionTokenCeiling(primaryModel, config), window - (preparation.tokensBefore ?? 0) - 8_192),
     );
-    const thinking = options.cached!.thinkingLevel;
+    // The cache matches only at the session's own level, so a different configured level falls back.
+    const thinking = desiredThinking;
     let mismatch: string | undefined;
     attemptCount++;
     activeModel = primaryModel;
