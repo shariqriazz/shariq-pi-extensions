@@ -7,12 +7,14 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { uuidv7, type Api, type Context, type Message, type Model, type Usage, type AssistantMessage } from "@earendil-works/pi-ai";
 import {
   buildSessionProjection,
+  convertToLlm,
   estimateTokens,
   type ExtensionContext,
   type SessionBeforeCompactEvent,
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import type { SmartCompactionConfig } from "./config.ts";
+import { cachedInstruction, extendCapturedPayload, keptStart, messagesSince, type CapturedRequest } from "./cached.ts";
 import {
   CHECKPOINT_RESUMPTION_PREAMBLE,
   extractProtectedFacts,
@@ -70,6 +72,8 @@ export interface SmartCompactionDetails {
   serializedCharacters: number;
   summaryCharacters: number;
   attemptCount: number;
+  /** Whether the checkpoint came from the live conversation repeated as cached (input tokens include cache writes), and why not when it did not. */
+  cachedRequest?: { used: true; cacheReadTokens: number; inputTokens: number } | { used: false; reason: string };
   /** Messages summarized beyond Pi's cut so the kept messages fit the request byte ceiling. */
   bytesCutMessages?: number;
   /** Summarizer requests used when the transcript was split into stretches. */
@@ -563,7 +567,12 @@ export interface RunSmartCompactionOptions {
   config: SmartCompactionConfig;
   /** Session tool definitions, used to declare tools the structured tail's turns called. */
   tools?: () => readonly ToolDefinitionSource[];
+  /** The last main-agent request, which the cached attempt repeats, and the session's cache key. */
+  cached?: { request: CapturedRequest | undefined; sessionId: string; thinkingLevel: string };
 }
+
+// Anthropic's default prompt cache lasts five minutes; an older request may no longer be cached.
+const CACHE_WARM_MS = 5 * 60 * 1000;
 
 export interface SmartCompactionOutput {
   summary: string;
@@ -1031,20 +1040,137 @@ export async function runSmartCompaction(
   // stretch is summarized; only the number of requests changes.
   const budget = Math.min(...plans.map((plan) => transcriptBudgetBytes(plan.model, config)));
   const segments = splitTranscript(serialized.parts, messagesToSummarize.length, budget);
-  let running = previousSummary;
-  for (const [index, segment] of segments.entries()) {
-    const last = index === segments.length - 1;
-    const messages = messagesToSummarize.slice(segment.start, segment.end);
-    running = await summarizeSegment({
-      transcript: segment.text,
-      messages,
-      previous: running,
-      // The last stretch must carry every protected fact; earlier ones carry theirs forward.
-      facts: last ? protectedFacts : extractProtectedFacts(messages, running),
-      allowStructured: last,
-    });
+  const firstKeptEntryId = extendedCut?.firstKeptEntryId ?? preparation.firstKeptEntryId;
+
+  /**
+   * The live conversation sent again exactly as the last request sent it, with
+   * the checkpoint asked for as the next turn, so the provider reads it from
+   * its prompt cache and the summarizer sees every message in full. Nothing is
+   * sent unless the request provably repeats the last one up to its new part.
+   */
+  const summarizeFromCache = async (): Promise<{ text: string; usage?: Usage } | { reason: string }> => {
+    const request = options.cached?.request;
+    if (event.reason === "overflow") return { reason: "the last request overflowed the context window" };
+    if (!request) return { reason: "no request in this session to repeat" };
+    if (!sessionModel || modelKey(request.model) !== modelKey(primaryModel) || modelKey(sessionModel) !== modelKey(primaryModel)) {
+      return { reason: "the summarizer is not the model of the last request" };
+    }
+    if (Date.now() - request.at > CACHE_WARM_MS) return { reason: "the last request is over five minutes old, so its cache may have expired" };
+    const since = messagesSince(branchEntries, request);
+    if (typeof since === "string") return { reason: since };
+    const sent = [...request.messages, ...since];
+    const kept = keptStart(branchEntries, firstKeptEntryId, sent);
+    if (!kept) return { reason: "the first kept message has no text to mark where the checkpoint ends" };
+    if (config.maxRequestBytes) {
+      const bytes = Buffer.byteLength(JSON.stringify(request.payload)) + measureMessages(since).bytes;
+      if (bytes >= config.maxRequestBytes) return { reason: "the conversation is over the request byte ceiling" };
+    }
+    const instruction = {
+      role: "user",
+      content: [{
+        type: "text",
+        text: cachedInstruction({
+          kept,
+          systemPrompt: SMART_COMPACTION_SYSTEM_PROMPT,
+          initialPrompt: SMART_COMPACTION_INITIAL_PROMPT,
+          updatePrompt: SMART_COMPACTION_UPDATE_PROMPT,
+          hasPreviousCheckpoint: Boolean(previousSummary),
+          facts: protectedFacts,
+          customInstructions,
+          sanitize: sanitizeTagContent,
+        }),
+      }],
+      timestamp: Date.now(),
+    } as AgentMessage;
+    const window = primaryModel.contextWindow > 0 ? primaryModel.contextWindow : 200_000;
+    const maxTokens = Math.max(
+      4_096,
+      Math.min(computeCompactionTokenCeiling(primaryModel, config), window - (preparation.tokensBefore ?? 0) - 8_192),
+    );
+    const thinking = options.cached!.thinkingLevel;
+    let mismatch: string | undefined;
+    attemptCount++;
+    activeModel = primaryModel;
+    activeIsInherited = true;
+    const timeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => {
+      timeoutController.abort(new Error("Compaction stage \"cached conversation\" timed out after 10 minutes."));
+    }, COMPACTION_TIMEOUT_MS);
+    const stageSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
+    try {
+      // streamSimple, like the agent's own request, maps the thinking level to the provider's effort.
+      const response = await ctx.modelRegistry.streamSimple(primaryModel, { messages: convertToLlm([...sent, instruction]) } as Context, {
+        maxTokens,
+        signal: stageSignal,
+        sessionId: options.cached!.sessionId,
+        ...(thinking && thinking !== "off" ? { reasoning: thinking } : {}),
+        onPayload: (payload: unknown) => {
+          const extended = extendCapturedPayload(request.payload, payload);
+          if (typeof extended === "string") {
+            mismatch = extended;
+            throw new Error(`cached request mismatch: ${extended}`);
+          }
+          return extended;
+        },
+      } as any).result();
+      if (mismatch) return { reason: mismatch };
+      stageSignal.throwIfAborted();
+      if (response.usage) accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
+      try {
+        return { text: validateSummaryOutput(response, protectedFacts), usage: response.usage };
+      } catch (validationError) {
+        const repairable = extractRepairableSummary(response);
+        if (repairable !== undefined) {
+          const missing = getDroppedProtectedFacts(repairable, protectedFacts);
+          try {
+            const text = validateSummaryText(withRetainedIdentifiers(repairable, missing), protectedFacts);
+            retainedIdentifiersAppended += missing.length;
+            return { text, usage: response.usage };
+          } catch {
+            // Not repairable; use the transcript path.
+          }
+        }
+        return { reason: `the checkpoint was rejected: ${validationError instanceof Error ? validationError.message : String(validationError)}` };
+      }
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      if (mismatch) return { reason: mismatch };
+      if (!timeoutController.signal.aborted && isFatalCompactionError(err)) throw err instanceof Error ? err : new Error(String(err));
+      return { reason: `the request failed: ${err instanceof Error ? err.message : String(err)}` };
+    } finally {
+      clearTimeout(timeoutTimer);
+    }
+  };
+
+  let cachedRequest: SmartCompactionDetails["cachedRequest"];
+  let usedSegments = 0;
+  const cached = options.cached ? await summarizeFromCache() : undefined;
+  if (cached && "text" in cached) {
+    finalSummaryText = cached.text;
+    // Input written to the cache was not read from it, so it counts with the uncached input.
+    cachedRequest = {
+      used: true,
+      cacheReadTokens: cached.usage?.cacheRead ?? 0,
+      inputTokens: (cached.usage?.input ?? 0) + (cached.usage?.cacheWrite ?? 0),
+    };
+  } else {
+    if (cached) cachedRequest = { used: false, reason: cached.reason };
+    let running = previousSummary;
+    for (const [index, segment] of segments.entries()) {
+      const last = index === segments.length - 1;
+      const messages = messagesToSummarize.slice(segment.start, segment.end);
+      running = await summarizeSegment({
+        transcript: segment.text,
+        messages,
+        previous: running,
+        // The last stretch must carry every protected fact; earlier ones carry theirs forward.
+        facts: last ? protectedFacts : extractProtectedFacts(messages, running),
+        allowStructured: last,
+      });
+    }
+    usedSegments = segments.length;
+    finalSummaryText = running ?? "";
   }
-  finalSummaryText = running ?? "";
 
   // Deterministic file operation accumulation across cycles
   const prior = extractPriorFileState(branchEntries);
@@ -1092,7 +1218,8 @@ export async function runSmartCompaction(
     summaryCharacters: finalSummary.length,
     attemptCount,
     bytesCutMessages: extendedCut ? extendedCut.messages.length : undefined,
-    chunkCount: segments.length > 1 ? segments.length : undefined,
+    cachedRequest,
+    chunkCount: usedSegments > 1 ? usedSegments : undefined,
     collapsedRepeats: serialized.collapsed > 0 ? serialized.collapsed : undefined,
     structuredMessages: succeeded?.structured?.messages.length,
     structuredBytes: succeeded?.structured?.bytes,
@@ -1103,7 +1230,7 @@ export async function runSmartCompaction(
 
   return {
     summary: finalSummary,
-    firstKeptEntryId: extendedCut?.firstKeptEntryId ?? preparation.firstKeptEntryId,
+    firstKeptEntryId,
     tokensBefore: preparation.tokensBefore,
     usage: accumulatedUsage,
     details,

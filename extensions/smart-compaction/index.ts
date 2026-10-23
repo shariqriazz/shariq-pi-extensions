@@ -12,6 +12,7 @@ import {
   saveSmartCompactionConfig,
   type SmartCompactionConfig,
 } from "./config.ts";
+import { captureRequests } from "./cached.ts";
 import { measureMessages, omitOldestImages, resolveCompactionModel, runSmartCompaction } from "./engine.ts";
 
 const STATUS_KEY = "smart-compaction";
@@ -44,6 +45,8 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       updateStatus();
     });
 
+    const requests = captureRequests(pi);
+
     pi.on("session_before_compact", async (event: SessionBeforeCompactEvent, ctx: ExtensionContext) => {
       if (!config.enabled) {
         return undefined;
@@ -56,6 +59,9 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           ctx,
           config,
           tools: () => pi.getAllTools(),
+          ...(ctx.sessionManager?.getSessionId
+            ? { cached: { request: requests.last(), sessionId: ctx.sessionManager.getSessionId(), thinkingLevel: pi.getThinkingLevel() } }
+            : {}),
         });
         return { compaction };
       } catch (error) {
@@ -80,6 +86,8 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
 
     pi.on("session_compact", (event, ctx) => {
       compactedSinceLastRequest = true;
+      // The conversation the captured request repeated has just been replaced.
+      requests.forget();
       if (event.fromExtension) {
         const details = event.compactionEntry.details as Record<string, unknown> | undefined;
         if (details?.customCompactor === "smart-compaction") {
@@ -87,9 +95,13 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           const sourceCharacters = Number(details.sourceCharacters ?? 0);
           const serializedCharacters = Number(details.serializedCharacters ?? 0);
           const durationMs = Number(details.durationMs ?? 0);
-          const reduction = sourceCharacters > 0 && serializedCharacters > 0
-            ? ` · input ${Math.max(0, Math.round((1 - (serializedCharacters / sourceCharacters)) * 100))}% smaller`
-            : "";
+          const cached = details.cachedRequest as { used?: boolean; cacheReadTokens?: number; inputTokens?: number } | undefined;
+          const cachedInput = (cached?.cacheReadTokens ?? 0) + (cached?.inputTokens ?? 0);
+          const reduction = cached?.used
+            ? ` · cached conversation${cachedInput > 0 ? `, ${Math.round(((cached.cacheReadTokens ?? 0) / cachedInput) * 100)}% read from cache` : ""}`
+            : sourceCharacters > 0 && serializedCharacters > 0
+              ? ` · input ${Math.max(0, Math.round((1 - (serializedCharacters / sourceCharacters)) * 100))}% smaller`
+              : "";
           const duration = durationMs > 0 ? ` · ${(durationMs / 1000).toFixed(1)}s` : "";
           ctx.ui?.notify(`Smart Compaction completed (${model})${reduction}${duration}`, "info");
         }

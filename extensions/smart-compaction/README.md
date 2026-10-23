@@ -27,7 +27,7 @@ After the model's text, the extension appends sections it computes itself:
 
 A summary is accepted only when the model stopped normally, made no tool calls, and returned all six sections. Commit SHAs, UUIDs, URLs, and IPv4 addresses found in user messages and the previous checkpoint are protected facts; a summary that drops one is rejected. When the only defect is dropped identifiers, they are appended verbatim under a "Retained Identifiers" heading instead of failing.
 
-Each attempt has a 10-minute timeout. The attempts are:
+Each attempt has a 10-minute timeout. The first is the cached conversation described below, when it applies. The others are:
 
 1. the configured model with the configured thinking level, first with the structured tail described below when it applies, then with the text transcript;
 2. the same model with thinking off;
@@ -38,6 +38,14 @@ Authentication, permission, quota, and cancellation errors stop the ladder immed
 The conversation is serialized for the summarizer with head and tail excerpts of long tool output, more room for failures and edits than for routine reads, bounded write and edit arguments, readable thinking cut to its first and last 2,000 characters in the 14 newest messages and 1,000 in older ones, and terminal control sequences and repeated lines removed. An entry repeated exactly (the same tool call, the same tool result, a resent prompt) appears once, with the number of copies and the time of the last one. Session history itself is never modified.
 
 When the transcript does not fit one summarizer request, it is summarized in stretches of whole messages, oldest first, and each stretch is folded into the running checkpoint; every message is still summarized. A stretch holds at most an estimated 3.5 MB including the prompt, and no more than the summarizer's context window allows after its output allowance, counting three bytes per token. Each stretch goes through the attempts above and is checked for its own protected facts; the last stretch must carry all of them. If any stretch fails every attempt, compaction is cancelled.
+
+### Cached conversation
+
+The first attempt sends the live conversation again exactly as the last request sent it (system prompt, tools, and every message in full) and asks for the checkpoint as the next turn. The provider reads almost all of it from its prompt cache, and the summarizer sees full tool output, reasoning, and images instead of excerpts. The instruction quotes the start of the first kept message, and the checkpoint covers only what came before it.
+
+It applies when the last request was the session model's own, under five minutes ago, the summarizer is that model, the conversation has only grown since, the compaction is not for a context overflow, and the conversation is under `maxRequestBytes`. Before anything is sent, the rebuilt request must repeat the last one field for field and message for message up to its new part. When any condition fails, or the checkpoint fails validation, the attempts above run as before. `details.cachedRequest` records whether the cached conversation was used, its cache-read and other input tokens, or why it was not.
+
+### Structured tail
 
 When the summarizer is the same provider, API, and model that wrote the summarized turns, and thinking is on, the first attempt sends the newest of those turns as the original messages instead, with their thinking blocks and encrypted reasoning, so the model reads its own reasoning while it writes the checkpoint. Older turns stay in the text transcript. The structured part holds whole turns, newest first, up to 2.5 MB, and the whole request is kept under an estimated 3.5 MB, below gateway body limits of about 4.5 MB. Tools those turns called are declared with tool calls disabled. Turns written by a different model than the summarizer (including a configured compaction model that differs from the session model), the later attempts, and a rejected structured request all use the text transcript.
 
