@@ -21,6 +21,9 @@ const STATUS_KEY = "smart-compaction";
 // compaction that could not get under the limit, Pi has new history to summarize.
 const REARM_AFTER_TOKENS = 20_000;
 
+// Longer than a compaction normally takes, including retries; runs waiting on one start after this regardless.
+const HOLD_RUNS_LIMIT_MS = 30 * 60 * 1000;
+
 export interface SmartCompactionExtensionOptions {
   configFile?: string;
 }
@@ -47,7 +50,45 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
 
     const requests = captureRequests(pi);
 
+    // Compacting stops the agent, and Pi starts a new run for any message that
+    // asks for a turn (a background terminal's result, a subagent's report, any
+    // extension message). Such runs wait here until compaction ends, so they
+    // continue from the compacted conversation instead of racing it. Prompts
+    // that arrive meanwhile queue behind the waiting run.
+    let compactionInProgress: { done: Promise<void>; finish: () => void } | undefined;
+    const holdRuns = () => {
+      if (compactionInProgress) return;
+      let finish!: () => void;
+      const done = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      compactionInProgress = {
+        done,
+        finish: () => {
+          compactionInProgress = undefined;
+          finish();
+        },
+      };
+    };
+    const releaseRuns = () => compactionInProgress?.finish();
+    pi.on("before_agent_start", async () => {
+      const pending = compactionInProgress;
+      if (!pending) return;
+      // A safety bound in case a compaction never reports its end.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        pending.done,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, HOLD_RUNS_LIMIT_MS);
+          timer.unref?.();
+        }),
+      ]);
+      clearTimeout(timer);
+    });
+    pi.on("session_compact_failed", () => releaseRuns());
+
     pi.on("session_before_compact", async (event: SessionBeforeCompactEvent, ctx: ExtensionContext) => {
+      holdRuns();
       if (!config.enabled) {
         return undefined;
       }
@@ -86,6 +127,7 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
     let stuckAtTokens: number | undefined;
 
     pi.on("session_compact", (event, ctx) => {
+      releaseRuns();
       compactedSinceLastRequest = true;
       // The conversation the captured request repeated has just been replaced.
       requests.forget();
@@ -114,7 +156,8 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       const text = event.text.trim();
       if (text === "/compact" || text.startsWith("/compact ")) {
         const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
-        ctx.compact(customInstructions ? { customInstructions } : undefined);
+        holdRuns();
+        ctx.compact({ ...(customInstructions ? { customInstructions } : {}), onComplete: releaseRuns, onError: releaseRuns });
         return { action: "handled" };
       }
       return { action: "continue" };
@@ -165,12 +208,15 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       stuckAtTokens = undefined;
 
       thresholdCompactionPending = true;
+      holdRuns();
       ctx.compact({
         onComplete: () => {
+          releaseRuns();
           thresholdCompactionPending = false;
           pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
         },
         onError: (error) => {
+          releaseRuns();
           thresholdCompactionPending = false;
           // Retrying on every request would abort each one; the next request
           // is treated like one right after a compaction that did not help.

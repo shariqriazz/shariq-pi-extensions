@@ -67,6 +67,10 @@ If a request is still over the limit right after a compaction, or Pi had nothing
 
 When the bound is reached, the extension starts compaction and then sends "Continue." as a follow-up so the run resumes. Manual `/compact` input is routed through the same compaction path.
 
+## Messages during compaction
+
+Compacting stops the agent, and Pi would otherwise start a new run for any message that asks for a turn while the summary is still being written, such as a background terminal's result or a subagent's report. While any compaction runs, Smart Compaction holds those runs and starts them once it ends, from the compacted conversation; messages that arrive meanwhile queue behind them. Pi's interactive editor queues typed prompts on its own. Pi itself rejects a typed prompt sent over RPC during an extension-started compaction, so clients such as Paseo show an error and the prompt must be sent again.
+
 ## Commands
 
 - `/compaction-model`: pick the compaction model, or `inherit` to use the session model.
