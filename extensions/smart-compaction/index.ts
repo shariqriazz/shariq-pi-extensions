@@ -24,6 +24,9 @@ const REARM_AFTER_TOKENS = 20_000;
 // Longer than a compaction normally takes, including retries; runs waiting on one start after this regardless.
 const HOLD_RUNS_LIMIT_MS = 30 * 60 * 1000;
 
+// How long a requested compaction may wait for the agent to stop before new runs are no longer stopped for it.
+const WAIT_TO_COMPACT_LIMIT_MS = 10 * 60 * 1000;
+
 export interface SmartCompactionExtensionOptions {
   configFile?: string;
 }
@@ -52,9 +55,18 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
 
     // Compacting stops the agent, and Pi starts a new run for any message that
     // asks for a turn (a background terminal's result, a subagent's report, any
-    // extension message). Such runs wait here until compaction ends, so they
-    // continue from the compacted conversation instead of racing it. Prompts
-    // that arrive meanwhile queue behind the waiting run.
+    // extension message). Once Pi has started compacting, such runs wait here
+    // until it ends, so they continue from the compacted conversation instead of
+    // racing it; prompts that arrive meanwhile queue behind the waiting run.
+    // Pi first waits for the agent to go idle, so a run must never be held
+    // before then: that wait would never end. A run that starts during that
+    // wait, after this extension asked for a compaction, is stopped before its
+    // first request instead (see the context hook); its message is already saved.
+    let compactionRequestedAt: number | undefined;
+    // Runs stopped while waiting; their messages are saved and answered once the agent resumes.
+    let runsStoppedWhileWaiting = 0;
+    const waitingToCompact = () =>
+      compactionRequestedAt !== undefined && Date.now() - compactionRequestedAt < WAIT_TO_COMPACT_LIMIT_MS;
     let compactionInProgress: { done: Promise<void>; finish: () => void } | undefined;
     const holdRuns = () => {
       if (compactionInProgress) return;
@@ -85,9 +97,14 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       ]);
       clearTimeout(timer);
     });
-    pi.on("session_compact_failed", () => releaseRuns());
+    pi.on("session_compact_failed", () => {
+      compactionRequestedAt = undefined;
+      releaseRuns();
+    });
 
     pi.on("session_before_compact", async (event: SessionBeforeCompactEvent, ctx: ExtensionContext) => {
+      // Pi emits this only once the agent is idle and compaction has begun.
+      compactionRequestedAt = undefined;
       holdRuns();
       if (!config.enabled) {
         return undefined;
@@ -156,8 +173,19 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       const text = event.text.trim();
       if (text === "/compact" || text.startsWith("/compact ")) {
         const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
-        holdRuns();
-        ctx.compact({ ...(customInstructions ? { customInstructions } : {}), onComplete: releaseRuns, onError: releaseRuns });
+        // Resume work this compaction interrupted, and answer messages that arrived
+        // meanwhile; an idle /compact with nothing arriving stays idle.
+        const interrupted = ctx.isIdle?.() === false;
+        const settle = () => {
+          compactionRequestedAt = undefined;
+          releaseRuns();
+          const resume = interrupted || runsStoppedWhileWaiting > 0;
+          runsStoppedWhileWaiting = 0;
+          if (resume) pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
+        };
+        runsStoppedWhileWaiting = 0;
+        compactionRequestedAt = Date.now();
+        ctx.compact({ ...(customInstructions ? { customInstructions } : {}), onComplete: settle, onError: settle });
         return { action: "handled" };
       }
       return { action: "continue" };
@@ -176,6 +204,12 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
     // threshold waits until the context is back under it instead of looping.
     let thresholdCompactionPending = false;
     pi.on("context", (event, ctx) => {
+      if (waitingToCompact()) {
+        // A run started while Pi waits for the agent to stop before compacting.
+        runsStoppedWhileWaiting++;
+        ctx.abort();
+        return;
+      }
       if (!config.enabled || thresholdCompactionPending) return;
       const size = measureMessages(event.messages ?? []);
       const usage = ctx.getContextUsage();
@@ -208,21 +242,28 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
       stuckAtTokens = undefined;
 
       thresholdCompactionPending = true;
-      holdRuns();
+      runsStoppedWhileWaiting = 0;
+      compactionRequestedAt = Date.now();
       ctx.compact({
         onComplete: () => {
+          runsStoppedWhileWaiting = 0;
+          compactionRequestedAt = undefined;
           releaseRuns();
           thresholdCompactionPending = false;
           pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
         },
         onError: (error) => {
+          compactionRequestedAt = undefined;
           releaseRuns();
           thresholdCompactionPending = false;
           // Retrying on every request would abort each one; the next request
           // is treated like one right after a compaction that did not help.
           compactedSinceLastRequest = true;
-          // When Pi had nothing to summarize, the aborted run resumes.
-          if (/nothing to compact/i.test(error?.message ?? "")) {
+          // When Pi had nothing to summarize, the aborted run resumes, as it does
+          // when runs were stopped while waiting so their messages get answered.
+          const stopped = runsStoppedWhileWaiting > 0;
+          runsStoppedWhileWaiting = 0;
+          if (stopped || /nothing to compact/i.test(error?.message ?? "")) {
             pi.sendUserMessage("Continue.", { deliverAs: "followUp" });
           }
         },
