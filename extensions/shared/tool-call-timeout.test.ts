@@ -11,8 +11,7 @@ import {
 
 test("the production timeout error names the tool and three-minute limit", () => {
   assert.equal(
-    new ToolCallTimeoutError("fixture_tool", CHILD_TOOL_CALL_TIMEOUT_MS)
-      .message,
+    new ToolCallTimeoutError("fixture_tool", CHILD_TOOL_CALL_TIMEOUT_MS).message,
     'Tool call "fixture_tool" timed out after 3 minutes.',
   );
 });
@@ -27,10 +26,7 @@ test("a hung tool call fails clearly and receives an abort signal", async () => 
     }),
     (error: unknown) => {
       assert.equal(error instanceof ToolCallTimeoutError, true);
-      assert.equal(
-        error instanceof Error ? error.message : "",
-        'Tool call "hung_fixture" timed out after 10 ms.',
-      );
+      assert.equal(error instanceof Error ? error.message : "", 'Tool call "hung_fixture" timed out after 10 ms.');
       return true;
     },
   );
@@ -42,12 +38,7 @@ test("a hung tool call fails clearly and receives an abort signal", async () => 
 test("parent cancellation still stops the timeout wrapper immediately", async () => {
   const controller = new AbortController();
   const reason = new Error("cancelled fixture");
-  const pending = runWithToolCallTimeout(
-    "hung_fixture",
-    60_000,
-    controller.signal,
-    () => new Promise(() => {}),
-  );
+  const pending = runWithToolCallTimeout("hung_fixture", 60_000, controller.signal, () => new Promise(() => {}));
 
   controller.abort(reason);
 
@@ -59,7 +50,9 @@ test("an already-cancelled call never starts the tool", async () => {
   controller.abort(new Error("cancelled first"));
   let started = false;
   await assert.rejects(
-    runWithToolCallTimeout("side_effect", 60_000, controller.signal, async () => { started = true; }),
+    runWithToolCallTimeout("side_effect", 60_000, controller.signal, async () => {
+      started = true;
+    }),
     /cancelled first/,
   );
   assert.equal(started, false);
@@ -111,15 +104,7 @@ test("successful and terminating tool results pass through unchanged", async () 
     terminate: true,
   };
 
-  assert.equal(
-    await runWithToolCallTimeout(
-      "structured_output",
-      10,
-      undefined,
-      async () => result,
-    ),
-    result,
-  );
+  assert.equal(await runWithToolCallTimeout("structured_output", 10, undefined, async () => result), result);
 });
 
 test("the timeout is fresh for each tool call, not shared across calls", async () => {

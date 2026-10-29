@@ -1,10 +1,4 @@
-export const TASK_STATUSES = [
-  "pending",
-  "in_progress",
-  "completed",
-  "blocked",
-  "cancelled",
-] as const;
+export const TASK_STATUSES = ["pending", "in_progress", "completed", "blocked", "cancelled"] as const;
 
 export const TASK_PRIORITIES = ["high", "medium", "low"] as const;
 

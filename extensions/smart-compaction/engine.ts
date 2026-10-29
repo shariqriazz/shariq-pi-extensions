@@ -4,7 +4,15 @@ import { lstat, open } from "node:fs/promises";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { uuidv7, type Api, type Context, type Message, type Model, type Usage, type AssistantMessage } from "@earendil-works/pi-ai";
+import {
+  uuidv7,
+  type Api,
+  type Context,
+  type Message,
+  type Model,
+  type Usage,
+  type AssistantMessage,
+} from "@earendil-works/pi-ai";
 import {
   buildSessionProjection,
   convertToLlm,
@@ -296,7 +304,7 @@ function truncatePatch(text: string, files: DirtyFileState[]): string {
     if (bodyBudget < 40) return header.trimEnd();
     if (chunk.length <= bodyBudget) return `${header}${chunk.trim()}`;
     const half = Math.floor(bodyBudget / 2);
-    return `${header}${chunk.slice(0, half).trimEnd()}\n[... ${chunk.length - (half * 2)} characters omitted ...]\n${chunk.slice(-half).trimStart()}`;
+    return `${header}${chunk.slice(0, half).trimEnd()}\n[... ${chunk.length - half * 2} characters omitted ...]\n${chunk.slice(-half).trimStart()}`;
   });
   return `${inventoryBlock}\n${excerpts.join("\n\n")}`;
 }
@@ -312,11 +320,7 @@ async function runGit(cwd: string, args: string[], signal?: AbortSignal): Promis
   return result.stdout;
 }
 
-async function readUntrackedPreviews(
-  root: string,
-  files: DirtyFileState[],
-  signal?: AbortSignal,
-): Promise<string> {
+async function readUntrackedPreviews(root: string, files: DirtyFileState[], signal?: AbortSignal): Promise<string> {
   const sections: string[] = [];
   let remaining = DIRTY_PATCH_CHARS;
   for (const file of files) {
@@ -377,7 +381,10 @@ export async function getGitEngineeringState(cwd?: string, signal?: AbortSignal)
     const codeFiles = files.filter((file) => !isGeneratedOrLockfile(file.path));
     const lockOrGeneratedFiles = files.filter((file) => isGeneratedOrLockfile(file.path)).map((file) => file.path);
 
-    const trackedCodePaths = codeFiles.filter((file) => file.status !== "??").map((file) => file.path).slice(0, 250);
+    const trackedCodePaths = codeFiles
+      .filter((file) => file.status !== "??")
+      .map((file) => file.path)
+      .slice(0, 250);
     const stagedArgs = ["diff", "--cached", "--no-ext-diff", "--no-color", "--unified=2"];
     const unstagedArgs = ["diff", "--no-ext-diff", "--no-color", "--unified=2"];
     if (trackedCodePaths.length > 0) {
@@ -423,7 +430,9 @@ export const RETAINED_IDENTIFIERS_HEADING = "### Retained Identifiers";
 export function extractSummaryText(response: AssistantMessage): string {
   if (response.stopReason !== "stop") {
     const errorDetails = response.errorMessage ? `: ${response.errorMessage}` : "";
-    throw new Error(`Compaction model did not complete successfully (stopReason="${response.stopReason}"${errorDetails}).`);
+    throw new Error(
+      `Compaction model did not complete successfully (stopReason="${response.stopReason}"${errorDetails}).`,
+    );
   }
 
   // Reject accidental tool calls
@@ -504,10 +513,8 @@ export function extractRepairableSummary(response: AssistantMessage): string | u
   return text;
 }
 
-export function computeCompactionTokenCeiling(
-  model: Model<Api>,
-  config: SmartCompactionConfig,
-): number {  const modelMax = model.maxTokens > 0 ? model.maxTokens : 32768;
+export function computeCompactionTokenCeiling(model: Model<Api>, config: SmartCompactionConfig): number {
+  const modelMax = model.maxTokens > 0 ? model.maxTokens : 32768;
 
   // If the user explicitly configured a maxSummaryTokens override, respect it within model's capacity
   if (typeof config.maxSummaryTokens === "number" && config.maxSummaryTokens > 0) {
@@ -524,7 +531,10 @@ export function isFatalCompactionError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === "AbortError") return true;
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   if (msg.includes("aborted") || msg.includes("cancelled")) return true;
-  if (msg.includes("invalid_request") && (msg.includes("reasoning") || msg.includes("effort") || msg.includes("budget"))) {
+  if (
+    msg.includes("invalid_request") &&
+    (msg.includes("reasoning") || msg.includes("effort") || msg.includes("budget"))
+  ) {
     return false;
   }
   return (
@@ -761,7 +771,11 @@ export function splitTranscript(
   }
   current.end = messageCount;
   segments.push(current);
-  return segments.map((segment) => ({ start: segment.start, end: segment.end, text: segment.texts.join(TRANSCRIPT_SEPARATOR) }));
+  return segments.map((segment) => ({
+    start: segment.start,
+    end: segment.end,
+    text: segment.texts.join(TRANSCRIPT_SEPARATOR),
+  }));
 }
 
 function userText(text: string): Message {
@@ -795,7 +809,8 @@ export function buildStructuredContext(
     const trailing = serializeConversationForCompaction(messages.slice(tail.end) as AgentMessage[]);
     const lead = older ? `<conversation>\n${older}\n</conversation>\n\n${STRUCTURED_LEAD_NOTE}` : STRUCTURED_ONLY_NOTE;
     const closing = `${trailing ? `<conversation>\n${trailing}\n</conversation>\n\n` : ""}${STRUCTURED_CLOSING_NOTE}\n\n${instructions}`;
-    const textBytes = Buffer.byteLength(lead) + Buffer.byteLength(closing) + Buffer.byteLength(SMART_COMPACTION_SYSTEM_PROMPT);
+    const textBytes =
+      Buffer.byteLength(lead) + Buffer.byteLength(closing) + Buffer.byteLength(SMART_COMPACTION_SYSTEM_PROMPT);
     if (tail.bytes + textBytes > REQUEST_MAX_BYTES) continue;
     return {
       context: {
@@ -810,9 +825,7 @@ export function buildStructuredContext(
   return undefined;
 }
 
-export async function runSmartCompaction(
-  options: RunSmartCompactionOptions,
-): Promise<SmartCompactionOutput> {
+export async function runSmartCompaction(options: RunSmartCompactionOptions): Promise<SmartCompactionOutput> {
   const startedAt = Date.now();
   const { event, ctx, config } = options;
   const { preparation, branchEntries, signal, customInstructions } = event;
@@ -823,7 +836,11 @@ export async function runSmartCompaction(
 
   // With a request byte ceiling, the kept messages must fit within part of it.
   const extendedCut = config.maxRequestBytes
-    ? byteBoundedCut(branchEntries, preparation.firstKeptEntryId, Math.floor(config.maxRequestBytes * KEPT_SHARE_OF_REQUEST_BYTES))
+    ? byteBoundedCut(
+        branchEntries,
+        preparation.firstKeptEntryId,
+        Math.floor(config.maxRequestBytes * KEPT_SHARE_OF_REQUEST_BYTES),
+      )
     : undefined;
   const messagesToSummarize = [
     ...(preparation.messagesToSummarize ?? []),
@@ -872,14 +889,16 @@ export async function runSmartCompaction(
     stageLabel: string;
   };
 
-  const desiredThinking = config.thinkingLevel === "inherit" || !config.thinkingLevel
-    ? options.sessionThinkingLevel ?? ctx.thinkingLevel
-    : config.thinkingLevel;
+  const desiredThinking =
+    config.thinkingLevel === "inherit" || !config.thinkingLevel
+      ? (options.sessionThinkingLevel ?? ctx.thinkingLevel)
+      : config.thinkingLevel;
 
   const plans: AttemptPlan[] = [
     {
       model: primaryModel,
-      reasoning: primaryModel.reasoning && desiredThinking && desiredThinking !== "off" ? (desiredThinking as any) : undefined,
+      reasoning:
+        primaryModel.reasoning && desiredThinking && desiredThinking !== "off" ? (desiredThinking as any) : undefined,
       isInherited: primaryIsInherited,
       stageLabel: "primary model with reasoning",
     },
@@ -955,14 +974,10 @@ export async function runSmartCompaction(
 
       const timeoutController = new AbortController();
       const timeoutTimer = setTimeout(() => {
-        timeoutController.abort(
-          new Error(`Compaction stage "${stageLabel}" timed out after 10 minutes.`),
-        );
+        timeoutController.abort(new Error(`Compaction stage "${stageLabel}" timed out after 10 minutes.`));
       }, COMPACTION_TIMEOUT_MS);
 
-      const stageSignal = signal
-        ? AbortSignal.any([signal, timeoutController.signal])
-        : timeoutController.signal;
+      const stageSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
 
       const completeOptions: Record<string, unknown> = {
         maxTokens: tokenCeiling,
@@ -1021,10 +1036,7 @@ export async function runSmartCompaction(
       // them verbatim instead of failing the whole compaction.
       const stillMissing = getDroppedProtectedFacts(repairCandidate, protectedFacts);
       try {
-        finalSummaryText = validateSummaryText(
-          withRetainedIdentifiers(repairCandidate, stillMissing),
-          protectedFacts,
-        );
+        finalSummaryText = validateSummaryText(withRetainedIdentifiers(repairCandidate, stillMissing), protectedFacts);
         lastError = undefined;
         retainedIdentifiersAppended += stillMissing.length;
       } catch {
@@ -1055,10 +1067,15 @@ export async function runSmartCompaction(
     const request = options.cached?.request;
     if (event.reason === "overflow") return { reason: "the last request overflowed the context window" };
     if (!request) return { reason: "no request in this session to repeat" };
-    if (!sessionModel || modelKey(request.model) !== modelKey(primaryModel) || modelKey(sessionModel) !== modelKey(primaryModel)) {
+    if (
+      !sessionModel ||
+      modelKey(request.model) !== modelKey(primaryModel) ||
+      modelKey(sessionModel) !== modelKey(primaryModel)
+    ) {
       return { reason: "the summarizer is not the model of the last request" };
     }
-    if (Date.now() - request.at > CACHE_WARM_MS) return { reason: "the last request is over five minutes old, so its cache may have expired" };
+    if (Date.now() - request.at > CACHE_WARM_MS)
+      return { reason: "the last request is over five minutes old, so its cache may have expired" };
     const since = messagesSince(branchEntries, request);
     if (typeof since === "string") return { reason: since };
     const sent = [...request.messages, ...since];
@@ -1070,19 +1087,21 @@ export async function runSmartCompaction(
     }
     const instruction = {
       role: "user",
-      content: [{
-        type: "text",
-        text: cachedInstruction({
-          kept,
-          systemPrompt: SMART_COMPACTION_SYSTEM_PROMPT,
-          initialPrompt: SMART_COMPACTION_INITIAL_PROMPT,
-          updatePrompt: SMART_COMPACTION_UPDATE_PROMPT,
-          hasPreviousCheckpoint: Boolean(previousSummary),
-          facts: protectedFacts,
-          customInstructions,
-          sanitize: sanitizeTagContent,
-        }),
-      }],
+      content: [
+        {
+          type: "text",
+          text: cachedInstruction({
+            kept,
+            systemPrompt: SMART_COMPACTION_SYSTEM_PROMPT,
+            initialPrompt: SMART_COMPACTION_INITIAL_PROMPT,
+            updatePrompt: SMART_COMPACTION_UPDATE_PROMPT,
+            hasPreviousCheckpoint: Boolean(previousSummary),
+            facts: protectedFacts,
+            customInstructions,
+            sanitize: sanitizeTagContent,
+          }),
+        },
+      ],
       timestamp: Date.now(),
     } as AgentMessage;
     const window = primaryModel.contextWindow > 0 ? primaryModel.contextWindow : 200_000;
@@ -1098,25 +1117,31 @@ export async function runSmartCompaction(
     activeIsInherited = true;
     const timeoutController = new AbortController();
     const timeoutTimer = setTimeout(() => {
-      timeoutController.abort(new Error("Compaction stage \"cached conversation\" timed out after 10 minutes."));
+      timeoutController.abort(new Error('Compaction stage "cached conversation" timed out after 10 minutes.'));
     }, COMPACTION_TIMEOUT_MS);
     const stageSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
     try {
       // streamSimple, like the agent's own request, maps the thinking level to the provider's effort.
-      const response = await ctx.modelRegistry.streamSimple(primaryModel, { messages: convertToLlm([...sent, instruction]) } as Context, {
-        maxTokens,
-        signal: stageSignal,
-        sessionId: options.cached!.sessionId,
-        ...(thinking && thinking !== "off" ? { reasoning: thinking } : {}),
-        onPayload: (payload: unknown) => {
-          const extended = extendCapturedPayload(request.payload, payload);
-          if (typeof extended === "string") {
-            mismatch = extended;
-            throw new Error(`cached request mismatch: ${extended}`);
-          }
-          return extended;
-        },
-      } as any).result();
+      const response = await ctx.modelRegistry
+        .streamSimple(
+          primaryModel,
+          { messages: convertToLlm([...sent, instruction]) } as Context,
+          {
+            maxTokens,
+            signal: stageSignal,
+            sessionId: options.cached!.sessionId,
+            ...(thinking && thinking !== "off" ? { reasoning: thinking } : {}),
+            onPayload: (payload: unknown) => {
+              const extended = extendCapturedPayload(request.payload, payload);
+              if (typeof extended === "string") {
+                mismatch = extended;
+                throw new Error(`cached request mismatch: ${extended}`);
+              }
+              return extended;
+            },
+          } as any,
+        )
+        .result();
       if (mismatch) return { reason: mismatch };
       stageSignal.throwIfAborted();
       if (response.usage) accumulatedUsage = combineCompactionUsage(accumulatedUsage, response.usage);
@@ -1134,12 +1159,15 @@ export async function runSmartCompaction(
             // Not repairable; use the transcript path.
           }
         }
-        return { reason: `the checkpoint was rejected: ${validationError instanceof Error ? validationError.message : String(validationError)}` };
+        return {
+          reason: `the checkpoint was rejected: ${validationError instanceof Error ? validationError.message : String(validationError)}`,
+        };
       }
     } catch (err) {
       if (signal?.aborted) throw err;
       if (mismatch) return { reason: mismatch };
-      if (!timeoutController.signal.aborted && isFatalCompactionError(err)) throw err instanceof Error ? err : new Error(String(err));
+      if (!timeoutController.signal.aborted && isFatalCompactionError(err))
+        throw err instanceof Error ? err : new Error(String(err));
       return { reason: `the request failed: ${err instanceof Error ? err.message : String(err)}` };
     } finally {
       clearTimeout(timeoutTimer);
@@ -1215,7 +1243,8 @@ export async function runSmartCompaction(
     dirtyStateAvailable: gitState.available,
     activeBackgroundProcesses: activeBackgroundProcesses.length > 0 ? activeBackgroundProcesses : undefined,
     runningSubagents: runningSubagents.length > 0 ? runningSubagents : undefined,
-    lockfilesAndGeneratedAssets: gitState.lockfilesAndGeneratedAssets.length > 0 ? gitState.lockfilesAndGeneratedAssets : undefined,
+    lockfilesAndGeneratedAssets:
+      gitState.lockfilesAndGeneratedAssets.length > 0 ? gitState.lockfilesAndGeneratedAssets : undefined,
     cycleCount,
     sourceCharacters,
     serializedCharacters: serializedCharacters || conversationText.length,

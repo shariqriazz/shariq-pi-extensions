@@ -1,8 +1,4 @@
-import type {
-  ExtensionCommandContext,
-  KeybindingsManager,
-  Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import {
@@ -42,41 +38,59 @@ function configuredKeys(
 
 function statusState(status: TaskStatus): SemanticState {
   switch (status) {
-    case "in_progress": return "active";
-    case "completed": return "success";
-    case "blocked": return "error";
+    case "in_progress":
+      return "active";
+    case "completed":
+      return "success";
+    case "blocked":
+      return "error";
     case "pending":
-    case "cancelled": return "muted";
+    case "cancelled":
+      return "muted";
   }
 }
 
 function statusColor(status: TaskStatus): "accent" | "success" | "error" | "muted" {
   switch (status) {
-    case "in_progress": return "accent";
-    case "completed": return "success";
-    case "blocked": return "error";
+    case "in_progress":
+      return "accent";
+    case "completed":
+      return "success";
+    case "blocked":
+      return "error";
     case "pending":
-    case "cancelled": return "muted";
+    case "cancelled":
+      return "muted";
   }
 }
 
 export function taskGlyph(status: TaskStatus): string {
   switch (status) {
-    case "pending": return "○";
-    case "in_progress": return "◆";
-    case "completed": return "✓";
-    case "blocked": return "!";
-    case "cancelled": return "×";
+    case "pending":
+      return "○";
+    case "in_progress":
+      return "◆";
+    case "completed":
+      return "✓";
+    case "blocked":
+      return "!";
+    case "cancelled":
+      return "×";
   }
 }
 
 function nextWorkingStatus(status: TaskStatus): TaskStatus {
   switch (status) {
-    case "pending": return "in_progress";
-    case "in_progress": return "completed";
-    case "completed": return "pending";
-    case "blocked": return "in_progress";
-    case "cancelled": return "pending";
+    case "pending":
+      return "in_progress";
+    case "in_progress":
+      return "completed";
+    case "completed":
+      return "pending";
+    case "blocked":
+      return "in_progress";
+    case "cancelled":
+      return "pending";
   }
 }
 
@@ -165,8 +179,10 @@ export class TaskDashboard implements Component {
     if (data === "e") this.close({ kind: "edit", id: task.id });
     else if (data === "d") this.close({ kind: "delete", id: task.id });
     else if (data === " ") this.close({ kind: "status", id: task.id, status: nextWorkingStatus(task.status) });
-    else if (data === "b") this.close({ kind: "status", id: task.id, status: task.status === "blocked" ? "pending" : "blocked" });
-    else if (data === "c") this.close({ kind: "status", id: task.id, status: task.status === "cancelled" ? "pending" : "cancelled" });
+    else if (data === "b")
+      this.close({ kind: "status", id: task.id, status: task.status === "blocked" ? "pending" : "blocked" });
+    else if (data === "c")
+      this.close({ kind: "status", id: task.id, status: task.status === "cancelled" ? "pending" : "cancelled" });
     else if (data === "p") this.close({ kind: "priority", id: task.id, priority: nextPriority(task.priority) });
   }
 
@@ -177,22 +193,32 @@ export class TaskDashboard implements Component {
     this.selected = Math.min(this.selected, Math.max(0, visible.length - 1));
     const rows = this.tui.terminal.rows || 30;
     const completed = counts.completed + counts.cancelled;
-    const stateTone: SemanticState = counts.blocked > 0 ? "warning" : counts.inProgress > 0 ? "active" : completed === counts.total && counts.total > 0 ? "success" : "muted";
-    const stateText = counts.blocked > 0
-      ? `${counts.blocked} blocked`
-      : counts.inProgress > 0
-        ? `${counts.inProgress} active`
-        : completed === counts.total && counts.total > 0
-          ? "all done"
-          : "waiting";
+    const stateTone: SemanticState =
+      counts.blocked > 0
+        ? "warning"
+        : counts.inProgress > 0
+          ? "active"
+          : completed === counts.total && counts.total > 0
+            ? "success"
+            : "muted";
+    const stateText =
+      counts.blocked > 0
+        ? `${counts.blocked} blocked`
+        : counts.inProgress > 0
+          ? `${counts.inProgress} active`
+          : completed === counts.total && counts.total > 0
+            ? "all done"
+            : "waiting";
     const title = `  ${this.theme.fg("accent", this.theme.bold("Task list"))}`;
     const summary = `${stateLabel(this.theme, stateTone, stateText)}  `;
     const lines: string[] = [joinSides(title, summary, width)];
-    lines.push(joinSides(
-      `  ${meter(this.theme, completed, Math.max(1, counts.total), Math.min(28, Math.max(12, width - 54)), completed === counts.total && counts.total > 0 ? "success" : "active")} ${this.theme.fg("text", `${completed}/${counts.total} finished`)}`,
-      `${this.theme.fg("muted", `${counts.pending} pending · ${counts.blocked} blocked`)}  `,
-      width,
-    ));
+    lines.push(
+      joinSides(
+        `  ${meter(this.theme, completed, Math.max(1, counts.total), Math.min(28, Math.max(12, width - 54)), completed === counts.total && counts.total > 0 ? "success" : "active")} ${this.theme.fg("text", `${completed}/${counts.total} finished`)}`,
+        `${this.theme.fg("muted", `${counts.pending} pending · ${counts.blocked} blocked`)}  `,
+        width,
+      ),
+    );
     if (state.explanation) {
       lines.push(truncateToWidth(`  ${this.theme.fg("dim", oneLine(state.explanation))}`, width));
     }
@@ -200,11 +226,14 @@ export class TaskDashboard implements Component {
     const chromeRows = lines.length + 3;
     const detailRows = 2;
     const listHeight = Math.max(4, rows - chromeRows - detailRows);
-    lines.push(frameTop(this.theme, width, `tasks · ${visible.length}${this.showFinished ? "" : ` of ${counts.total}`}`));
+    lines.push(
+      frameTop(this.theme, width, `tasks · ${visible.length}${this.showFinished ? "" : ` of ${counts.total}`}`),
+    );
     if (visible.length === 0) {
-      const empty = counts.total === 0
-        ? "No tasks yet — the agent creates a list for multi-step work."
-        : "No active tasks. Press h to show completed and cancelled items.";
+      const empty =
+        counts.total === 0
+          ? "No tasks yet — the agent creates a list for multi-step work."
+          : "No active tasks. Press h to show completed and cancelled items.";
       lines.push(framedRow(this.theme, ` ${this.theme.fg("muted", empty)}`, width));
       for (let index = 1; index < listHeight; index++) lines.push(framedRow(this.theme, "", width));
     } else {
@@ -220,7 +249,10 @@ export class TaskDashboard implements Component {
         const marker = selected ? this.theme.fg("accent", "❯") : " ";
         const glyph = this.theme.fg(statusColor(task.status), taskGlyph(task.status));
         const id = this.theme.fg("dim", `[${oneLine(task.id)}]`);
-        const priority = task.priority === "medium" ? "" : this.theme.fg(task.priority === "high" ? "warning" : "dim", ` ${task.priority}`);
+        const priority =
+          task.priority === "medium"
+            ? ""
+            : this.theme.fg(task.priority === "high" ? "warning" : "dim", ` ${task.priority}`);
         const right = `${this.theme.fg(statusColor(task.status), task.status.replaceAll("_", " "))}${priority} `;
         const left = ` ${marker} ${glyph} ${id} ${selected ? this.theme.fg("accent", oneLine(task.content)) : this.theme.fg(task.status === "completed" || task.status === "cancelled" ? "muted" : "text", oneLine(task.content))}`;
         lines.push(framedRow(this.theme, joinSides(left, right, Math.max(0, width - 2)), width, selected));
@@ -230,7 +262,10 @@ export class TaskDashboard implements Component {
 
     const selected = visible[this.selected];
     if (selected?.note) {
-      const wrapped = wrapTextWithAnsi(`${this.theme.fg("muted", "note")} ${this.theme.fg("dim", oneLine(selected.note))}`, Math.max(1, width - 4));
+      const wrapped = wrapTextWithAnsi(
+        `${this.theme.fg("muted", "note")} ${this.theme.fg("dim", oneLine(selected.note))}`,
+        Math.max(1, width - 4),
+      );
       lines.push(truncateToWidth(`  ${wrapped[0] ?? ""}`, width));
     } else {
       lines.push("");

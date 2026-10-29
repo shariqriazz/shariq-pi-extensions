@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import {
-  frameBottom,
-  framedRow,
-  frameTop,
-  joinSides,
-  meter,
-  sanitizeTerminalText,
-} from "./tui-dashboard.ts";
+import { frameBottom, framedRow, frameTop, joinSides, meter, sanitizeTerminalText } from "./tui-dashboard.ts";
 
 const theme = {
   fg: (_color: string, text: string) => text,

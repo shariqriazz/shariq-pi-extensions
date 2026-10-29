@@ -8,7 +8,7 @@ import type { ScrapeFormat } from "./client.ts";
 const OUTPUT_DIR = join(tmpdir(), "pi-firecrawl");
 
 function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function strings(value: unknown): string[] {
@@ -30,7 +30,10 @@ async function writeArtifact(operation: string, value: unknown): Promise<string>
 const FOOTER_RESERVE_BYTES = 512;
 
 async function boundOutput(text: string, operation: string, raw: unknown, forceArtifact = false): Promise<string> {
-  const bounded = truncateHead(text, { maxBytes: DEFAULT_MAX_BYTES - FOOTER_RESERVE_BYTES, maxLines: DEFAULT_MAX_LINES - 2 });
+  const bounded = truncateHead(text, {
+    maxBytes: DEFAULT_MAX_BYTES - FOOTER_RESERVE_BYTES,
+    maxLines: DEFAULT_MAX_LINES - 2,
+  });
   if (!bounded.truncated && !forceArtifact) return text;
   const path = await writeArtifact(operation, raw);
   if (!bounded.truncated) return `${text}\n\n[Complete Firecrawl response saved to: ${path}]`;
@@ -44,7 +47,10 @@ function searchHeader(payload: Record<string, unknown>): string[] {
   return parts;
 }
 
-export async function formatSearchOutput(payload: Record<string, unknown>, contentMaxCharacters = 6_000): Promise<string> {
+export async function formatSearchOutput(
+  payload: Record<string, unknown>,
+  contentMaxCharacters = 6_000,
+): Promise<string> {
   const data = record(payload.data);
   const lines = searchHeader(payload);
   let contentTrimmed = false;
@@ -53,7 +59,11 @@ export async function formatSearchOutput(payload: Record<string, unknown>, conte
   if (web.length) lines.push("", "## Web");
   for (const [index, rawItem] of web.entries()) {
     const item = record(rawItem);
-    lines.push("", `${index + 1}. ${valueText(item.title) ?? "Untitled"}`, `   URL: ${valueText(item.url) ?? "unknown"}`);
+    lines.push(
+      "",
+      `${index + 1}. ${valueText(item.title) ?? "Untitled"}`,
+      `   URL: ${valueText(item.url) ?? "unknown"}`,
+    );
     const description = valueText(item.description);
     if (description) lines.push(`   ${description}`);
     const category = valueText(item.category);
@@ -63,7 +73,8 @@ export async function formatSearchOutput(payload: Record<string, unknown>, conte
       const selected = content.slice(0, contentMaxCharacters);
       contentTrimmed ||= selected.length < content.length;
       lines.push("", selected);
-      if (selected.length < content.length) lines.push("[Result content truncated; use the saved response for the complete text.]");
+      if (selected.length < content.length)
+        lines.push("[Result content truncated; use the saved response for the complete text.]");
     }
   }
 
@@ -71,7 +82,11 @@ export async function formatSearchOutput(payload: Record<string, unknown>, conte
   if (news.length) lines.push("", "## News");
   for (const [index, rawItem] of news.entries()) {
     const item = record(rawItem);
-    lines.push("", `${index + 1}. ${valueText(item.title) ?? "Untitled"}`, `   URL: ${valueText(item.url) ?? "unknown"}`);
+    lines.push(
+      "",
+      `${index + 1}. ${valueText(item.title) ?? "Untitled"}`,
+      `   URL: ${valueText(item.url) ?? "unknown"}`,
+    );
     const date = valueText(item.date);
     if (date) lines.push(`   Date: ${date}`);
     const snippet = valueText(item.snippet) ?? valueText(item.description);
@@ -81,7 +96,8 @@ export async function formatSearchOutput(payload: Record<string, unknown>, conte
       const selected = content.slice(0, contentMaxCharacters);
       contentTrimmed ||= selected.length < content.length;
       lines.push("", selected);
-      if (selected.length < content.length) lines.push("[Result content truncated; use the saved response for the complete text.]");
+      if (selected.length < content.length)
+        lines.push("[Result content truncated; use the saved response for the complete text.]");
     }
   }
 
@@ -89,10 +105,16 @@ export async function formatSearchOutput(payload: Record<string, unknown>, conte
   if (images.length) lines.push("", "## Images");
   for (const [index, rawItem] of images.entries()) {
     const item = record(rawItem);
-    const dimensions = typeof item.imageWidth === "number" && typeof item.imageHeight === "number"
-      ? ` (${item.imageWidth}x${item.imageHeight})`
-      : "";
-    lines.push("", `${index + 1}. ${valueText(item.title) ?? "Untitled"}${dimensions}`, `   Image: ${valueText(item.imageUrl) ?? "unknown"}`, `   Source: ${valueText(item.url) ?? "unknown"}`);
+    const dimensions =
+      typeof item.imageWidth === "number" && typeof item.imageHeight === "number"
+        ? ` (${item.imageWidth}x${item.imageHeight})`
+        : "";
+    lines.push(
+      "",
+      `${index + 1}. ${valueText(item.title) ?? "Untitled"}${dimensions}`,
+      `   Image: ${valueText(item.imageUrl) ?? "unknown"}`,
+      `   Source: ${valueText(item.url) ?? "unknown"}`,
+    );
   }
 
   if (!web.length && !news.length && !images.length) lines.push("", "No results returned.");
@@ -117,7 +139,11 @@ export async function formatScrapeOutput(payload: Record<string, unknown>, forma
     lines.push(valueText(data.answer) ?? "No answer returned.");
   } else if (format === "highlights") {
     const highlights = data.highlights;
-    lines.push(Array.isArray(highlights) ? highlights.map(String).join("\n\n") : valueText(highlights) ?? "No highlights returned.");
+    lines.push(
+      Array.isArray(highlights)
+        ? highlights.map(String).join("\n\n")
+        : (valueText(highlights) ?? "No highlights returned."),
+    );
   } else if (format === "summary") {
     lines.push(valueText(data.summary) ?? "No summary returned.");
   } else {
@@ -154,9 +180,7 @@ export async function formatDeveloperSearchOutput(payload: Record<string, unknow
     if (passages.length > 0) {
       lines.push("", "Matched passages:");
       for (const rawPassage of passages) {
-        const text = typeof rawPassage === "string"
-          ? rawPassage.trim()
-          : valueText(record(rawPassage).text);
+        const text = typeof rawPassage === "string" ? rawPassage.trim() : valueText(record(rawPassage).text);
         if (text) {
           lines.push("", text);
         }

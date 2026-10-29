@@ -9,7 +9,9 @@ function harness() {
     on(name: string, handler: (...args: any[]) => any) {
       hooks.set(name, [...(hooks.get(name) ?? []), handler]);
     },
-    sendMessage(message: any, options: any) { sent.push({ message, options }); },
+    sendMessage(message: any, options: any) {
+      sent.push({ message, options });
+    },
   } as never;
   const emit = (name: string, ...args: any[]) => {
     for (const handler of hooks.get(name) ?? []) handler(...args);
@@ -29,10 +31,12 @@ test("idle settlement starts one custom model turn without user or follow-up del
   start(app);
   deliver(result("terminal"));
 
-  assert.deepEqual(app.sent, [{
-    message: result("terminal"),
-    options: { triggerTurn: true },
-  }]);
+  assert.deepEqual(app.sent, [
+    {
+      message: result("terminal"),
+      options: { triggerTurn: true },
+    },
+  ]);
 });
 
 test("active-parent settlements wait locally and flush together at the safe idle edge", () => {
@@ -53,7 +57,9 @@ test("active-parent settlements wait locally and flush together at the safe idle
 
 test("separately loaded extension copies share one coordinator for the same session", async () => {
   // Pi loads each extension entrypoint through its own module instance.
-  const copy = await import(`./settlement-delivery.ts?copy=${Date.now()}`) as typeof import("./settlement-delivery.ts");
+  const copy = (await import(
+    `./settlement-delivery.ts?copy=${Date.now()}`
+  )) as typeof import("./settlement-delivery.ts");
   const firstApp = harness();
   const secondApp = harness();
   const first = settlementDelivery(firstApp.pi);

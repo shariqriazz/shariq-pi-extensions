@@ -113,7 +113,9 @@ try {
   });
   // npm 11 and earlier return an array; npm 12 returns an object keyed by package name.
   const parsedPack = JSON.parse(packJson);
-  const pack = Array.isArray(parsedPack) ? parsedPack[0] : parsedPack?.[manifest.name] ?? Object.values(parsedPack ?? {})[0];
+  const pack = Array.isArray(parsedPack)
+    ? parsedPack[0]
+    : (parsedPack?.[manifest.name] ?? Object.values(parsedPack ?? {})[0]);
   const packedFiles = Array.isArray(pack?.files) ? pack.files.map((file) => file.path) : [];
   if (packedFiles.length === 0) errors.push("npm pack returned no files");
   for (const filename of packedFiles) {
@@ -134,5 +136,7 @@ if (errors.length > 0) {
   for (const error of errors) console.error(error);
   process.exitCode = 1;
 } else {
-  console.log(`Validated ${manifest.pi.extensions.length} extensions, ${manifest.pi.skills.length} skills, recursive tests, and the npm payload; no forbidden runtime state or secret files were packed.`);
+  console.log(
+    `Validated ${manifest.pi.extensions.length} extensions, ${manifest.pi.skills.length} skills, recursive tests, and the npm payload; no forbidden runtime state or secret files were packed.`,
+  );
 }

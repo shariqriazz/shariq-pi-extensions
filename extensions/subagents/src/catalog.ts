@@ -35,7 +35,9 @@ const MAX_CATALOG_AGENTS = 512;
 export function allocateSubagentId() {
   // Preserve the legacy sa-N shape while remaining collision-resistant across
   // independent and ephemeral Pi processes.
-  const random = BigInt(`0x${randomBytes(8).toString("hex")}`).toString(10).padStart(20, "0");
+  const random = BigInt(`0x${randomBytes(8).toString("hex")}`)
+    .toString(10)
+    .padStart(20, "0");
   return `sa-${Date.now()}${random}`;
 }
 
@@ -52,7 +54,10 @@ function validRecord(value: unknown): value is ArchivedSubagent {
     typeof record.cwd === "string" &&
     typeof record.sessionFile === "string" &&
     typeof record.updatedAt === "number" &&
-    (record.status === "running" || record.status === "done" || record.status === "error" || record.status === "cancelled")
+    (record.status === "running" ||
+      record.status === "done" ||
+      record.status === "error" ||
+      record.status === "cancelled")
   );
 }
 

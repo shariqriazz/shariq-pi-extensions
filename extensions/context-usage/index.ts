@@ -1,5 +1,12 @@
 import type { Component } from "@earendil-works/pi-tui";
-import type { ContextUsage, ExtensionAPI, ExtensionContext, SessionEntry, Theme, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type {
+  ContextUsage,
+  ExtensionAPI,
+  ExtensionContext,
+  SessionEntry,
+  Theme,
+  ToolInfo,
+} from "@earendil-works/pi-coding-agent";
 import { buildSessionContext, convertToLlm, getAgentDir, keyText } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { createHash } from "node:crypto";
@@ -79,7 +86,9 @@ type ModelSummary = {
   api: string;
 };
 
-type HeuristicProfile = Partial<Pick<ResolvedHeuristic, "label" | "textDenominator" | "sessionDenominator" | "toolDenominator" | "toolNumerator">>;
+type HeuristicProfile = Partial<
+  Pick<ResolvedHeuristic, "label" | "textDenominator" | "sessionDenominator" | "toolDenominator" | "toolNumerator">
+>;
 
 type HeuristicRule = HeuristicProfile & {
   profile?: string;
@@ -93,7 +102,9 @@ type HeuristicRule = HeuristicProfile & {
 
 type ContextUsageConfig = {
   profiles?: Record<string, HeuristicProfile>;
-  defaults?: Partial<Pick<ResolvedHeuristic, "textDenominator" | "sessionDenominator" | "toolDenominator" | "toolNumerator">> & { profile?: string };
+  defaults?: Partial<
+    Pick<ResolvedHeuristic, "textDenominator" | "sessionDenominator" | "toolDenominator" | "toolNumerator">
+  > & { profile?: string };
   rules?: HeuristicRule[];
 };
 
@@ -173,8 +184,10 @@ const g = globalThis as ContextUsageGlobal;
 // separated the project context with a blank line. Accept both.
 const PROJECT_CONTEXT_RE = /\n?<project_context>\n\n?[\s\S]*?\n<\/project_context>\n?/;
 const PROJECT_INSTRUCTIONS_RE = /<project_instructions path="([^"]*)">\n([\s\S]*?)\n<\/project_instructions>/g;
-const AVAILABLE_SKILLS_RE = /(?:\n?<skills>\n|\n\n)The following skills provide specialized instructions for specific tasks\.[\s\S]*?<available_skills>[\s\S]*?<\/available_skills>(?:\n<\/skills>)?/;
-const SKILL_RE = /<skill>\s*<name>([\s\S]*?)<\/name>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<location>([\s\S]*?)<\/location>\s*<\/skill>/g;
+const AVAILABLE_SKILLS_RE =
+  /(?:\n?<skills>\n|\n\n)The following skills provide specialized instructions for specific tasks\.[\s\S]*?<available_skills>[\s\S]*?<\/available_skills>(?:\n<\/skills>)?/;
+const SKILL_RE =
+  /<skill>\s*<name>([\s\S]*?)<\/name>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<location>([\s\S]*?)<\/location>\s*<\/skill>/g;
 const DEFAULT_MODE: ViewMode = "summary";
 const OPENAI_TOOL_TEXT_FRAGMENT_DENOMINATOR = 6.6;
 
@@ -314,9 +327,7 @@ function firstMeaningfulLines(text: string, maxLines: number): string[] {
 }
 
 function getPromptRemainder(systemPrompt: string): string {
-  return normalizeBlankLines(
-    systemPrompt.replace(PROJECT_CONTEXT_RE, "\n").replace(AVAILABLE_SKILLS_RE, "\n"),
-  );
+  return normalizeBlankLines(systemPrompt.replace(PROJECT_CONTEXT_RE, "\n").replace(AVAILABLE_SKILLS_RE, "\n"));
 }
 
 function parseSkills(content: string, denominator: number): SkillSummary[] {
@@ -392,12 +403,17 @@ function runtimeAdditionsAttribution(additions: RuntimeAdditions, denominator: n
   if (additions.chars === 0) return undefined;
   const tokens = estimateCharsAsTokens(additions.chars, denominator);
   const parts: string[] = [];
-  if (additions.snippetCount > 0) parts.push(`${additions.snippetCount} tool snippet${additions.snippetCount === 1 ? "" : "s"}`);
-  if (additions.guidelineCount > 0) parts.push(`${additions.guidelineCount} guideline${additions.guidelineCount === 1 ? "" : "s"}`);
+  if (additions.snippetCount > 0)
+    parts.push(`${additions.snippetCount} tool snippet${additions.snippetCount === 1 ? "" : "s"}`);
+  if (additions.guidelineCount > 0)
+    parts.push(`${additions.guidelineCount} guideline${additions.guidelineCount === 1 ? "" : "s"}`);
   return `of which tool/extension instructions: ~${compactCount(tokens)} tokens (${parts.join(", ")}) · already counted in this row`;
 }
 
-function buildSkillsSection(systemPrompt: string, denominator: number): { section?: PrefixSection; skills: SkillSummary[] } {
+function buildSkillsSection(
+  systemPrompt: string,
+  denominator: number,
+): { section?: PrefixSection; skills: SkillSummary[] } {
   const match = systemPrompt.match(AVAILABLE_SKILLS_RE);
   if (!match) return { skills: [] };
   const content = match[0].trim();
@@ -405,9 +421,7 @@ function buildSkillsSection(systemPrompt: string, denominator: number): { sectio
   const sortedSkills = [...skills].sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name));
   const scanRows = sortedSkills.map((skill) => ({ name: skill.name, tokens: skill.tokens, desc: skill.description }));
   const wrapperChars = Math.max(0, content.length - skills.reduce((sum, skill) => sum + skill.chars, 0));
-  const wrapperNote = wrapperChars > 0
-    ? `list wrapper/markup  ${inlineCount(wrapperChars, denominator)}`
-    : undefined;
+  const wrapperNote = wrapperChars > 0 ? `list wrapper/markup  ${inlineCount(wrapperChars, denominator)}` : undefined;
   return {
     skills,
     section: {
@@ -526,13 +540,20 @@ function parseContextUsageConfig(value: unknown): ContextUsageConfig {
 }
 
 function splitConfigPaths(value: string | undefined, separator = delimiter): string[] {
-  return (value ?? "").split(separator).map((entry) => expandHomePath(entry.trim())).filter(Boolean);
+  return (value ?? "")
+    .split(separator)
+    .map((entry) => expandHomePath(entry.trim()))
+    .filter(Boolean);
 }
 
 function loadContextUsageConfig(cwd: string, projectTrusted: boolean): ContextUsageConfig {
   // The project file applies only to trusted projects; global and explicit env paths always apply.
   const [globalPath, projectPath] = configPaths("pi-context-usage", cwd);
-  const paths = [globalPath!, ...(projectTrusted ? [projectPath!] : []), ...splitConfigPaths(process.env.PI_CONTEXT_USAGE_CONFIG)];
+  const paths = [
+    globalPath!,
+    ...(projectTrusted ? [projectPath!] : []),
+    ...splitConfigPaths(process.env.PI_CONTEXT_USAGE_CONFIG),
+  ];
   return paths.reduce<ContextUsageConfig>(
     (config, filePath) => mergeContextUsageConfig(config, readJsonConfig(filePath, parseContextUsageConfig)),
     {},
@@ -540,7 +561,10 @@ function loadContextUsageConfig(cwd: string, projectTrusted: boolean): ContextUs
 }
 
 function globToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
   return new RegExp(`^${escaped}$`, "i");
 }
 
@@ -564,9 +588,11 @@ function ruleMatchesModel(rule: HeuristicRule, model?: ModelSummary): boolean {
   const provider = model?.provider ?? "";
   const id = model?.id ?? "";
   const api = model?.api ?? "";
-  return matchesPattern(provider, match.provider)
-    && matchesPattern(id, match.model ?? match.id)
-    && matchesPattern(api, match.api);
+  return (
+    matchesPattern(provider, match.provider) &&
+    matchesPattern(id, match.model ?? match.id) &&
+    matchesPattern(api, match.api)
+  );
 }
 
 function defaultHeuristic(): ResolvedHeuristic {
@@ -580,14 +606,20 @@ function defaultHeuristic(): ResolvedHeuristic {
   };
 }
 
-function applyHeuristicPatch(base: ResolvedHeuristic, patch: HeuristicProfile | Partial<ResolvedHeuristic> | undefined, source: string): ResolvedHeuristic {
-  const normalized: Partial<ResolvedHeuristic> = patch ? {
-    label: patch.label,
-    textDenominator: patch.textDenominator,
-    sessionDenominator: patch.sessionDenominator,
-    toolDenominator: patch.toolDenominator,
-    toolNumerator: patch.toolNumerator,
-  } : {};
+function applyHeuristicPatch(
+  base: ResolvedHeuristic,
+  patch: HeuristicProfile | Partial<ResolvedHeuristic> | undefined,
+  source: string,
+): ResolvedHeuristic {
+  const normalized: Partial<ResolvedHeuristic> = patch
+    ? {
+        label: patch.label,
+        textDenominator: patch.textDenominator,
+        sessionDenominator: patch.sessionDenominator,
+        toolDenominator: patch.toolDenominator,
+        toolNumerator: patch.toolNumerator,
+      }
+    : {};
   return {
     ...base,
     ...normalized,
@@ -682,8 +714,8 @@ const BUILT_IN_HEURISTIC_RULES: BuiltInHeuristicRule[] = [
 function builtInRuleMatches(rule: BuiltInHeuristicRule, model: ModelSummary): boolean {
   const provider = model.provider.toLowerCase();
   const api = model.api.toLowerCase();
-  const providerOrApiMatches = rule.providerIncludes.some((entry) => provider.includes(entry))
-    || rule.apiEquals.includes(api);
+  const providerOrApiMatches =
+    rule.providerIncludes.some((entry) => provider.includes(entry)) || rule.apiEquals.includes(api);
   const modelMatches = rule.modelRegex ? rule.modelRegex.test(model.id.toLowerCase()) : true;
   return providerOrApiMatches && modelMatches;
 }
@@ -866,7 +898,8 @@ function getSchemaProperties(schema: unknown): Record<string, unknown> {
 function schemaPropertyType(property: unknown): string {
   if (!isJsonObject(property)) return "object";
   if (typeof property.type === "string") return property.type;
-  if (Array.isArray(property.type)) return property.type.filter((entry): entry is string => typeof entry === "string").join("|");
+  if (Array.isArray(property.type))
+    return property.type.filter((entry): entry is string => typeof entry === "string").join("|");
   if (property.anyOf) return "anyOf";
   if (property.oneOf) return "oneOf";
   if (property.allOf) return "allOf";
@@ -897,7 +930,14 @@ function arrayItemsSchema(property: unknown): unknown {
   return isJsonObject(property) ? property.items : undefined;
 }
 
-function collectToolFields(name: string, property: unknown, depth: number, required: boolean, out: ToolField[], maxDepth = 3): void {
+function collectToolFields(
+  name: string,
+  property: unknown,
+  depth: number,
+  required: boolean,
+  out: ToolField[],
+  maxDepth = 3,
+): void {
   out.push({
     name,
     type: schemaPropertyType(property),
@@ -940,7 +980,8 @@ function estimateOpenAIToolDefinitionTokens(tool: ToolSummary): number {
   tokens += estimateOpenAIToolTextTokens(`${tool.name}:${trimFinalPeriod(tool.description)}`);
   const propertyEntries = Object.entries(getSchemaProperties(tool.schema));
   if (propertyEntries.length > 0) tokens += 3;
-  for (const [propertyName, property] of propertyEntries) tokens += estimateOpenAIPropertyTokens(propertyName, property);
+  for (const [propertyName, property] of propertyEntries)
+    tokens += estimateOpenAIPropertyTokens(propertyName, property);
   return tokens;
 }
 
@@ -956,12 +997,15 @@ function estimateOpenAIPropertyTokens(propertyName: string, property: unknown): 
     tokens += enumInit;
     for (const enumValue of enumValues) tokens += enumItem + estimateOpenAIToolTextTokens(String(enumValue));
   }
-  tokens += estimateOpenAIToolTextTokens(`${propertyName}:${schemaPropertyType(property)}:${schemaPropertyDescription(property)}`);
+  tokens += estimateOpenAIToolTextTokens(
+    `${propertyName}:${schemaPropertyType(property)}:${schemaPropertyDescription(property)}`,
+  );
 
   const nestedEntries = Object.entries(getSchemaProperties(property));
   if (nestedEntries.length > 0) {
     tokens += propInit;
-    for (const [nestedName, nestedProperty] of nestedEntries) tokens += estimateOpenAIPropertyTokens(nestedName, nestedProperty);
+    for (const [nestedName, nestedProperty] of nestedEntries)
+      tokens += estimateOpenAIPropertyTokens(nestedName, nestedProperty);
   }
 
   const itemEntries = Object.entries(schemaArrayItemProperties(property));
@@ -997,7 +1041,10 @@ function buildToolDisplayEstimate(tool: ToolSummary, heuristic: ResolvedHeuristi
   return { tokens: estimateCharsAsTokens(chars, heuristic.toolDenominator), chars };
 }
 
-function buildToolsSection(pi: ExtensionAPI, heuristic: ResolvedHeuristic): { section?: PrefixSection; tools: ToolSummary[] } {
+function buildToolsSection(
+  pi: ExtensionAPI,
+  heuristic: ResolvedHeuristic,
+): { section?: PrefixSection; tools: ToolSummary[] } {
   const activeNames = new Set(pi.getActiveTools());
   const allTools = pi.getAllTools();
   const activeToolInfos = allTools.filter((tool) => activeNames.has(tool.name));
@@ -1011,13 +1058,20 @@ function buildToolsSection(pi: ExtensionAPI, heuristic: ResolvedHeuristic): { se
   const numerator = buildToolNumerator(tools, heuristic);
   const denominator = heuristic.toolDenominator;
   const effectiveTokens = numerator.tokens ?? estimateCharsAsTokens(numerator.chars, denominator);
-  const sectionDetail = typeof numerator.tokens === "number"
-    ? `· OpenAI formula · schema text ${ratioDetail(OPENAI_TOOL_TEXT_FRAGMENT_DENOMINATOR)}`
-    : `${ratioDetail(denominator)} · ${numerator.label}`;
+  const sectionDetail =
+    typeof numerator.tokens === "number"
+      ? `· OpenAI formula · schema text ${ratioDetail(OPENAI_TOOL_TEXT_FRAGMENT_DENOMINATOR)}`
+      : `${ratioDetail(denominator)} · ${numerator.label}`;
   const toolEstimates = tools.map((tool) => ({ tool, estimate: buildToolDisplayEstimate(tool, heuristic) }));
-  const sortedEstimates = [...toolEstimates].sort((a, b) => b.estimate.tokens - a.estimate.tokens || a.tool.name.localeCompare(b.tool.name));
+  const sortedEstimates = [...toolEstimates].sort(
+    (a, b) => b.estimate.tokens - a.estimate.tokens || a.tool.name.localeCompare(b.tool.name),
+  );
   const compactToolRows: ScanRow[] = [
-    ...sortedEstimates.map(({ tool, estimate }) => ({ name: tool.name, tokens: estimate.tokens, desc: tool.description })),
+    ...sortedEstimates.map(({ tool, estimate }) => ({
+      name: tool.name,
+      tokens: estimate.tokens,
+      desc: tool.description,
+    })),
     ...inactiveTools.map((tool) => ({ name: tool.name, desc: `(inactive) ${tool.description}`, inactive: true })),
   ];
   const expandedTools: ToolExpanded[] = sortedEstimates.map(({ tool, estimate }) => ({
@@ -1027,14 +1081,15 @@ function buildToolsSection(pi: ExtensionAPI, heuristic: ResolvedHeuristic): { se
     description: tool.description,
     fields: buildToolFields(tool.schema),
   }));
-  const notes = typeof numerator.tokens === "number"
-    ? [
-        "formula  +7/fn +3/prop-section +3/prop -3/enum +3/enum-item +12 once · nested counted recursively",
-        `counted on the minified provider payload (${compactCount(numerator.chars)} ch); tree below is the readable view of it`,
-      ]
-    : [
-        `counts use ${numerator.label} at ch ${ratioDetail(denominator)} over the minified provider payload (${compactCount(numerator.chars)} ch); the tree below is the readable view`,
-      ];
+  const notes =
+    typeof numerator.tokens === "number"
+      ? [
+          "formula  +7/fn +3/prop-section +3/prop -3/enum +3/enum-item +12 once · nested counted recursively",
+          `counted on the minified provider payload (${compactCount(numerator.chars)} ch); tree below is the readable view of it`,
+        ]
+      : [
+          `counts use ${numerator.label} at ch ${ratioDetail(denominator)} over the minified provider payload (${compactCount(numerator.chars)} ch); the tree below is the readable view`,
+        ];
   return {
     tools,
     section: {
@@ -1058,7 +1113,8 @@ function countTextContent(content: unknown): number {
     if (!block || typeof block !== "object") return sum;
     const typed = block as { type?: string; text?: string; data?: string; mimeType?: string };
     if (typed.type === "text") return sum + (typed.text ?? "").length;
-    if (typed.type === "image") return sum + `[image:${typed.mimeType ?? "unknown"}:${typed.data?.length ?? 0} chars]`.length;
+    if (typed.type === "image")
+      return sum + `[image:${typed.mimeType ?? "unknown"}:${typed.data?.length ?? 0} chars]`.length;
     return sum;
   }, 0);
 }
@@ -1199,7 +1255,9 @@ function buildSnapshot(
     `${heuristic.label}:${heuristic.textDenominator}:${heuristic.sessionDenominator}:${heuristic.toolDenominator}:${heuristic.toolNumerator}`,
     JSON.stringify(config),
     pi.getActiveTools().join(","),
-    session ? `${session.thinkingChars}:${session.toolOutputChars}:${session.messageChars}:${session.messageCount}` : "no-session",
+    session
+      ? `${session.thinkingChars}:${session.toolOutputChars}:${session.messageChars}:${session.messageCount}`
+      : "no-session",
     contextUsage ? `${contextUsage.tokens}:${contextUsage.contextWindow}:${contextUsage.percent}` : "no-usage",
   ].join("|");
 
@@ -1238,14 +1296,16 @@ function padLabel(label: string, width = 42): string {
 // ratio, say so here (tool tokens may come from the OpenAI formula or a different
 // denominator); the expanded view stays the per-section audit trail.
 function methodologyHint(heuristic: ResolvedHeuristic): string {
-  const sessionPart = heuristic.sessionDenominator !== heuristic.textDenominator
-    ? `${SEP}session ${ratioDetail(heuristic.sessionDenominator)}`
-    : "";
-  const toolsPart = heuristic.toolNumerator === "openai-cookbook"
-    ? `${SEP}tools: OpenAI formula`
-    : heuristic.toolDenominator !== heuristic.textDenominator
-      ? `${SEP}tools ${ratioDetail(heuristic.toolDenominator)}`
+  const sessionPart =
+    heuristic.sessionDenominator !== heuristic.textDenominator
+      ? `${SEP}session ${ratioDetail(heuristic.sessionDenominator)}`
       : "";
+  const toolsPart =
+    heuristic.toolNumerator === "openai-cookbook"
+      ? `${SEP}tools: OpenAI formula`
+      : heuristic.toolDenominator !== heuristic.textDenominator
+        ? `${SEP}tools ${ratioDetail(heuristic.toolDenominator)}`
+        : "";
   return `counts ch ${ratioDetail(heuristic.textDenominator)}${sessionPart}${toolsPart} (${heuristic.label})`;
 }
 
@@ -1340,7 +1400,8 @@ function renderToolFieldRows(fields: ToolField[], theme: Theme, width: number, c
   return fields.map((field) => {
     const rawName = `${" ".repeat(fieldIndent(field.depth))}${field.name}`;
     const namePart = rawName.length > nameCol ? `${rawName.slice(0, nameCol - 1)}…` : rawName.padEnd(nameCol, " ");
-    const typePart = field.type.length > typeCol ? `${field.type.slice(0, typeCol - 1)}…` : field.type.padEnd(typeCol, " ");
+    const typePart =
+      field.type.length > typeCol ? `${field.type.slice(0, typeCol - 1)}…` : field.type.padEnd(typeCol, " ");
     const reqPart = hasRequired ? (field.required ? "required" : "        ") : "";
     const prefixWidth = namePart.length + 2 + typePart.length + (hasRequired ? 2 + reqPart.length : 0);
     const descWidth = Math.max(16, width - prefixWidth - 3);
@@ -1353,7 +1414,12 @@ function renderToolFieldRows(fields: ToolField[], theme: Theme, width: number, c
 // the shortened provenance beside it at L3-dim, so a column of tools scans by name
 // while the audit trail stays present without competing. Tokens keep the accent,
 // right-aligned. When width runs out the provenance gives way before the name does.
-function renderExpandedToolHeader(tool: ToolExpanded, tokenLayout: TokenLabelLayout, theme: Theme, width: number): string {
+function renderExpandedToolHeader(
+  tool: ToolExpanded,
+  tokenLayout: TokenLabelLayout,
+  theme: Theme,
+  width: number,
+): string {
   const maxWidth = Math.max(40, width);
   const indent = "    ";
   const gap = 2;
@@ -1368,7 +1434,11 @@ function renderExpandedToolHeader(tool: ToolExpanded, tokenLayout: TokenLabelLay
   return `${indent}${styled}${" ".repeat(Math.max(gap, maxWidth - used))}${accent(theme, token)}`;
 }
 
-function renderExpandedToolsBlock(content: { notes: string[]; tools: ToolExpanded[] }, theme: Theme, width: number): string[] {
+function renderExpandedToolsBlock(
+  content: { notes: string[]; tools: ToolExpanded[] },
+  theme: Theme,
+  width: number,
+): string[] {
   const out: string[] = [];
   const tokenLayout = tokenLabelLayout(content.tools.map((tool) => tool.tokens));
   const allFields = content.tools.flatMap((tool) => tool.fields);
@@ -1405,9 +1475,10 @@ function buildSessionEstimate(snapshot: PrefixSnapshot): SessionEstimate | undef
   const messageTokens = estimateCharsAsTokens(snapshot.session.messageChars, denominator);
   const heuristicTotal = estimateCharsAsTokens(sessionChars(snapshot.session), denominator);
   const harnessTokens = totalTokens(snapshot);
-  const piSessionTokens = snapshot.contextUsage?.tokens === null || snapshot.contextUsage?.tokens === undefined
-    ? undefined
-    : Math.max(0, Math.round(snapshot.contextUsage.tokens - harnessTokens));
+  const piSessionTokens =
+    snapshot.contextUsage?.tokens === null || snapshot.contextUsage?.tokens === undefined
+      ? undefined
+      : Math.max(0, Math.round(snapshot.contextUsage.tokens - harnessTokens));
   const totalTokensValue = piSessionTokens ?? heuristicTotal;
   const otherTokens = Math.max(0, Math.round(totalTokensValue - toolOutputTokens - messageTokens));
   return {
@@ -1427,7 +1498,11 @@ function buildSessionEstimate(snapshot: PrefixSnapshot): SessionEstimate | undef
  * derived from estimated token counts carry the ~ marker — a wrong harness estimate
  * must not masquerade as an exact share (only Total request is pi-exact).
  */
-function ctxShareLabel(tokens: number, usage: ContextUsage | undefined, options: { estimate?: boolean } = {}): string | undefined {
+function ctxShareLabel(
+  tokens: number,
+  usage: ContextUsage | undefined,
+  options: { estimate?: boolean } = {},
+): string | undefined {
   if (!usage || usage.tokens === null || usage.contextWindow <= 0) return undefined;
   const percent = (tokens / usage.contextWindow) * 100;
   if (!Number.isFinite(percent) || percent < 0) return undefined;
@@ -1452,17 +1527,14 @@ function renderContextBar(snapshot: PrefixSnapshot, estimate: SessionEstimate, t
   const usage = snapshot.contextUsage;
   if (!usage || usage.tokens === null || usage.contextWindow <= 0) return [];
   const free = Math.max(0, usage.contextWindow - usage.tokens);
-  const legend =
-    `harness ~${compactCount(totalTokens(snapshot))}${SEP}session ~${compactCount(estimate.totalTokens)}${SEP}free ${compactCount(free)}`;
+  const legend = `harness ~${compactCount(totalTokens(snapshot))}${SEP}session ~${compactCount(estimate.totalTokens)}${SEP}free ${compactCount(free)}`;
   const room = Math.max(0, width - 4 - legend.length - 2);
   const sameLine = room >= 12;
   const barWidth = Math.min(28, Math.max(12, sameLine ? room : width - 4));
   const carried = Math.min(1, Math.max(0, usage.tokens / usage.contextWindow));
   const filled = Math.min(barWidth, Math.max(usage.tokens > 0 ? 1 : 0, Math.round(carried * barWidth)));
   const bar = `${accent(theme, "█".repeat(filled))}${theme.fg("dim", "▒".repeat(barWidth - filled))}`;
-  return sameLine
-    ? [`  ${bar}  ${theme.fg("dim", legend)}`]
-    : [`  ${bar}`, `  ${theme.fg("dim", legend)}`];
+  return sameLine ? [`  ${bar}  ${theme.fg("dim", legend)}`] : [`  ${bar}`, `  ${theme.fg("dim", legend)}`];
 }
 
 function renderSessionRows(snapshot: PrefixSnapshot, theme: Theme, width: number, layout?: TokenLabelLayout): string[] {
@@ -1472,28 +1544,50 @@ function renderSessionRows(snapshot: PrefixSnapshot, theme: Theme, width: number
   const provenance = estimate.totalSource === "pi" ? "Pi current - harness" : "heuristic fallback";
   const rows = [
     "",
-    renderMetricRow({ label: "Tool outputs", tokens: estimate.toolOutputTokens, detail: countDetail(snapshot.session.toolOutputChars) }, theme, layout),
-    renderMetricRow({ label: "Messages", tokens: estimate.messageTokens, detail: countDetail(snapshot.session.messageChars) }, theme, layout),
+    renderMetricRow(
+      {
+        label: "Tool outputs",
+        tokens: estimate.toolOutputTokens,
+        detail: countDetail(snapshot.session.toolOutputChars),
+      },
+      theme,
+      layout,
+    ),
+    renderMetricRow(
+      { label: "Messages", tokens: estimate.messageTokens, detail: countDetail(snapshot.session.messageChars) },
+      theme,
+      layout,
+    ),
     renderMetricRow({ label: "Other / reasoning", tokens: estimate.otherTokens, detail: "(residual)" }, theme, layout),
-    renderMetricRow({
-      label: "Total session",
-      tokens: estimate.totalTokens,
-      emphasis: true,
-      detail: sessionShare ? `(${sessionShare} · ${provenance})` : `(${provenance})`,
-    }, theme, layout),
+    renderMetricRow(
+      {
+        label: "Total session",
+        tokens: estimate.totalTokens,
+        emphasis: true,
+        detail: sessionShare ? `(${sessionShare} · ${provenance})` : `(${provenance})`,
+      },
+      theme,
+      layout,
+    ),
   ];
   const usage = snapshot.contextUsage;
   if (usage && usage.tokens !== null) {
     const percent = formatPercent(usage.percent);
     const window = usage.contextWindow > 0 ? contextWindowLabel(usage.contextWindow) : undefined;
-    rows.push(renderMetricRow({
-      label: "Total request",
-      tokens: usage.tokens,
-      // Pi reports this as an estimate (last usage plus trailing messages).
-      exact: false,
-      emphasis: true,
-      detail: percent && window ? `(${percent} / ${window} ctx)` : "(Pi estimate)",
-    }, theme, layout));
+    rows.push(
+      renderMetricRow(
+        {
+          label: "Total request",
+          tokens: usage.tokens,
+          // Pi reports this as an estimate (last usage plus trailing messages).
+          exact: false,
+          emphasis: true,
+          detail: percent && window ? `(${percent} / ${window} ctx)` : "(Pi estimate)",
+        },
+        theme,
+        layout,
+      ),
+    );
     rows.push(...renderContextBar(snapshot, estimate, theme, width));
   }
   return rows;
@@ -1502,12 +1596,13 @@ function renderSessionRows(snapshot: PrefixSnapshot, theme: Theme, width: number
 function summaryTokenLayout(snapshot: PrefixSnapshot): TokenLabelLayout {
   const values = [...snapshot.sections.map(sectionTokens), totalTokens(snapshot)];
   const sessionEstimate = buildSessionEstimate(snapshot);
-  if (sessionEstimate) values.push(
-    sessionEstimate.totalTokens,
-    sessionEstimate.toolOutputTokens,
-    sessionEstimate.messageTokens,
-    sessionEstimate.otherTokens,
-  );
+  if (sessionEstimate)
+    values.push(
+      sessionEstimate.totalTokens,
+      sessionEstimate.toolOutputTokens,
+      sessionEstimate.messageTokens,
+      sessionEstimate.otherTokens,
+    );
   if (typeof snapshot.contextUsage?.tokens === "number") values.push(snapshot.contextUsage.tokens);
   return tokenLabelLayout(values);
 }
@@ -1524,15 +1619,18 @@ function contextSummaryFrame(theme: Theme, title: string, rows: string[], width:
   const safeWidth = Math.max(8, width);
   const inner = Math.max(0, safeWidth - 2);
   const label = truncateToWidth(` ${title} `, Math.max(0, inner - 1), "…");
-  const top = theme.fg("border", "╭") +
+  const top =
+    theme.fg("border", "╭") +
     accent(theme, label) +
     theme.fg("border", "─".repeat(Math.max(0, inner - stripAnsi(label).length)) + "╮");
   const body = rows.map((row) => {
     const clipped = truncateToWidth(row, inner, "…");
-    return theme.fg("border", "│") +
+    return (
+      theme.fg("border", "│") +
       clipped +
       " ".repeat(Math.max(0, inner - stripAnsi(clipped).length)) +
-      theme.fg("border", "│");
+      theme.fg("border", "│")
+    );
   });
   return [top, ...body, theme.fg("border", `╰${"─".repeat(inner)}╯`)];
 }
@@ -1548,7 +1646,9 @@ function renderSummary(snapshot: PrefixSnapshot, theme: Theme, width = 80): stri
     typeof request === "number" ? `Request ~${compactCount(request)}` : undefined,
     window && window > 0 ? `/ ${contextWindowLabel(window)}` : undefined,
     percent ? `· ${percent}` : undefined,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
   const totals = new Map<string, number>();
   for (const section of snapshot.sections) {
     const label = summarySectionLabel(section.title);
@@ -1572,7 +1672,7 @@ function compactLabel(label: string, width: number): string {
 }
 
 function numericRowTokens(rows: ScanRow[]): number[] {
-  return rows.flatMap((row) => typeof row.tokens === "number" ? [row.tokens] : []);
+  return rows.flatMap((row) => (typeof row.tokens === "number" ? [row.tokens] : []));
 }
 
 function compactLayout(snapshot: PrefixSnapshot): CompactLayout {
@@ -1592,7 +1692,9 @@ function compactLayout(snapshot: PrefixSnapshot): CompactLayout {
 }
 
 function inactiveTokenField(layout: TokenLabelLayout): string {
-  return "-".padStart(Math.max(1, layout.unitWidth + 1)).padEnd(Math.max(layout.fieldWidth, layout.unitWidth + 1, 1), " ");
+  return "-"
+    .padStart(Math.max(1, layout.unitWidth + 1))
+    .padEnd(Math.max(layout.fieldWidth, layout.unitWidth + 1, 1), " ");
 }
 
 function renderScanRows(rows: ScanRow[], theme: Theme, width: number, layout?: CompactLayout): string[] {
@@ -1604,9 +1706,10 @@ function renderScanRows(rows: ScanRow[], theme: Theme, width: number, layout?: C
   return rows.map((row) => {
     const name = compactLabel(row.name, labelWidth);
     const desc = row.desc ? singleLine(row.desc, descWidth) : "";
-    const token = typeof row.tokens === "number"
-      ? estimatedTokenField(row.tokens, effectiveTokenLayout)
-      : inactiveTokenField(effectiveTokenLayout);
+    const token =
+      typeof row.tokens === "number"
+        ? estimatedTokenField(row.tokens, effectiveTokenLayout)
+        : inactiveTokenField(effectiveTokenLayout);
     if (row.inactive) {
       return theme.fg("dim", `    ${name}  ${token}${desc ? `  ${desc}` : ""}`);
     }
@@ -1632,7 +1735,11 @@ function renderCompact(snapshot: PrefixSnapshot, theme: Theme, width: number): s
     }
   }
   const sessionTokenLayout = summaryTokenLayout(snapshot);
-  lines.push("", renderCompactTotalRow(snapshot, theme, layout), ...renderSessionRows(snapshot, theme, width, sessionTokenLayout));
+  lines.push(
+    "",
+    renderCompactTotalRow(snapshot, theme, layout),
+    ...renderSessionRows(snapshot, theme, width, sessionTokenLayout),
+  );
   lines.push(""); // panel tail spacer (design language §8)
   return lines;
 }
@@ -1641,7 +1748,11 @@ function renderExpanded(snapshot: PrefixSnapshot, theme: Theme, width: number): 
   const lines = renderHeader(snapshot, "expanded", theme);
   const layout = summaryTokenLayout(snapshot);
   lines.push(
-    renderMetricRow({ label: "Total harness", tokens: totalTokens(snapshot), emphasis: true, detail: harnessDetail(snapshot) }, theme, layout),
+    renderMetricRow(
+      { label: "Total harness", tokens: totalTokens(snapshot), emphasis: true, detail: harnessDetail(snapshot) },
+      theme,
+      layout,
+    ),
     ...renderSessionRows(snapshot, theme, width, layout),
   );
 
@@ -1738,11 +1849,12 @@ class StartupContextComponent implements Component {
       }
 
       const theme = this.getTheme();
-      const body = this.mode === "summary"
-        ? renderSummary(snapshot, theme, width)
-        : this.mode === "compact"
-          ? renderCompact(snapshot, theme, width)
-          : renderExpanded(snapshot, theme, width);
+      const body =
+        this.mode === "summary"
+          ? renderSummary(snapshot, theme, width)
+          : this.mode === "compact"
+            ? renderCompact(snapshot, theme, width)
+            : renderExpanded(snapshot, theme, width);
 
       this.cachedSignature = snapshot.signature;
       this.cachedMode = this.mode;
@@ -1753,10 +1865,10 @@ class StartupContextComponent implements Component {
       this.cachedSignature = "context-usage-unavailable";
       this.cachedMode = this.mode;
       this.cachedWidth = width;
-      this.cachedLines = wrapLines([
-        "",
-        `${accent(undefined, "[Context Usage]")} unavailable while Pi finishes resuming this session`,
-      ], width);
+      this.cachedLines = wrapLines(
+        ["", `${accent(undefined, "[Context Usage]")} unavailable while Pi finishes resuming this session`],
+        width,
+      );
       return this.cachedLines;
     }
   }
@@ -1778,7 +1890,11 @@ function renderPlain(component: Component, width = 120): string {
 }
 
 function isPrefixBlock(component: unknown): component is StartupContextComponent {
-  return !!component && typeof component === "object" && (component as { __piContextUsageBlock?: boolean }).__piContextUsageBlock === true;
+  return (
+    !!component &&
+    typeof component === "object" &&
+    (component as { __piContextUsageBlock?: boolean }).__piContextUsageBlock === true
+  );
 }
 
 // _lib/chat.ts isResourceRow, minus the panel itself: the [Context Usage] block renders
@@ -1823,17 +1939,22 @@ function isContextBlockInstalled(block: StartupContextComponent): boolean {
  * (empty) loaded-resources slot so the card sits in the same place.
  */
 function findQuietStartupContainer(tui: unknown): ContainerLike | undefined {
-  const isContainer = (value: unknown) => !!value && typeof value === "object" && Array.isArray((value as { children?: unknown }).children);
+  const isContainer = (value: unknown) =>
+    !!value && typeof value === "object" && Array.isArray((value as { children?: unknown }).children);
   const document = findContainerBy(tui, (children) => children.length === 3 && children.every(isContainer));
   const resources = document?.children[1] as ContainerLike | undefined;
-  return resources && Array.isArray(resources.children) && resources.children.every((child) => isPrefixBlock(child) || isBlankComponent(child as Component))
+  return resources &&
+    Array.isArray(resources.children) &&
+    resources.children.every((child) => isPrefixBlock(child) || isBlankComponent(child as Component))
     ? resources
     : undefined;
 }
 
 function installContextBlock(block: StartupContextComponent, allowQuietFallback = false): boolean {
   const tui = g.__piContextUsageTui;
-  const chat = findResourceChatContainer(tui) ?? g.__piContextUsageChat ??
+  const chat =
+    findResourceChatContainer(tui) ??
+    g.__piContextUsageChat ??
     (allowQuietFallback ? findQuietStartupContainer(tui) : undefined);
   if (!chat || !Array.isArray(chat.children)) return false;
 
@@ -1986,7 +2107,6 @@ export default function piContextUsage(pi: ExtensionAPI) {
     });
 
     scheduleInstall(block);
-
   });
 
   pi.on("model_select", async (event, ctx) => {
@@ -2023,9 +2143,10 @@ export default function piContextUsage(pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       if (!ctx.hasUI) return;
       const requested = args.trim().toLowerCase() as ViewMode | "";
-      const mode: ViewMode = requested === "summary" || requested === "compact" || requested === "expanded"
-        ? requested
-        : nextMode(g.__piContextUsageMode ?? g.__piContextUsageBlock?.getMode() ?? DEFAULT_MODE);
+      const mode: ViewMode =
+        requested === "summary" || requested === "compact" || requested === "expanded"
+          ? requested
+          : nextMode(g.__piContextUsageMode ?? g.__piContextUsageBlock?.getMode() ?? DEFAULT_MODE);
       setMode(mode);
       if (g.__piContextUsageBlock) scheduleInstall(g.__piContextUsageBlock);
       ctx.ui.notify(`[Context Usage] view: ${mode}`, "info");

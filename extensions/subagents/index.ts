@@ -9,11 +9,7 @@ import * as fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  ExtensionUIContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
@@ -80,21 +76,9 @@ import {
   type WorktreeAction,
   type WorktreeInfo,
 } from "./src/worktree.ts";
-import {
-  createSubagentRuntime,
-  runTool,
-  type SubagentRuntime,
-} from "./src/runtime.ts";
-import {
-  openPeerMessageViewer,
-  openSubagentPicker,
-  openSubagentTakeover,
-} from "./src/ui/takeover.ts";
-import {
-  isCoordinatorRequest,
-  SUBAGENT_COORDINATOR_REQUEST,
-  type SubagentCoordinator,
-} from "./src/coordinator.ts";
+import { createSubagentRuntime, runTool, type SubagentRuntime } from "./src/runtime.ts";
+import { openPeerMessageViewer, openSubagentPicker, openSubagentTakeover } from "./src/ui/takeover.ts";
+import { isCoordinatorRequest, SUBAGENT_COORDINATOR_REQUEST, type SubagentCoordinator } from "./src/coordinator.ts";
 import {
   allocateSubagentId,
   currentOwner,
@@ -131,9 +115,7 @@ interface WaitAgentDetails {
   pending: string[];
 }
 
-function waitAgentDetails(
-  values: Partial<WaitAgentDetails> = {},
-): WaitAgentDetails {
+function waitAgentDetails(values: Partial<WaitAgentDetails> = {}): WaitAgentDetails {
   return {
     pendingQuestions: values.pendingQuestions ?? [],
     results: values.results ?? [],
@@ -142,7 +124,12 @@ function waitAgentDetails(
 }
 
 export function deriveBtwTitle(prompt: string): string {
-  const firstLine = prompt.split("\n").find((line) => line.trim())?.trim().replace(/\s+/g, " ") ?? "";
+  const firstLine =
+    prompt
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim()
+      .replace(/\s+/g, " ") ?? "";
   if (!firstLine) return "by the way";
   const codePoints = [...firstLine];
   return codePoints.length <= BTW_TITLE_MAX_LENGTH
@@ -160,10 +147,7 @@ function describeSubagent(snap: SubagentSnapshot) {
   return `${snap.id} [${snap.status}] "${snap.title}" (${details.join(", ")})`;
 }
 
-function truncatedOutput(
-  snap: SubagentSnapshot,
-  maxBytes = SUBAGENT_OUTPUT_MAX_BYTES,
-): string {
+function truncatedOutput(snap: SubagentSnapshot, maxBytes = SUBAGENT_OUTPUT_MAX_BYTES): string {
   const output = snap.finalText || "(no output)";
   const truncation = truncateHead(output, {
     maxBytes: Math.min(maxBytes, DEFAULT_MAX_BYTES),
@@ -201,11 +185,7 @@ export default function (pi: ExtensionAPI) {
       .map(([id, pending]) => `- ${pending.title}: ${pending.question} (question_id: ${id})`)
       .join("\n");
 
-  const parentBridge = (
-    title: string,
-    manager: SubagentManagerShape,
-    senderId: string,
-  ) => ({
+  const parentBridge = (title: string, manager: SubagentManagerShape, senderId: string) => ({
     notify(message: string) {
       pi.sendMessage(
         {
@@ -237,10 +217,7 @@ export default function (pi: ExtensionAPI) {
         message: message.trim(),
       } as const;
       try {
-        await runTool(
-          getRuntime(),
-          manager.send(id, `[Peer agent "${title}"] ${message.trim()}`),
-        );
+        await runTool(getRuntime(), manager.send(id, `[Peer agent "${title}"] ${message.trim()}`));
         const record: PeerMessage = { ...base, status: "delivered" };
         manager.view.recordPeerMessage(record);
         peerHistory.push(record);
@@ -417,7 +394,9 @@ export default function (pi: ExtensionAPI) {
     }
     const archivedSource = options.resumeFrom ? latestRecord(options.resumeFrom) : undefined;
     if (ownedByAnotherProcess(archivedSource)) {
-      throw new Error(`Subagent "${options.resumeFrom}" is running in another Pi session; resume it there or wait until it finishes.`);
+      throw new Error(
+        `Subagent "${options.resumeFrom}" is running in another Pi session; resume it there or wait until it finishes.`,
+      );
     }
     const resumeSessionFile = archivedSource?.sessionFile;
     if (options.resumeFrom && (!resumeSessionFile || !fs.existsSync(resumeSessionFile))) {
@@ -432,10 +411,7 @@ export default function (pi: ExtensionAPI) {
       thinking: options.thinking,
       isolation: options.isolation ?? (archivedSource ? (archivedSource.worktree ? "worktree" : "none") : undefined),
     });
-    const title =
-      options.taskName?.trim().slice(0, 160) ||
-      archivedSource?.title ||
-      profile.agentType;
+    const title = options.taskName?.trim().slice(0, 160) || archivedSource?.title || profile.agentType;
     // Validate before allocating a worktree so a bad value cannot leak one.
     const forkTurns = resumeSessionFile ? undefined : parseForkTurns(options.forkTurns);
 
@@ -445,12 +421,7 @@ export default function (pi: ExtensionAPI) {
     if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
       throw new Error(`cwd is not a directory: ${cwd}`);
     }
-    if (
-      profile.isolation === "worktree" &&
-      options.cwd &&
-      !resumeSessionFile &&
-      options.origin !== "orchestration"
-    ) {
+    if (profile.isolation === "worktree" && options.cwd && !resumeSessionFile && options.origin !== "orchestration") {
       throw new Error('cwd and isolation="worktree" are mutually exclusive.');
     }
 
@@ -467,66 +438,62 @@ export default function (pi: ExtensionAPI) {
     }
     const cleanup = async () => {
       if (createdWorktree && worktree) {
-        await discardAgentWorktree(
-          (command, args, execOptions) => pi.exec(command, args, execOptions),
-          worktree,
-        ).catch(() => undefined);
+        await discardAgentWorktree((command, args, execOptions) => pi.exec(command, args, execOptions), worktree).catch(
+          () => undefined,
+        );
       }
     };
     try {
-    const preferredId = resumeSessionFile ? options.resumeFrom! : allocateSubagentId();
-    const inheritedMessages = forkTurns === undefined
-      ? []
-      : forkConversation(
-          ctx.sessionManager.buildContextEntries().flatMap(sessionEntryToContextMessages),
-          forkTurns,
-        );
-    return {
-      cleanup,
-      task: {
-        prompt: buildTaskPrompt(options.message, profile.instructions, profile.persona),
-        title,
-        origin: options.origin ?? "model",
-        cwd,
-        model: profile.model,
-        reasoningEffort: profile.thinking,
-        capability: profile.capability,
-        childOptions: profile.childOptions,
-        agentType: profile.agentType,
-        persona: profile.persona,
-        isolation: profile.isolation,
-        maxConcurrent: options.maxConcurrent ?? config.maxConcurrent,
-        concurrencyGroup: options.concurrencyGroup,
-        worktree,
-        resumeSessionFile,
-        preferredId,
-        parent: {
-          parentCwd: ctx.cwd,
-          bridge: parentBridge(title, manager, preferredId),
-          projectTrusted: resolveStandaloneChildProjectTrust({
+      const preferredId = resumeSessionFile ? options.resumeFrom! : allocateSubagentId();
+      const inheritedMessages =
+        forkTurns === undefined
+          ? []
+          : forkConversation(
+              ctx.sessionManager.buildContextEntries().flatMap(sessionEntryToContextMessages),
+              forkTurns,
+            );
+      return {
+        cleanup,
+        task: {
+          prompt: buildTaskPrompt(options.message, profile.instructions, profile.persona),
+          title,
+          origin: options.origin ?? "model",
+          cwd,
+          model: profile.model,
+          reasoningEffort: profile.thinking,
+          capability: profile.capability,
+          childOptions: profile.childOptions,
+          agentType: profile.agentType,
+          persona: profile.persona,
+          isolation: profile.isolation,
+          maxConcurrent: options.maxConcurrent ?? config.maxConcurrent,
+          concurrencyGroup: options.concurrencyGroup,
+          worktree,
+          resumeSessionFile,
+          preferredId,
+          parent: {
             parentCwd: ctx.cwd,
-            childCwd: cwd,
-            parentTrusted: ctx.isProjectTrusted(),
-          }),
-          inheritedModel: ctx.model ?? undefined,
-          inheritedThinkingLevel: pi.getThinkingLevel(),
-          inheritedMessages,
-          parentSessionFile: ctx.sessionManager.getSessionFile(),
-          modelRegistry: ctx.modelRegistry,
+            bridge: parentBridge(title, manager, preferredId),
+            projectTrusted: resolveStandaloneChildProjectTrust({
+              parentCwd: ctx.cwd,
+              childCwd: cwd,
+              parentTrusted: ctx.isProjectTrusted(),
+            }),
+            inheritedModel: ctx.model ?? undefined,
+            inheritedThinkingLevel: pi.getThinkingLevel(),
+            inheritedMessages,
+            parentSessionFile: ctx.sessionManager.getSessionFile(),
+            modelRegistry: ctx.modelRegistry,
+          },
         },
-      },
-    };
+      };
     } catch (error) {
       await cleanup();
       throw error;
     }
   };
 
-  const spawnPiAgent = async (
-    manager: SubagentManagerShape,
-    ctx: ExtensionContext,
-    options: SpawnOptions,
-  ) => {
+  const spawnPiAgent = async (manager: SubagentManagerShape, ctx: ExtensionContext, options: SpawnOptions) => {
     const prepared = await preparePiAgent(manager, ctx, options);
     if (prepared.resumed) return prepared.resumed;
     try {
@@ -544,17 +511,21 @@ export default function (pi: ExtensionAPI) {
     const subs = manager.view.active();
     const runningSnapshots = subs.filter((snap) => snap.status === "running");
     if (activityContext) {
-      setActivitySource(activityContext, "subagents", runningSnapshots.map((snap) => {
-        const activeTool = snap.liveTools.find((tool) => !tool.done)?.name;
-        return {
-          id: snap.id,
-          label: "Subagent",
-          title: snap.title,
-          detail: activeTool ? `${activeTool} · ${formatElapsed(snap)}` : `thinking · ${formatElapsed(snap)}`,
-          state: "active" as const,
-          priority: 55,
-        };
-      }));
+      setActivitySource(
+        activityContext,
+        "subagents",
+        runningSnapshots.map((snap) => {
+          const activeTool = snap.liveTools.find((tool) => !tool.done)?.name;
+          return {
+            id: snap.id,
+            label: "Subagent",
+            title: snap.title,
+            detail: activeTool ? `${activeTool} · ${formatElapsed(snap)}` : `thinking · ${formatElapsed(snap)}`,
+            state: "active" as const,
+            priority: 55,
+          };
+        }),
+      );
     }
     ui.setStatus("subagents", undefined);
   };
@@ -638,10 +609,7 @@ export default function (pi: ExtensionAPI) {
       const manager = await getManager();
       const snapshot = manager.view.get(id);
       if (!snapshot?.meta.worktree) return;
-      await discardAgentWorktree(
-        (command, args, options) => pi.exec(command, args, options),
-        snapshot.meta.worktree,
-      );
+      await discardAgentWorktree((command, args, options) => pi.exec(command, args, options), snapshot.meta.worktree);
       manager.view.clearWorktree(id);
       const updated = manager.view.get(id);
       if (updated) persistSnapshot(updated);
@@ -652,12 +620,9 @@ export default function (pi: ExtensionAPI) {
       manager.view.retain(id, false);
     },
   };
-  const unsubscribeCoordinator = pi.events.on(
-    SUBAGENT_COORDINATOR_REQUEST,
-    (request) => {
-      if (isCoordinatorRequest(request)) request.accept(coordinator);
-    },
-  );
+  const unsubscribeCoordinator = pi.events.on(SUBAGENT_COORDINATOR_REQUEST, (request) => {
+    if (isCoordinatorRequest(request)) request.accept(coordinator);
+  });
 
   pi.on("session_start", (_event, ctx) => {
     archived.clear();
@@ -751,15 +716,11 @@ export default function (pi: ExtensionAPI) {
           description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.reasoningEffort,
         }),
       ),
-      readonly: Type.Optional(
-        Type.Boolean({ description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.readonly }),
-      ),
+      readonly: Type.Optional(Type.Boolean({ description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.readonly })),
       agent_type: Type.Optional(
         Type.String({ description: "Profile: general-purpose, explore, plan, or a configured one." }),
       ),
-      persona: Type.Optional(
-        Type.String({ description: "Configured persona." }),
-      ),
+      persona: Type.Optional(Type.String({ description: "Configured persona." })),
       capability: Type.Optional(
         StringEnum(CAPABILITY_MODES, { description: "Tool policy; default from the profile." }),
       ),
@@ -767,11 +728,11 @@ export default function (pi: ExtensionAPI) {
         StringEnum(ISOLATION_MODES, { description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.isolation }),
       ),
       fork_turns: Type.Optional(
-        Type.String({ description: 'Parent context to copy: "none" (default), "all", or a number of recent user turns.' }),
+        Type.String({
+          description: 'Parent context to copy: "none" (default), "all", or a number of recent user turns.',
+        }),
       ),
-      resume_from: Type.Optional(
-        Type.String({ description: "Id of a finished subagent to continue." }),
-      ),
+      resume_from: Type.Optional(Type.String({ description: "Id of a finished subagent to continue." })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const manager = await getManager();
@@ -821,12 +782,33 @@ export default function (pi: ExtensionAPI) {
       };
     },
     renderCall(args, theme) {
-      return new Text(toolCallCard(theme, args.resume_from ? "subagent resume" : "subagent spawn", args.task_name ?? oneLine(args.message).slice(0, 72), `${args.agent_type ?? "general-purpose"} · ${args.capability ?? (args.readonly ? "read-only" : "all")} · ${args.isolation ?? "shared"}`), 0, 0);
+      return new Text(
+        toolCallCard(
+          theme,
+          args.resume_from ? "subagent resume" : "subagent spawn",
+          args.task_name ?? oneLine(args.message).slice(0, 72),
+          `${args.agent_type ?? "general-purpose"} · ${args.capability ?? (args.readonly ? "read-only" : "all")} · ${args.isolation ?? "shared"}`,
+        ),
+        0,
+        0,
+      );
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Starting subagent…"), 0, 0);
-      const details = result.details as { id?: string; title?: string; model?: string; capability?: string; isolation?: string } | undefined;
-      return new Text(toolResultCard(result, expanded, theme, "active", details?.id ?? "subagent", `${details?.title ?? "started"} · ${details?.model ?? "inherit"} · ${details?.capability ?? "all"} · ${details?.isolation ?? "shared"}`), 0, 0);
+      const details = result.details as
+        { id?: string; title?: string; model?: string; capability?: string; isolation?: string } | undefined;
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          "active",
+          details?.id ?? "subagent",
+          `${details?.title ?? "started"} · ${details?.model ?? "inherit"} · ${details?.capability ?? "all"} · ${details?.isolation ?? "shared"}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -856,7 +838,10 @@ export default function (pi: ExtensionAPI) {
       }
       const requested = params.ids?.length
         ? params.ids
-        : manager.view.list().filter((snap) => snap.status === "running").map((snap) => snap.id);
+        : manager.view
+            .list()
+            .filter((snap) => snap.status === "running")
+            .map((snap) => snap.id);
       const ids = [...new Set(requested)];
       if (ids.length === 0) {
         return {
@@ -867,9 +852,7 @@ export default function (pi: ExtensionAPI) {
       const known = manager.view.list().map((snap) => snap.id);
       const unknown = ids.filter((id) => !manager.view.get(id));
       if (unknown.length > 0) {
-        throw new Error(
-          `Unknown subagent id(s): ${unknown.join(", ")}. Known: ${known.join(", ") || "none"}.`,
-        );
+        throw new Error(`Unknown subagent id(s): ${unknown.join(", ")}. Known: ${known.join(", ") || "none"}.`);
       }
 
       const snapshots = ids.map((id) => manager.view.get(id)!);
@@ -883,16 +866,11 @@ export default function (pi: ExtensionAPI) {
         let section = `## ${snap.id} "${snap.title}" ${verb}`;
         if (snap.errorText) section += `\nError: ${snap.errorText}`;
         const headerBytes = Buffer.byteLength(section, "utf8") + 2;
-        const outputBudget = Math.max(
-          512,
-          Math.min(WAIT_PER_AGENT_MAX_BYTES, remainingBytes - headerBytes),
-        );
+        const outputBudget = Math.max(512, Math.min(WAIT_PER_AGENT_MAX_BYTES, remainingBytes - headerBytes));
         section += `\n\n${truncatedOutput(snap, outputBudget)}`;
         const sectionBytes = Buffer.byteLength(section, "utf8");
         if (sectionBytes > remainingBytes) {
-          sections.push(
-            `## ${snap.id} "${snap.title}"\n\n[omitted: total result limit reached]`,
-          );
+          sections.push(`## ${snap.id} "${snap.title}"\n\n[omitted: total result limit reached]`);
           break;
         }
         sections.push(section);
@@ -901,7 +879,7 @@ export default function (pi: ExtensionAPI) {
       if (pending.length > 0) {
         sections.push(
           `Still running in the background: ${pending.map((snap) => snap.id).join(", ")}. ` +
-          "Their results will arrive as messages; continue other work or end the turn.",
+            "Their results will arrive as messages; continue other work or end the turn.",
         );
       }
 
@@ -926,16 +904,37 @@ export default function (pi: ExtensionAPI) {
       };
     },
     renderCall(args, theme) {
-      return new Text(toolCallCard(theme, "subagent collect", args.ids?.length ? `${args.ids.length} selected` : "available results", args.ids?.join(", ")), 0, 0);
+      return new Text(
+        toolCallCard(
+          theme,
+          "subagent collect",
+          args.ids?.length ? `${args.ids.length} selected` : "available results",
+          args.ids?.join(", "),
+        ),
+        0,
+        0,
+      );
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Collecting subagent results…"), 0, 0);
-      const details = result.details as { results?: Array<{ status?: string }>; pending?: string[]; pendingQuestions?: string[] } | undefined;
+      const details = result.details as
+        { results?: Array<{ status?: string }>; pending?: string[]; pendingQuestions?: string[] } | undefined;
       const results = details?.results ?? [];
       const failed = results.filter((item) => item.status === "error").length;
       const pending = details?.pending?.length ?? 0;
       const questions = details?.pendingQuestions?.length ?? 0;
-      return new Text(toolResultCard(result, expanded, theme, failed ? "error" : questions ? "warning" : pending ? "active" : "success", "subagents", `${results.length} result${results.length === 1 ? "" : "s"} · ${pending} running${questions ? ` · ${questions} need guidance` : ""}`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          failed ? "error" : questions ? "warning" : pending ? "active" : "success",
+          "subagents",
+          `${results.length} result${results.length === 1 ? "" : "s"} · ${pending} running${questions ? ` · ${questions} need guidance` : ""}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -952,15 +951,12 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params) {
       const manager = await getManager();
       const ids = [...new Set(params.ids)];
-      if (ids.length === 0)
-        throw new Error("Provide at least one subagent id.");
+      if (ids.length === 0) throw new Error("Provide at least one subagent id.");
 
       const known = manager.view.list().map((snap) => snap.id);
       const unknown = ids.filter((id) => !manager.view.get(id));
       if (unknown.length > 0) {
-        throw new Error(
-          `Unknown subagent id(s): ${unknown.join(", ")}. Known: ${known.join(", ") || "none"}.`,
-        );
+        throw new Error(`Unknown subagent id(s): ${unknown.join(", ")}. Known: ${known.join(", ") || "none"}.`);
       }
 
       const report = await runTool(getRuntime(), manager.cancel(ids));
@@ -983,12 +979,32 @@ export default function (pi: ExtensionAPI) {
       };
     },
     renderCall(args, theme) {
-      return new Text(toolCallCard(theme, "subagent close", `${args.ids?.length ?? 0} agent${args.ids?.length === 1 ? "" : "s"}`, args.ids?.join(", ")), 0, 0);
+      return new Text(
+        toolCallCard(
+          theme,
+          "subagent close",
+          `${args.ids?.length ?? 0} agent${args.ids?.length === 1 ? "" : "s"}`,
+          args.ids?.join(", "),
+        ),
+        0,
+        0,
+      );
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Closing subagents…"), 0, 0);
       const details = result.details as { results?: unknown[] } | undefined;
-      return new Text(toolResultCard(result, expanded, theme, "success", "subagents closed", `${details?.results?.length ?? 0} processed`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          "success",
+          "subagents closed",
+          `${details?.results?.length ?? 0} processed`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1008,9 +1024,7 @@ export default function (pi: ExtensionAPI) {
       const snap = manager.view.get(params.id);
       if (!snap) {
         const known = manager.view.list().map((s) => s.id);
-        throw new Error(
-          `Unknown subagent id "${params.id}". Known: ${known.join(", ") || "none"}.`,
-        );
+        throw new Error(`Unknown subagent id "${params.id}". Known: ${known.join(", ") || "none"}.`);
       }
 
       let text = `${describeSubagent(snap)}\nTurns: ${snap.turns}`;
@@ -1035,8 +1049,26 @@ export default function (pi: ExtensionAPI) {
     },
     renderResult(result, { expanded }, theme) {
       const details = result.details as { id?: string; status?: string; turns?: number } | undefined;
-      const state = details?.status === "error" ? "error" : details?.status === "running" ? "active" : details?.status === "cancelled" ? "muted" : "success";
-      return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "subagent", `${details?.status ?? "unknown"} · ${details?.turns ?? 0} turns`), 0, 0);
+      const state =
+        details?.status === "error"
+          ? "error"
+          : details?.status === "running"
+            ? "active"
+            : details?.status === "cancelled"
+              ? "muted"
+              : "success";
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          state,
+          details?.id ?? "subagent",
+          `${details?.status ?? "unknown"} · ${details?.turns ?? 0} turns`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1054,17 +1086,32 @@ export default function (pi: ExtensionAPI) {
           `profile ${name}: ${profile.description ?? "no description"}; capability=${profile.capability ?? "all"}; isolation=${profile.isolation ?? "none"}${profile.tier ? `; tier=${profile.tier}` : ""}`,
       );
       const tierLines = Object.entries(config.tiers).map(
-        ([tier, setting]) => `tier ${tier}: model=${setting?.model ?? "parent"}; thinking=${setting?.thinking ?? "parent"}`,
+        ([tier, setting]) =>
+          `tier ${tier}: model=${setting?.model ?? "parent"}; thinking=${setting?.thinking ?? "parent"}`,
       );
       const personaLines = Object.entries(config.personas).map(
         ([name, persona]) => `persona ${name}: ${persona.description ?? "no description"}`,
       );
       return {
-        content: [{
-          type: "text",
-          text: [`maxConcurrent=${config.maxConcurrent}`, `fusion=${config.fusion ? "on" : "off"}`, ...tierLines, ...profileLines, ...personaLines].join("\n"),
-        }],
-        details: { maxConcurrent: config.maxConcurrent, fusion: config.fusion, tiers: config.tiers, profiles: config.profiles, personas: config.personas },
+        content: [
+          {
+            type: "text",
+            text: [
+              `maxConcurrent=${config.maxConcurrent}`,
+              `fusion=${config.fusion ? "on" : "off"}`,
+              ...tierLines,
+              ...profileLines,
+              ...personaLines,
+            ].join("\n"),
+          },
+        ],
+        details: {
+          maxConcurrent: config.maxConcurrent,
+          fusion: config.fusion,
+          tiers: config.tiers,
+          profiles: config.profiles,
+          personas: config.personas,
+        },
       };
     },
     renderCall(_args, theme) {
@@ -1072,7 +1119,18 @@ export default function (pi: ExtensionAPI) {
     },
     renderResult(result, { expanded }, theme) {
       const details = result.details as { maxConcurrent?: number; profiles?: object; personas?: object } | undefined;
-      return new Text(toolResultCard(result, expanded, theme, "muted", "subagent profiles", `${Object.keys(details?.profiles ?? {}).length} profiles · ${Object.keys(details?.personas ?? {}).length} personas · max ${details?.maxConcurrent ?? "?"}`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          "muted",
+          "subagent profiles",
+          `${Object.keys(details?.profiles ?? {}).length} profiles · ${Object.keys(details?.personas ?? {}).length} personas · max ${details?.maxConcurrent ?? "?"}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1089,7 +1147,12 @@ export default function (pi: ExtensionAPI) {
       const liveIds = new Set(subs.map((snap) => snap.id));
       const resumable = [...archived.values()].filter((record) => !liveIds.has(record.id));
       const lines = subs.map((snap) => describeSubagent(snap));
-      lines.push(...resumable.map((record) => `${record.id} [archived:${record.status}] "${record.title}" (${record.model ?? "?"}, ${record.cwd})`));
+      lines.push(
+        ...resumable.map(
+          (record) =>
+            `${record.id} [archived:${record.status}] "${record.title}" (${record.model ?? "?"}, ${record.cwd})`,
+        ),
+      );
       return {
         content: [{ type: "text", text: lines.length ? lines.join("\n") : "No subagents." }],
         details: {
@@ -1108,7 +1171,18 @@ export default function (pi: ExtensionAPI) {
       const agents = details?.subagents ?? [];
       const running = agents.filter((agent) => agent.status === "running").length;
       const failed = agents.filter((agent) => agent.status === "error").length;
-      return new Text(toolResultCard(result, expanded, theme, failed ? "error" : running ? "active" : "muted", "subagents", `${agents.length} tracked · ${running} running · ${failed} failed`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          failed ? "error" : running ? "active" : "muted",
+          "subagents",
+          `${agents.length} tracked · ${running} running · ${failed} failed`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1137,7 +1211,18 @@ export default function (pi: ExtensionAPI) {
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Messaging subagent…"), 0, 0);
       const details = result.details as { id?: string; status?: string } | undefined;
-      return new Text(toolResultCard(result, expanded, theme, details?.status === "error" ? "error" : "success", details?.id ?? "subagent", `message delivered · ${details?.status ?? "unknown"}`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          details?.status === "error" ? "error" : "success",
+          details?.id ?? "subagent",
+          `message delivered · ${details?.status ?? "unknown"}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1145,12 +1230,15 @@ export default function (pi: ExtensionAPI) {
     name: "apply_agent_changes",
     label: "Manage Isolated Agent Changes",
     exposure: "model-only",
-    description: "Inspect, patch, cherry-pick, merge, or permanently discard a finished subagent's isolated worktree. Cherry-pick and merge are tried in a temporary worktree first, so a conflict leaves the source checkout unchanged.",
+    description:
+      "Inspect, patch, cherry-pick, merge, or permanently discard a finished subagent's isolated worktree. Cherry-pick and merge are tried in a temporary worktree first, so a conflict leaves the source checkout unchanged.",
     parameters: Type.Object({
       id: Type.String({ description: "Worktree-isolated subagent id" }),
-      action: Type.Optional(StringEnum(WORKTREE_ACTIONS, {
-        description: "Default patch.",
-      })),
+      action: Type.Optional(
+        StringEnum(WORKTREE_ACTIONS, {
+          description: "Default patch.",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const manager = await getManager();
@@ -1163,7 +1251,9 @@ export default function (pi: ExtensionAPI) {
         throw new Error(`Subagent "${params.id}" is still running; wait or close it before ${action}.`);
       }
       if (!snap && ownedByAnotherProcess(record) && action !== "inspect") {
-        throw new Error(`Subagent "${params.id}" is running in another Pi session; ${action} it there or wait until it finishes.`);
+        throw new Error(
+          `Subagent "${params.id}" is running in another Pi session; ${action} it there or wait until it finishes.`,
+        );
       }
       const exec = (command: string, args: string[], execOptions?: Parameters<typeof pi.exec>[2]) =>
         pi.exec(command, args, execOptions);
@@ -1192,14 +1282,15 @@ export default function (pi: ExtensionAPI) {
       } else {
         result = await integrateAgentWorktree(exec, worktree, action, snap?.title ?? record?.title ?? params.id);
       }
-      const files = Array.isArray(result.files) ? result.files as string[] : [];
-      const text = action === "inspect"
-        ? `${params.id}: ${files.length} changed file(s), ${(result.commits as string[] | undefined)?.length ?? 0} commit(s), dirty=${String(result.dirty)}`
-        : action === "discard"
-          ? `Discarded the isolated worktree for ${params.id}.`
-          : result.changed
-            ? `${action} applied ${files.length} file(s) from ${params.id}:\n${files.join("\n")}`
-            : `${params.id} has no changes to ${action}.`;
+      const files = Array.isArray(result.files) ? (result.files as string[]) : [];
+      const text =
+        action === "inspect"
+          ? `${params.id}: ${files.length} changed file(s), ${(result.commits as string[] | undefined)?.length ?? 0} commit(s), dirty=${String(result.dirty)}`
+          : action === "discard"
+            ? `Discarded the isolated worktree for ${params.id}.`
+            : result.changed
+              ? `${action} applied ${files.length} file(s) from ${params.id}:\n${files.join("\n")}`
+              : `${params.id} has no changes to ${action}.`;
       return { content: [{ type: "text", text }], details: { id: params.id, ...result, worktree } };
     },
     renderCall(args, theme) {
@@ -1207,9 +1298,23 @@ export default function (pi: ExtensionAPI) {
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Managing subagent changes…"), 0, 0);
-      const details = result.details as { id?: string; action?: string; changed?: boolean; discarded?: boolean; files?: string[] } | undefined;
-      const summary = details?.discarded ? "worktree discarded" : `${details?.action ?? "inspect"} · ${details?.files?.length ?? 0} files${details?.changed ? " changed" : ""}`;
-      return new Text(toolResultCard(result, expanded, theme, details?.changed || details?.discarded ? "success" : "muted", details?.id ?? "subagent", summary), 0, 0);
+      const details = result.details as
+        { id?: string; action?: string; changed?: boolean; discarded?: boolean; files?: string[] } | undefined;
+      const summary = details?.discarded
+        ? "worktree discarded"
+        : `${details?.action ?? "inspect"} · ${details?.files?.length ?? 0} files${details?.changed ? " changed" : ""}`;
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          details?.changed || details?.discarded ? "success" : "muted",
+          details?.id ?? "subagent",
+          summary,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1235,11 +1340,31 @@ export default function (pi: ExtensionAPI) {
       };
     },
     renderCall(args, theme) {
-      return new Text(toolCallCard(theme, "subagent reply", args.question_id ?? "pending question", oneLine(args.reply).slice(0, 100)), 0, 0);
+      return new Text(
+        toolCallCard(
+          theme,
+          "subagent reply",
+          args.question_id ?? "pending question",
+          oneLine(args.reply).slice(0, 100),
+        ),
+        0,
+        0,
+      );
     },
     renderResult(result, { expanded }, theme) {
       const details = result.details as { title?: string; questionId?: string } | undefined;
-      return new Text(toolResultCard(result, expanded, theme, "success", "reply delivered", `${details?.title ?? "subagent"} · ${details?.questionId ?? "question"}`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          "success",
+          "reply delivered",
+          `${details?.title ?? "subagent"} · ${details?.questionId ?? "question"}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -1247,7 +1372,8 @@ export default function (pi: ExtensionAPI) {
     name: "task",
     label: "Start Pi Subagent Tasks",
     exposure: "model-only",
-    description: "Start several independent background subagents at once and return their ids. Capacity is reserved for the whole batch, or none of it starts. Each result arrives as a message that starts your next turn.",
+    description:
+      "Start several independent background subagents at once and return their ids. Capacity is reserved for the whole batch, or none of it starts. Each result arrives as a message that starts your next turn.",
     parameters: Type.Object({
       tasks: Type.Array(
         Type.Object({
@@ -1270,26 +1396,26 @@ export default function (pi: ExtensionAPI) {
       const manager = await getManager();
       const config = loadSubagentConfig(ctx.cwd, ctx.isProjectTrusted());
       if (params.tasks.length > config.maxConcurrent) {
-        throw new Error(
-          `Requested ${params.tasks.length} tasks, but maxConcurrent is ${config.maxConcurrent}.`,
-        );
+        throw new Error(`Requested ${params.tasks.length} tasks, but maxConcurrent is ${config.maxConcurrent}.`);
       }
       const prepared: PreparedSpawn[] = [];
       try {
         for (const item of params.tasks) {
-          prepared.push(await preparePiAgent(manager, ctx, {
-            message: item.message,
-            taskName: item.task_name,
-            cwd: item.cwd,
-            model: item.model,
-            thinking: item.thinking,
-            readonly: item.readonly,
-            agentType: item.agent_type,
-            persona: item.persona,
-            capability: item.capability,
-            isolation: item.isolation,
-            forkTurns: item.fork_turns,
-          }));
+          prepared.push(
+            await preparePiAgent(manager, ctx, {
+              message: item.message,
+              taskName: item.task_name,
+              cwd: item.cwd,
+              model: item.model,
+              thinking: item.thinking,
+              readonly: item.readonly,
+              agentType: item.agent_type,
+              persona: item.persona,
+              capability: item.capability,
+              isolation: item.isolation,
+              forkTurns: item.fork_turns,
+            }),
+          );
         }
       } catch (error) {
         await Promise.all(prepared.map((item) => item.cleanup()));
@@ -1299,125 +1425,142 @@ export default function (pi: ExtensionAPI) {
       try {
         spawned = await runTool(
           getRuntime(),
-          manager.spawnBatch("pi", prepared.map((item) => item.task!)),
+          manager.spawnBatch(
+            "pi",
+            prepared.map((item) => item.task!),
+          ),
         );
       } catch (error) {
         await Promise.all(prepared.map((item) => item.cleanup()));
         throw error;
       }
       for (const snap of spawned) persistSnapshot(snap);
-      const lines = spawned.map(
-        (snap) => `- ${describeSubagent(snap)}`,
-      );
+      const lines = spawned.map((snap) => `- ${describeSubagent(snap)}`);
       return {
-        content: [{
-          type: "text",
-          text:
-            `Started ${spawned.length} Pi subagent${spawned.length === 1 ? "" : "s"} in the background:\n` +
-            `${lines.join("\n")}\n\n` +
-            "Each result will arrive as a message that starts your next turn; continue other work or end this turn.",
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Started ${spawned.length} Pi subagent${spawned.length === 1 ? "" : "s"} in the background:\n` +
+              `${lines.join("\n")}\n\n` +
+              "Each result will arrive as a message that starts your next turn; continue other work or end this turn.",
+          },
+        ],
         details: {
           agents: spawned.map((snap) => ({ id: snap.id, title: snap.title, status: snap.status })),
         },
       };
     },
     renderCall(args, theme) {
-      return new Text(toolCallCard(theme, "subagent batch", `${args.tasks?.length ?? 0} task${args.tasks?.length === 1 ? "" : "s"}`, (args.tasks ?? []).slice(0, 3).map((task: { task_name?: string; message?: string }) => task.task_name ?? oneLine(task.message ?? "").slice(0, 40)).join(" · ")), 0, 0);
+      return new Text(
+        toolCallCard(
+          theme,
+          "subagent batch",
+          `${args.tasks?.length ?? 0} task${args.tasks?.length === 1 ? "" : "s"}`,
+          (args.tasks ?? [])
+            .slice(0, 3)
+            .map(
+              (task: { task_name?: string; message?: string }) =>
+                task.task_name ?? oneLine(task.message ?? "").slice(0, 40),
+            )
+            .join(" · "),
+        ),
+        0,
+        0,
+      );
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Starting subagent batch…"), 0, 0);
       const details = result.details as { agents?: Array<{ status?: string }> } | undefined;
       const agents = details?.agents ?? [];
-      return new Text(toolResultCard(result, expanded, theme, "active", "subagent batch", `${agents.length} started · ${agents.filter((agent) => agent.status === "running").length} running`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          "active",
+          "subagent batch",
+          `${agents.length} started · ${agents.filter((agent) => agent.status === "running").length} running`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
   // --- Result message rendering ------------------------------------------
 
-  pi.registerMessageRenderer(
-    "subagent-result",
-    (message, { expanded }, theme) => {
-      const details = (message.details ?? {}) as {
-        id?: string;
-        title?: string;
-        status?: string;
+  pi.registerMessageRenderer("subagent-result", (message, { expanded }, theme) => {
+    const details = (message.details ?? {}) as {
+      id?: string;
+      title?: string;
+      status?: string;
+    };
+    const failed = details.status === "error";
+    const cancelled = details.status === "cancelled";
+    const icon = failed ? theme.fg("error", "x") : cancelled ? theme.fg("muted", "■") : theme.fg("success", "■");
+    const header =
+      `${icon} ` +
+      theme.fg("accent", theme.bold(`subagent ${oneLine(details.id ?? "?")}`)) +
+      theme.fg(
+        "muted",
+        ` · ${oneLine(details.title ?? "")} · ${failed ? "failed" : cancelled ? "cancelled" : "finished"}`,
+      );
+
+    const content = typeof message.content === "string" ? message.content : "";
+    // Remove only the summary line. The following Error line (when present)
+    // is part of the actual result and must remain visible.
+    // Child output is untrusted; strip terminal control sequences before display.
+    const body = sanitizeTerminalText(content.split("\n").slice(1).join("\n")).trim();
+
+    if (expanded) {
+      const md = new Markdown(`${body}`, 0, 0, getMarkdownTheme());
+      const container = new Text(header, 0, 0);
+      return {
+        render: (width: number) => [...container.render(width), ...md.render(width)],
+        invalidate: () => {
+          container.invalidate();
+          md.invalidate();
+        },
       };
-      const failed = details.status === "error";
-      const cancelled = details.status === "cancelled";
-      const icon = failed ? theme.fg("error", "x") : cancelled ? theme.fg("muted", "■") : theme.fg("success", "■");
-      const header =
-        `${icon} ` +
-        theme.fg("accent", theme.bold(`subagent ${oneLine(details.id ?? "?")}`)) +
-        theme.fg(
-          "muted",
-          ` · ${oneLine(details.title ?? "")} · ${failed ? "failed" : cancelled ? "cancelled" : "finished"}`,
-        );
+    }
 
-      const content =
-        typeof message.content === "string" ? message.content : "";
-      // Remove only the summary line. The following Error line (when present)
-      // is part of the actual result and must remain visible.
-      // Child output is untrusted; strip terminal control sequences before display.
-      const body = sanitizeTerminalText(content.split("\n").slice(1).join("\n")).trim();
+    const previewLines = body.split("\n").slice(0, 8);
+    let text = header;
+    for (const line of previewLines) text += `\n${theme.fg("toolOutput", line)}`;
+    if (body.split("\n").length > 8) text += `\n${theme.fg("dim", "... (ctrl+o to expand)")}`;
+    return new Text(text, 0, 0);
+  });
 
-      if (expanded) {
-        const md = new Markdown(`${body}`, 0, 0, getMarkdownTheme());
-        const container = new Text(header, 0, 0);
-        return {
-          render: (width: number) => [
-            ...container.render(width),
-            ...md.render(width),
-          ],
-          invalidate: () => {
-            container.invalidate();
-            md.invalidate();
-          },
-        };
-      }
-
-      const previewLines = body.split("\n").slice(0, 8);
-      let text = header;
-      for (const line of previewLines)
-        text += `\n${theme.fg("toolOutput", line)}`;
-      if (body.split("\n").length > 8)
-        text += `\n${theme.fg("dim", "... (ctrl+o to expand)")}`;
-      return new Text(text, 0, 0);
-    },
-  );
-
-  pi.registerEntryRenderer<BtwEntryData>(
-    BTW_ENTRY_TYPE,
-    (entry, { expanded }, theme) => {
-      const data = entry.data;
-      if (!data) return new Text(theme.fg("warning", "By-the-way result unavailable"), 0, 0);
-      const failed = data.status === "error";
-      const cancelled = data.status === "cancelled";
-      const header =
-        `${theme.fg(failed ? "error" : cancelled ? "muted" : "success", "■")} ` +
-        theme.fg("accent", theme.bold(`by the way · ${oneLine(data.title)}`)) +
-        theme.fg("muted", ` · ${failed ? "failed" : cancelled ? "cancelled" : "answered"} · ${oneLine(data.id)}`);
-      const body = sanitizeTerminalText([data.errorText ? `Error: ${data.errorText}` : "", data.answer]
-        .filter(Boolean)
-        .join("\n\n"));
-      if (expanded) {
-        const markdown = new Markdown(body, 0, 0, getMarkdownTheme());
-        const title = new Text(header, 0, 0);
-        return {
-          render: (width: number) => [...title.render(width), ...markdown.render(width)],
-          invalidate: () => {
-            title.invalidate();
-            markdown.invalidate();
-          },
-        };
-      }
-      const bodyLines = body.split("\n");
-      let text = header;
-      for (const line of bodyLines.slice(0, 8)) text += `\n${theme.fg("toolOutput", line)}`;
-      if (bodyLines.length > 8) text += `\n${theme.fg("dim", "... (ctrl+o to expand)")}`;
-      return new Text(text, 0, 0);
-    },
-  );
+  pi.registerEntryRenderer<BtwEntryData>(BTW_ENTRY_TYPE, (entry, { expanded }, theme) => {
+    const data = entry.data;
+    if (!data) return new Text(theme.fg("warning", "By-the-way result unavailable"), 0, 0);
+    const failed = data.status === "error";
+    const cancelled = data.status === "cancelled";
+    const header =
+      `${theme.fg(failed ? "error" : cancelled ? "muted" : "success", "■")} ` +
+      theme.fg("accent", theme.bold(`by the way · ${oneLine(data.title)}`)) +
+      theme.fg("muted", ` · ${failed ? "failed" : cancelled ? "cancelled" : "answered"} · ${oneLine(data.id)}`);
+    const body = sanitizeTerminalText(
+      [data.errorText ? `Error: ${data.errorText}` : "", data.answer].filter(Boolean).join("\n\n"),
+    );
+    if (expanded) {
+      const markdown = new Markdown(body, 0, 0, getMarkdownTheme());
+      const title = new Text(header, 0, 0);
+      return {
+        render: (width: number) => [...title.render(width), ...markdown.render(width)],
+        invalidate: () => {
+          title.invalidate();
+          markdown.invalidate();
+        },
+      };
+    }
+    const bodyLines = body.split("\n");
+    let text = header;
+    for (const line of bodyLines.slice(0, 8)) text += `\n${theme.fg("toolOutput", line)}`;
+    if (bodyLines.length > 8) text += `\n${theme.fg("dim", "... (ctrl+o to expand)")}`;
+    return new Text(text, 0, 0);
+  });
 
   // --- Commands -----------------------------------------------------------
 
@@ -1474,10 +1617,7 @@ export default function (pi: ExtensionAPI) {
           if (!selected) return;
           scope = selected as ConfigScope;
         }
-        const edited = await ctx.ui.editor(
-          `Edit ${scope} subagent configuration`,
-          loadConfigDocument(scope, ctx.cwd),
-        );
+        const edited = await ctx.ui.editor(`Edit ${scope} subagent configuration`, loadConfigDocument(scope, ctx.cwd));
         if (edited === undefined) return;
         try {
           saveConfigDocument(scope, ctx.cwd, edited);
@@ -1522,7 +1662,10 @@ export default function (pi: ExtensionAPI) {
       if (action === "profiles") {
         const config = loadSubagentConfig(ctx.cwd, ctx.isProjectTrusted());
         const entries = [
-          { label: `fusion: ${config.fusion ? "on" : "off"} · tiers`, text: JSON.stringify({ fusion: config.fusion, tiers: config.tiers }, null, 2) },
+          {
+            label: `fusion: ${config.fusion ? "on" : "off"} · tiers`,
+            text: JSON.stringify({ fusion: config.fusion, tiers: config.tiers }, null, 2),
+          },
           ...Object.entries(config.profiles).map(([name, value]) => ({
             label: `profile: ${name}`,
             text: JSON.stringify(value, null, 2),
@@ -1532,13 +1675,16 @@ export default function (pi: ExtensionAPI) {
             text: JSON.stringify(value, null, 2),
           })),
         ];
-        const selected = await ctx.ui.select("Subagent profiles and personas", entries.map((entry) => entry.label));
+        const selected = await ctx.ui.select(
+          "Subagent profiles and personas",
+          entries.map((entry) => entry.label),
+        );
         const entry = entries.find((candidate) => candidate.label === selected);
         if (entry) await ctx.ui.editor(`View ${entry.label} · edit via /subagents config`, entry.text);
         return;
       }
       if (action !== "agents") {
-        ctx.ui.notify('Use /subagents agents, peers, profiles, config, or fusion', "error");
+        ctx.ui.notify("Use /subagents agents, peers, profiles, config, or fusion", "error");
         return;
       }
       if (manager.view.size() === 0) {

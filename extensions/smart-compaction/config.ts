@@ -48,22 +48,26 @@ export function loadSmartCompactionConfig(file = smartCompactionConfigPath()): S
     return {
       version: 1,
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_SMART_COMPACTION_CONFIG.enabled,
-      model: typeof raw.model === "string" && raw.model.trim() ? raw.model.trim() : DEFAULT_SMART_COMPACTION_CONFIG.model,
-      thinkingLevel: raw.thinkingLevel && ["inherit", "off", "low", "medium", "high", "max"].includes(raw.thinkingLevel)
-        ? (raw.thinkingLevel as SmartCompactionConfig["thinkingLevel"])
-        : DEFAULT_SMART_COMPACTION_CONFIG.thinkingLevel,
-      maxSummaryTokens: typeof raw.maxSummaryTokens === "number" && raw.maxSummaryTokens > 0
-        ? raw.maxSummaryTokens
-        : undefined,
-      thresholdMode: raw.thresholdMode && ["percent", "hard", "hybrid"].includes(raw.thresholdMode)
-        ? raw.thresholdMode as CompactionThresholdMode
-        : DEFAULT_SMART_COMPACTION_CONFIG.thresholdMode,
-      thresholdPercent: typeof raw.thresholdPercent === "number" && raw.thresholdPercent > 0 && raw.thresholdPercent <= 100
-        ? raw.thresholdPercent
-        : DEFAULT_SMART_COMPACTION_CONFIG.thresholdPercent,
-      hardLimitTokens: typeof raw.hardLimitTokens === "number" && raw.hardLimitTokens > 0
-        ? Math.floor(raw.hardLimitTokens)
-        : DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens,
+      model:
+        typeof raw.model === "string" && raw.model.trim() ? raw.model.trim() : DEFAULT_SMART_COMPACTION_CONFIG.model,
+      thinkingLevel:
+        raw.thinkingLevel && ["inherit", "off", "low", "medium", "high", "max"].includes(raw.thinkingLevel)
+          ? (raw.thinkingLevel as SmartCompactionConfig["thinkingLevel"])
+          : DEFAULT_SMART_COMPACTION_CONFIG.thinkingLevel,
+      maxSummaryTokens:
+        typeof raw.maxSummaryTokens === "number" && raw.maxSummaryTokens > 0 ? raw.maxSummaryTokens : undefined,
+      thresholdMode:
+        raw.thresholdMode && ["percent", "hard", "hybrid"].includes(raw.thresholdMode)
+          ? (raw.thresholdMode as CompactionThresholdMode)
+          : DEFAULT_SMART_COMPACTION_CONFIG.thresholdMode,
+      thresholdPercent:
+        typeof raw.thresholdPercent === "number" && raw.thresholdPercent > 0 && raw.thresholdPercent <= 100
+          ? raw.thresholdPercent
+          : DEFAULT_SMART_COMPACTION_CONFIG.thresholdPercent,
+      hardLimitTokens:
+        typeof raw.hardLimitTokens === "number" && raw.hardLimitTokens > 0
+          ? Math.floor(raw.hardLimitTokens)
+          : DEFAULT_SMART_COMPACTION_CONFIG.hardLimitTokens,
       ...(typeof raw.maxRequestBytes === "number" && raw.maxRequestBytes > 0
         ? { maxRequestBytes: Math.floor(raw.maxRequestBytes) }
         : {}),

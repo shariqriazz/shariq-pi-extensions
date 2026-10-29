@@ -25,7 +25,7 @@ export function formatTokens(value: number, options: { exact?: boolean } = {}): 
 
 /** Money: two decimals; three below $0.10, where the third digit is significant. */
 export function formatUsd(value: number): string {
-  return value >= 0.10 ? `$${value.toFixed(2)}` : `$${value.toFixed(3)}`;
+  return value >= 0.1 ? `$${value.toFixed(2)}` : `$${value.toFixed(3)}`;
 }
 
 /** Latency durations (design language §4): below 10s the first decimal is significant

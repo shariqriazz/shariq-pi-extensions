@@ -24,12 +24,7 @@ import type { Cause, Scope } from "effect";
 import { Effect, Queue, Stream } from "effect";
 import { Type } from "typebox";
 import type { SubagentBackend, SubagentSession } from "../backend.ts";
-import type {
-  SpawnTask,
-  SubagentEvent,
-  SubagentMeta,
-  TranscriptPart,
-} from "../domain.ts";
+import type { SpawnTask, SubagentEvent, SubagentMeta, TranscriptPart } from "../domain.ts";
 import { SendError, SpawnError } from "../domain.ts";
 import {
   CHILD_EXCLUDED_TOOL_NAMES,
@@ -133,7 +128,11 @@ export function capabilityGuardExtension(
   };
 }
 
-function restrictActiveTools(session: AgentSession, capability: SpawnTask["capability"], allowlist?: ReadonlyArray<string>) {
+function restrictActiveTools(
+  session: AgentSession,
+  capability: SpawnTask["capability"],
+  allowlist?: ReadonlyArray<string>,
+) {
   if (capability === "all" && !allowlist) return;
   const active = session.getActiveToolNames();
   const allowed = active.filter((name) => childToolAllowed(name, capability, allowlist));
@@ -142,9 +141,7 @@ function restrictActiveTools(session: AgentSession, capability: SpawnTask["capab
 
 // --- Model + effort resolution -----------------------------------------------
 
-type ThinkingLevel = NonNullable<
-  NonNullable<Parameters<typeof createAgentSession>[0]>["thinkingLevel"]
->;
+type ThinkingLevel = NonNullable<NonNullable<Parameters<typeof createAgentSession>[0]>["thinkingLevel"]>;
 
 function createParentBridgeTools(task: SpawnTask): ToolDefinition[] {
   const bridge = task.parent.bridge;
@@ -192,7 +189,8 @@ function createParentBridgeTools(task: SpawnTask): ToolDefinition[] {
     {
       name: "message_peer",
       label: "Message Peer Agent",
-      description: "Route a message to an existing sibling agent through the main-thread manager. This cannot create agents.",
+      description:
+        "Route a message to an existing sibling agent through the main-thread manager. This cannot create agents.",
       parameters: Type.Object({
         id: Type.String({ description: "Target peer id from list_peers" }),
         message: Type.String({ description: "Message for the peer" }),
@@ -253,7 +251,13 @@ function waitBounded(operation: Promise<unknown>, timeoutMs: number) {
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, timeoutMs);
   });
-  return Promise.race([operation.then(() => undefined, () => undefined), timeout])
+  return Promise.race([
+    operation.then(
+      () => undefined,
+      () => undefined,
+    ),
+    timeout,
+  ])
     .catch(() => {})
     .finally(() => {
       if (timer) clearTimeout(timer);
@@ -264,15 +268,11 @@ function waitBounded(operation: Promise<unknown>, timeoutMs: number) {
 
 function messageRole(msg: unknown): Message["role"] | undefined {
   const role = (msg as { role?: string } | undefined)?.role;
-  if (role === "user" || role === "assistant" || role === "toolResult")
-    return role;
+  if (role === "user" || role === "assistant" || role === "toolResult") return role;
   return undefined;
 }
 
-export function lastAssistantMessage(
-  messages: ReadonlyArray<unknown>,
-  fromIndex = 0,
-): AssistantMessage | undefined {
+export function lastAssistantMessage(messages: ReadonlyArray<unknown>, fromIndex = 0): AssistantMessage | undefined {
   for (let i = messages.length - 1; i >= fromIndex; i--) {
     const msg = messages[i];
     if (messageRole(msg) === "assistant") return msg as AssistantMessage;
@@ -355,9 +355,7 @@ function userText(msg: Message): string {
   return content
     .filter(
       (part): part is { type: "text"; text: string } =>
-        !!part &&
-        typeof part === "object" &&
-        (part as { type?: unknown }).type === "text",
+        !!part && typeof part === "object" && (part as { type?: unknown }).type === "text",
     )
     .map((part) => part.text)
     .join("\n");
@@ -377,7 +375,8 @@ export function translateSessionEvent(
     case "message_update": {
       const streamEvent = event.assistantMessageEvent;
       if (streamEvent?.type === "text_delta") emit({ _tag: "AssistantDelta", kind: "text", delta: streamEvent.delta });
-      else if (streamEvent?.type === "thinking_delta") emit({ _tag: "AssistantDelta", kind: "thinking", delta: streamEvent.delta });
+      else if (streamEvent?.type === "thinking_delta")
+        emit({ _tag: "AssistantDelta", kind: "thinking", delta: streamEvent.delta });
       break;
     }
     case "message_end": {
@@ -398,7 +397,13 @@ export function translateSessionEvent(
       emit({ _tag: "ToolUpdate", toolId: event.toolCallId, outputPreview: toolPreview(event.partialResult) });
       break;
     case "tool_execution_end":
-      emit({ _tag: "ToolEnd", toolId: event.toolCallId, name: event.toolName, isError: event.isError, outputPreview: toolPreview(event.result) });
+      emit({
+        _tag: "ToolEnd",
+        toolId: event.toolCallId,
+        name: event.toolName,
+        isError: event.isError,
+        outputPreview: toolPreview(event.result),
+      });
       break;
     case "queue_update":
       emit({
@@ -427,15 +432,10 @@ export function settledOutcome(
 }
 
 export function boundedError(error: unknown) {
-  return (error instanceof Error ? error.message : String(error)).slice(
-    0,
-    4096,
-  );
+  return (error instanceof Error ? error.message : String(error)).slice(0, 4096);
 }
 
-const makePiSession = (
-  task: SpawnTask,
-): Effect.Effect<SubagentSession, SpawnError, Scope.Scope> =>
+const makePiSession = (task: SpawnTask): Effect.Effect<SubagentSession, SpawnError, Scope.Scope> =>
   Effect.gen(function* () {
     const registry = task.parent.modelRegistry;
     if (!registry) {
@@ -445,13 +445,11 @@ const makePiSession = (
     }
 
     const model = yield* Effect.try({
-      try: () =>
-        resolvePiModel(registry, task.model, task.parent.inheritedModel),
+      try: () => resolvePiModel(registry, task.model, task.parent.inheritedModel),
       catch: (error) => new SpawnError({ message: boundedError(error) }),
     });
     // pi's thinking levels ARE the shared reasoning-effort scale.
-    const thinkingLevel = (task.reasoningEffort ??
-      task.parent.inheritedThinkingLevel) as ThinkingLevel | undefined;
+    const thinkingLevel = (task.reasoningEffort ?? task.parent.inheritedThinkingLevel) as ThinkingLevel | undefined;
 
     const session = yield* Effect.tryPromise({
       try: async () => {
@@ -481,10 +479,7 @@ const makePiSession = (
           model,
           thinkingLevel,
           customTools: createParentBridgeTools(task),
-          excludeTools: [
-            ...CHILD_EXCLUDED_TOOL_NAMES,
-            ...capabilityExclusions(task.capability),
-          ],
+          excludeTools: [...CHILD_EXCLUDED_TOOL_NAMES, ...capabilityExclusions(task.capability)],
         });
         // Start child extension session hooks/resources in headless mode.
         // A rejection here would otherwise leak the freshly created session:
@@ -525,18 +520,11 @@ const makePiSession = (
       const sessionModel = session.model;
       const last = lastAssistantMessage(session.messages);
       if (!last) return sessionModel;
-      if (
-        sessionModel &&
-        (last.provider !== sessionModel.provider ||
-          last.model !== sessionModel.id)
-      ) {
+      if (sessionModel && (last.provider !== sessionModel.provider || last.model !== sessionModel.id)) {
         // The session changed models after this assistant response.
         return sessionModel;
       }
-      return (
-        registry.find(last.provider, last.responseModel ?? last.model) ??
-        sessionModel
-      );
+      return registry.find(last.provider, last.responseModel ?? last.model) ?? sessionModel;
     };
 
     const currentMeta = (): SubagentMeta => {
@@ -634,9 +622,7 @@ const makePiSession = (
     };
 
     // Session naming is best-effort.
-    yield* Effect.try(() =>
-      session.sessionManager.appendSessionInfo(`subagent: ${task.title}`),
-    ).pipe(Effect.ignore);
+    yield* Effect.try(() => session.sessionManager.appendSessionInfo(`subagent: ${task.title}`)).pipe(Effect.ignore);
 
     emit({ _tag: "MetaChanged", meta: currentMeta() });
     startRun(task.prompt);

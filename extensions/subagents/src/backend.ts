@@ -6,14 +6,7 @@
 
 import type { Effect, Scope, Stream } from "effect";
 import { Context } from "effect";
-import type {
-  BackendName,
-  SendError,
-  SpawnError,
-  SpawnTask,
-  SubagentEvent,
-  SubagentMeta,
-} from "./domain.ts";
+import type { BackendName, SendError, SpawnError, SpawnTask, SubagentEvent, SubagentMeta } from "./domain.ts";
 
 export interface BackendCapabilities {
   /** Can send() steer a live run (vs. only starting a fresh run when idle). */
@@ -57,13 +50,10 @@ export interface SubagentBackend {
    * underlying session or process and ends `events`. Fire-and-forget
    * semantics (background fibers, result delivery) live in the manager.
    */
-  spawn(
-    task: SpawnTask,
-  ): Effect.Effect<SubagentSession, SpawnError, Scope.Scope>;
+  spawn(task: SpawnTask): Effect.Effect<SubagentSession, SpawnError, Scope.Scope>;
 }
 
 /** Registry of all wired backends, keyed by name. */
-export class BackendRegistry extends Context.Service<
-  BackendRegistry,
-  ReadonlyMap<BackendName, SubagentBackend>
->()("subagents/BackendRegistry") {}
+export class BackendRegistry extends Context.Service<BackendRegistry, ReadonlyMap<BackendName, SubagentBackend>>()(
+  "subagents/BackendRegistry",
+) {}

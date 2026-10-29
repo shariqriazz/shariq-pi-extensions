@@ -1,12 +1,8 @@
 import type { EventBus, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { CapabilityMode, IsolationMode } from "./config.ts";
-import type {
-  ReasoningEffort,
-  SubagentSnapshot,
-} from "./domain.ts";
+import type { ReasoningEffort, SubagentSnapshot } from "./domain.ts";
 
-export const SUBAGENT_COORDINATOR_REQUEST =
-  "shariq-pi-extensions:subagents:coordinator-request";
+export const SUBAGENT_COORDINATOR_REQUEST = "shariq-pi-extensions:subagents:coordinator-request";
 
 export interface CoordinatorSpawnOptions {
   message: string;
@@ -23,10 +19,7 @@ export interface CoordinatorSpawnOptions {
 }
 
 export interface SubagentCoordinator {
-  spawn(
-    ctx: ExtensionContext,
-    options: CoordinatorSpawnOptions,
-  ): Promise<SubagentSnapshot>;
+  spawn(ctx: ExtensionContext, options: CoordinatorSpawnOptions): Promise<SubagentSnapshot>;
   send(id: string, message: string): Promise<SubagentSnapshot>;
   cancel(ids: ReadonlyArray<string>): Promise<void>;
   get(id: string): Promise<SubagentSnapshot | undefined>;
@@ -41,9 +34,7 @@ interface CoordinatorRequest {
   accept(coordinator: SubagentCoordinator): void;
 }
 
-export function requestSubagentCoordinator(
-  events: EventBus,
-): SubagentCoordinator | undefined {
+export function requestSubagentCoordinator(events: EventBus): SubagentCoordinator | undefined {
   let coordinator: SubagentCoordinator | undefined;
   events.emit(SUBAGENT_COORDINATOR_REQUEST, {
     accept(value) {
@@ -53,12 +44,6 @@ export function requestSubagentCoordinator(
   return coordinator;
 }
 
-export function isCoordinatorRequest(
-  value: unknown,
-): value is CoordinatorRequest {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as CoordinatorRequest).accept === "function"
-  );
+export function isCoordinatorRequest(value: unknown): value is CoordinatorRequest {
+  return !!value && typeof value === "object" && typeof (value as CoordinatorRequest).accept === "function";
 }

@@ -1,9 +1,4 @@
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  formatSize,
-  truncateTail,
-} from "@earendil-works/pi-coding-agent";
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, truncateTail } from "@earendil-works/pi-coding-agent";
 import { formatDurationMs, oneLine, sanitizeTerminalText } from "../../shared/tui-dashboard.ts";
 import type { TerminalReadResult, TerminalSnapshot } from "./types.ts";
 import { terminalElapsedMs } from "./types.ts";
@@ -14,19 +9,16 @@ export const COMPLETION_OUTPUT_MAX_BYTES = 12 * 1024;
 export const COMPLETION_OUTPUT_MAX_LINES = 120;
 
 export function formatTerminal(snapshot: TerminalSnapshot): string {
-  const outcome = snapshot.status === "running"
-    ? "running"
-    : snapshot.status === "killed"
-      ? "killed"
-      : `exit ${snapshot.exitCode ?? "?"}`;
+  const outcome =
+    snapshot.status === "running"
+      ? "running"
+      : snapshot.status === "killed"
+        ? "killed"
+        : `exit ${snapshot.exitCode ?? "?"}`;
   return `${snapshot.id} [${snapshot.status}] "${oneLine(snapshot.title)}" (pid ${snapshot.pid}, ${formatDurationMs(terminalElapsedMs(snapshot))}, ${outcome}, output ${formatSize(snapshot.output.totalBytes)}, ${snapshot.cwd})`;
 }
 
-function boundedOutput(
-  text: string,
-  maxBytes: number,
-  maxLines: number,
-): { text: string; truncated: boolean } {
+function boundedOutput(text: string, maxBytes: number, maxLines: number): { text: string; truncated: boolean } {
   const clean = sanitizeTerminalText(text).replaceAll("\r", "");
   const truncation = truncateTail(clean, {
     maxBytes: Math.min(maxBytes, DEFAULT_MAX_BYTES),
@@ -53,19 +45,16 @@ export function formatReadResult(result: TerminalReadResult): string {
 }
 
 export function formatCompletion(snapshot: TerminalSnapshot): string {
-  const result = snapshot.status === "killed"
-    ? "was stopped"
-    : snapshot.exitCode === 0
-      ? "completed successfully"
-      : `failed with exit ${snapshot.exitCode ?? "?"}`;
+  const result =
+    snapshot.status === "killed"
+      ? "was stopped"
+      : snapshot.exitCode === 0
+        ? "completed successfully"
+        : `failed with exit ${snapshot.exitCode ?? "?"}`;
   let text = `Background terminal ${snapshot.id} "${oneLine(snapshot.title)}" ${result} after ${formatDurationMs(terminalElapsedMs(snapshot))}.`;
   if (snapshot.errorText) text += `\nError: ${snapshot.errorText}`;
   if (snapshot.output.spillTruncated) text += "\nNotice: the private output log reached its size limit.";
-  const bounded = boundedOutput(
-    snapshot.output.text,
-    COMPLETION_OUTPUT_MAX_BYTES,
-    COMPLETION_OUTPUT_MAX_LINES,
-  );
+  const bounded = boundedOutput(snapshot.output.text, COMPLETION_OUTPUT_MAX_BYTES, COMPLETION_OUTPUT_MAX_LINES);
   text += `\n\n${bounded.text || "(no output)"}`;
   if (bounded.truncated || snapshot.output.truncatedBytes > 0) {
     text += `\n\n[Final output tail-truncated. Private log: ${snapshot.output.spillPath ?? "unavailable"}]`;

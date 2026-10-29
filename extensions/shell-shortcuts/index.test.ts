@@ -14,6 +14,10 @@ test("registers /exit as a graceful shutdown alias", async () => {
   assert.equal(command?.definition.description, "Alias for /quit");
 
   let shutdowns = 0;
-  await command?.definition.handler("", { shutdown: () => { shutdowns++; } });
+  await command?.definition.handler("", {
+    shutdown: () => {
+      shutdowns++;
+    },
+  });
   assert.equal(shutdowns, 1);
 });

@@ -22,10 +22,9 @@ if (tests.length === 0) {
   process.exit(1);
 }
 
-const result = spawnSync(
-  process.execPath,
-  ["--test", "--experimental-strip-types", ...tests],
-  { cwd: root, stdio: "inherit" },
-);
+const result = spawnSync(process.execPath, ["--test", "--experimental-strip-types", ...tests], {
+  cwd: root,
+  stdio: "inherit",
+});
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);

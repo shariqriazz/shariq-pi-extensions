@@ -18,7 +18,10 @@ interface Coordinator {
 const REGISTRY_KEY = Symbol.for("shariq-pi-extensions/settlement-delivery/v1");
 const coordinators: WeakMap<SessionKey, Coordinator> =
   ((globalThis as Record<symbol, unknown>)[REGISTRY_KEY] as WeakMap<SessionKey, Coordinator> | undefined) ??
-  ((globalThis as Record<symbol, unknown>)[REGISTRY_KEY] = new WeakMap<SessionKey, Coordinator>()) as WeakMap<SessionKey, Coordinator>;
+  (((globalThis as Record<symbol, unknown>)[REGISTRY_KEY] = new WeakMap<SessionKey, Coordinator>()) as WeakMap<
+    SessionKey,
+    Coordinator
+  >);
 
 function createCoordinator(pi: ExtensionAPI): Coordinator {
   const coordinator: Coordinator = {

@@ -5,11 +5,7 @@
  */
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import {
-  truncateToWidth,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { SubagentSnapshot, TranscriptItem } from "../domain.ts";
 
 const ANSI_PATTERN =
@@ -28,40 +24,23 @@ export function sanitizeText(text: string): string {
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 
-function renderUserText(
-  theme: Theme,
-  text: string,
-  width: number,
-  out: string[],
-) {
+function renderUserText(theme: Theme, text: string, width: number, out: string[]) {
   const clean = sanitizeText(text).trim();
   if (!clean) return;
   const wrapped = wrapTextWithAnsi(clean, Math.max(10, width - 2));
   for (let i = 0; i < wrapped.length; i++) {
     const prefix = i === 0 ? theme.fg("accent", "> ") : "  ";
-    out.push(
-      truncateToWidth(prefix + theme.fg("userMessageText", wrapped[i]), width),
-    );
+    out.push(truncateToWidth(prefix + theme.fg("userMessageText", wrapped[i]), width));
   }
 }
 
-function renderThinking(
-  theme: Theme,
-  text: string,
-  width: number,
-  out: string[],
-) {
+function renderThinking(theme: Theme, text: string, width: number, out: string[]) {
   const reasoning = sanitizeText(text).trim();
   if (!reasoning) return;
   const prefix = theme.fg("dim", "~ ");
   const wrapped = wrapTextWithAnsi(reasoning, Math.max(10, width - 2));
   for (let i = 0; i < wrapped.length; i++) {
-    out.push(
-      truncateToWidth(
-        (i === 0 ? prefix : "  ") + theme.fg("muted", theme.italic(wrapped[i])),
-        width,
-      ),
-    );
+    out.push(truncateToWidth((i === 0 ? prefix : "  ") + theme.fg("muted", theme.italic(wrapped[i])), width));
   }
 }
 
@@ -77,12 +56,7 @@ function renderAssistantItem(
       if (!text) continue;
       out.push(...wrapTextWithAnsi(text, width));
     } else if (part.type === "thinking") {
-      renderThinking(
-        theme,
-        part.redacted ? "[redacted reasoning]" : part.text,
-        width,
-        out,
-      );
+      renderThinking(theme, part.redacted ? "[redacted reasoning]" : part.text, width, out);
     } else if (part.type === "toolCall") {
       const preview = part.argsPreview ? sanitizeText(part.argsPreview) : "";
       const line =
@@ -104,20 +78,12 @@ function renderToolResultItem(
     sanitizeText(item.outputPreview ?? "")
       .split("\n")
       .find((line) => line.trim()) ?? "";
-  const label = item.isError
-    ? theme.fg("error", "  error: ")
-    : theme.fg("dim", "  output: ");
-  out.push(
-    truncateToWidth(label + theme.fg("dim", firstLine || "(no output)"), width),
-  );
+  const label = item.isError ? theme.fg("error", "  error: ") : theme.fg("dim", "  output: ");
+  out.push(truncateToWidth(label + theme.fg("dim", firstLine || "(no output)"), width));
 }
 
 /** Render a subagent's conversation as plain lines, wrapped to `width`. */
-export function buildTranscriptLines(
-  snap: SubagentSnapshot,
-  width: number,
-  theme: Theme,
-): string[] {
+export function buildTranscriptLines(snap: SubagentSnapshot, width: number, theme: Theme): string[] {
   const out: string[] = [];
 
   for (const item of snap.transcript) {
@@ -139,8 +105,7 @@ export function buildTranscriptLines(
     const before = out.length;
     if (out.length > 0) out.push("");
     if (thinking.trim()) renderThinking(theme, thinking, width, out);
-    if (text.trim())
-      out.push(...wrapTextWithAnsi(sanitizeText(text).trim(), width));
+    if (text.trim()) out.push(...wrapTextWithAnsi(sanitizeText(text).trim(), width));
     if (out.length === before + 1) out.pop();
   }
 
@@ -163,17 +128,10 @@ export function buildTranscriptLines(
   for (const message of snap.queued) {
     if (out.length > 0) out.push("");
     const prefix = theme.fg("warning", `> [queued ${message.kind}] `);
-    const wrapped = wrapTextWithAnsi(
-      sanitizeText(message.text),
-      Math.max(10, width - visibleWidth(prefix)),
-    );
+    const wrapped = wrapTextWithAnsi(sanitizeText(message.text), Math.max(10, width - visibleWidth(prefix)));
     for (let i = 0; i < wrapped.length; i++) {
       out.push(
-        truncateToWidth(
-          (i === 0 ? prefix : " ".repeat(visibleWidth(prefix))) +
-            theme.fg("muted", wrapped[i]),
-          width,
-        ),
+        truncateToWidth((i === 0 ? prefix : " ".repeat(visibleWidth(prefix))) + theme.fg("muted", wrapped[i]), width),
       );
     }
   }

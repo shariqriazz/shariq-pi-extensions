@@ -18,7 +18,12 @@ function sanitizeMessage(message: unknown): Message | undefined {
   const role = (message as { role?: unknown }).role;
   if (role === "user") {
     const user = message as UserMessage;
-    return { ...user, content: Array.isArray(user.content) ? user.content.filter((part) => part.type === "text" || part.type === "image") : user.content };
+    return {
+      ...user,
+      content: Array.isArray(user.content)
+        ? user.content.filter((part) => part.type === "text" || part.type === "image")
+        : user.content,
+    };
   }
   if (role === "assistant") {
     const assistant = message as AssistantMessage;

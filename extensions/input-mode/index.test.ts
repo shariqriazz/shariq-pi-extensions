@@ -18,14 +18,26 @@ function harness(file: string) {
   const statuses: Array<string | undefined> = [];
   const notices: Array<{ message: string; level: string }> = [];
   const ui = {
-    setStatus(_key: string, value: string | undefined) { statuses.push(value); },
-    notify(message: string, level: string) { notices.push({ message, level }); },
-    async select() { return undefined; },
+    setStatus(_key: string, value: string | undefined) {
+      statuses.push(value);
+    },
+    notify(message: string, level: string) {
+      notices.push({ message, level });
+    },
+    async select() {
+      return undefined;
+    },
   };
   createInputModeExtension({ configFile: file })({
-    registerCommand(name: string, command: any) { commands.set(name, command); },
-    on(name: string, handler: (...args: any[]) => any) { hooks.set(name, handler); },
-    sendUserMessage(content: any, options: any) { sent.push({ content, options }); },
+    registerCommand(name: string, command: any) {
+      commands.set(name, command);
+    },
+    on(name: string, handler: (...args: any[]) => any) {
+      hooks.set(name, handler);
+    },
+    sendUserMessage(content: any, options: any) {
+      sent.push({ content, options });
+    },
   } as never);
   return { commands, hooks, sent, statuses, notices, ui };
 }
@@ -50,7 +62,11 @@ test("steer, interrupt, and follow-up modes preserve distinct input semantics", 
     const app = harness(fixture.file);
     const input = app.hooks.get("input")!;
     let aborts = 0;
-    const context = { abort() { aborts += 1; } };
+    const context = {
+      abort() {
+        aborts += 1;
+      },
+    };
     const event = { type: "input", text: "new direction", source: "interactive", streamingBehavior: "steer" };
 
     assert.deepEqual(input(event, context), { action: "continue" });
@@ -64,10 +80,12 @@ test("steer, interrupt, and follow-up modes preserve distinct input semantics", 
     assert.equal(aborts, 1);
     assert.equal(app.sent.length, 0);
     app.hooks.get("agent_settled")?.();
-    assert.deepEqual(app.sent, [{
-      content: "new direction",
-      options: { deliverAs: "steer", expandPromptTemplates: true },
-    }]);
+    assert.deepEqual(app.sent, [
+      {
+        content: "new direction",
+        options: { deliverAs: "steer", expandPromptTemplates: true },
+      },
+    ]);
 
     const image = { type: "image", data: "fixture", mimeType: "image/png" };
     input({ ...event, text: "first", images: [image] }, context);
@@ -122,7 +140,14 @@ test("command validates direct input and exposes non-default mode status", async
     assert.match(app.notices.at(-1)?.message ?? "", /Input mode unchanged \(interrupt\)/);
     const input = app.hooks.get("input")!;
     let aborts = 0;
-    input({ type: "input", text: "x", source: "interactive", streamingBehavior: "steer" }, { abort() { aborts += 1; } });
+    input(
+      { type: "input", text: "x", source: "interactive", streamingBehavior: "steer" },
+      {
+        abort() {
+          aborts += 1;
+        },
+      },
+    );
     assert.equal(aborts, 1, "interrupt mode is still live");
     app.hooks.get("session_shutdown")?.();
     assert.equal(app.statuses.at(-1), undefined);

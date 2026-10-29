@@ -11,7 +11,9 @@ import { formatDeveloperSearchOutput, formatScrapeOutput, formatSearchOutput } f
 function registeredTools() {
   const tools = new Map<string, { name: string; description: string; promptGuidelines?: string[] }>();
   firecrawlWebExtension({
-    registerTool(tool: { name: string; description: string; promptGuidelines?: string[] }) { tools.set(tool.name, tool); },
+    registerTool(tool: { name: string; description: string; promptGuidelines?: string[] }) {
+      tools.set(tool.name, tool);
+    },
   } as never);
   return tools;
 }
@@ -49,13 +51,17 @@ test("builds a compact Firecrawl search request with explicit filters", () => {
 });
 
 test("rejects conflicting search domain filters", () => {
-  assert.throws(() => buildSearchBody({ query: "x", include_domains: ["a.test"], exclude_domains: ["b.test"] }), /either include_domains or exclude_domains/);
+  assert.throws(
+    () => buildSearchBody({ query: "x", include_domains: ["a.test"], exclude_domains: ["b.test"] }),
+    /either include_domains or exclude_domains/,
+  );
 });
 
 test("builds scrape formats and validates query-driven extraction", () => {
-  assert.deepEqual(buildScrapeBody({ url: "https://example.com", format: "question", query: "What is this?" }).formats, [
-    { type: "question", question: "What is this?" },
-  ]);
+  assert.deepEqual(
+    buildScrapeBody({ url: "https://example.com", format: "question", query: "What is this?" }).formats,
+    [{ type: "question", question: "What is this?" }],
+  );
   assert.throws(() => buildScrapeBody({ url: "https://example.com", format: "highlights" }), /requires query/);
   assert.throws(() => buildScrapeBody({ url: "file:///tmp/test" }), /HTTP or HTTPS/);
 });
@@ -76,7 +82,10 @@ test("reuses the existing Firecrawl CLI credential store", async () => {
   try {
     const directory = join(home, "Library", "Application Support", "firecrawl-cli");
     await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, "credentials.json"), JSON.stringify({ apiKey: "fc-cli-test", apiUrl: "https://api.firecrawl.dev" }));
+    await writeFile(
+      join(directory, "credentials.json"),
+      JSON.stringify({ apiKey: "fc-cli-test", apiUrl: "https://api.firecrawl.dev" }),
+    );
     const config = resolveFirecrawlConfig({ env: {}, home, platform: "darwin" });
     assert.equal(config.source, "firecrawl-cli");
     assert.equal(config.apiKey, "fc-cli-test");
@@ -94,7 +103,10 @@ test("sends authenticated API requests without returning the credential", async 
     undefined,
     async (_input, init) => {
       authorization = new Headers(init?.headers).get("authorization") ?? "";
-      return new Response(JSON.stringify({ success: true, data: { web: [] } }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, data: { web: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     },
   );
   assert.equal(authorization, "Bearer fc-private-test");
@@ -108,7 +120,9 @@ test("rejects oversized streaming responses before buffering beyond 25 MiB", asy
     start(controller) {
       for (let index = 0; index < 26; index++) controller.enqueue(chunk);
     },
-    cancel() { cancelled = true; },
+    cancel() {
+      cancelled = true;
+    },
   });
   await assert.rejects(
     firecrawlRequest(
@@ -125,7 +139,12 @@ test("rejects oversized streaming responses before buffering beyond 25 MiB", asy
 
 test("a declared oversized response is cancelled, not left streaming", async () => {
   let cancelled = false;
-  const body = new ReadableStream<Uint8Array>({ pull() {}, cancel() { cancelled = true; } });
+  const body = new ReadableStream<Uint8Array>({
+    pull() {},
+    cancel() {
+      cancelled = true;
+    },
+  });
   await assert.rejects(
     firecrawlRequest(
       "search",
@@ -146,17 +165,24 @@ test("retry delays release their abort listeners", async () => {
   const signal = controller.signal;
   const add = signal.addEventListener.bind(signal);
   const remove = signal.removeEventListener.bind(signal);
-  signal.addEventListener = ((...args: Parameters<typeof add>) => { if (args[0] === "abort") added++; return add(...args); }) as typeof add;
-  signal.removeEventListener = ((...args: Parameters<typeof remove>) => { if (args[0] === "abort") removed++; return remove(...args); }) as typeof remove;
+  signal.addEventListener = ((...args: Parameters<typeof add>) => {
+    if (args[0] === "abort") added++;
+    return add(...args);
+  }) as typeof add;
+  signal.removeEventListener = ((...args: Parameters<typeof remove>) => {
+    if (args[0] === "abort") removed++;
+    return remove(...args);
+  }) as typeof remove;
   let calls = 0;
   await firecrawlRequest(
     "search",
     { query: "test", timeout: 5_000 },
     { apiKey: "fc-private-test", apiUrl: "https://api.firecrawl.dev", source: "environment" },
     signal,
-    async () => (++calls < 3
-      ? new Response("{}", { status: 503, headers: { "retry-after": "0" } })
-      : new Response(JSON.stringify({ success: true }), { status: 200 })),
+    async () =>
+      ++calls < 3
+        ? new Response("{}", { status: 503, headers: { "retry-after": "0" } })
+        : new Response(JSON.stringify({ success: true }), { status: 200 }),
   );
   assert.equal(calls, 3);
   assert.equal(added, removed, "every delay listener is removed after it resolves");
@@ -164,10 +190,22 @@ test("retry delays release their abort listeners", async () => {
 
 test("local HTTP API URLs accept IPv4 and IPv6 loopback only", () => {
   for (const apiUrl of ["http://localhost:3002", "http://127.0.0.1:3002", "http://[::1]:3002"]) {
-    assert.equal(resolveFirecrawlConfig({ env: { FIRECRAWL_API_KEY: "fc-test-secret", FIRECRAWL_API_URL: apiUrl }, home: "/tmp/does-not-exist", platform: "linux" }).apiUrl, apiUrl);
+    assert.equal(
+      resolveFirecrawlConfig({
+        env: { FIRECRAWL_API_KEY: "fc-test-secret", FIRECRAWL_API_URL: apiUrl },
+        home: "/tmp/does-not-exist",
+        platform: "linux",
+      }).apiUrl,
+      apiUrl,
+    );
   }
   assert.throws(
-    () => resolveFirecrawlConfig({ env: { FIRECRAWL_API_KEY: "fc-test-secret", FIRECRAWL_API_URL: "http://10.0.0.5:3002" }, home: "/tmp/does-not-exist", platform: "linux" }),
+    () =>
+      resolveFirecrawlConfig({
+        env: { FIRECRAWL_API_KEY: "fc-test-secret", FIRECRAWL_API_URL: "http://10.0.0.5:3002" },
+        home: "/tmp/does-not-exist",
+        platform: "linux",
+      }),
     /HTTPS/,
   );
 });
@@ -181,12 +219,18 @@ test("truncated output with its artifact footer stays within Pi's limits", async
 });
 
 test("formats compact untrusted search and scrape output", async () => {
-  const search = await formatSearchOutput({ creditsUsed: 2, data: { web: [{ title: "Example", url: "https://example.com", description: "Result" }] } });
+  const search = await formatSearchOutput({
+    creditsUsed: 2,
+    data: { web: [{ title: "Example", url: "https://example.com", description: "Result" }] },
+  });
   assert.match(search, /untrusted web content/);
   assert.match(search, /Credits used: 2/);
   assert.match(search, /https:\/\/example\.com/);
 
-  const scrape = await formatScrapeOutput({ data: { markdown: "# Example", metadata: { url: "https://example.com", statusCode: 200 } } }, "markdown");
+  const scrape = await formatScrapeOutput(
+    { data: { markdown: "# Example", metadata: { url: "https://example.com", statusCode: 200 } } },
+    "markdown",
+  );
   assert.match(scrape, /untrusted web content/);
   assert.match(scrape, /# Example/);
 });

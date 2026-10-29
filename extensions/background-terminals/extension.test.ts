@@ -5,9 +5,15 @@ import extension from "./index.ts";
 function addHook(hooks: Map<string, (...args: any[]) => any>) {
   return (name: string, handler: (...args: any[]) => any) => {
     const previous = hooks.get(name);
-    hooks.set(name, previous
-      ? (...args: any[]) => { previous(...args); handler(...args); }
-      : handler);
+    hooks.set(
+      name,
+      previous
+        ? (...args: any[]) => {
+            previous(...args);
+            handler(...args);
+          }
+        : handler,
+    );
   };
 }
 
@@ -17,21 +23,26 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   const hooks: string[] = [];
   const renderers: string[] = [];
   extension({
-    registerTool(definition: any) { tools.set(definition.name, definition); },
-    registerCommand(name: string) { commands.push(name); },
-    registerMessageRenderer(name: string) { renderers.push(name); },
-    on(name: string) { hooks.push(name); },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
+    registerCommand(name: string) {
+      commands.push(name);
+    },
+    registerMessageRenderer(name: string) {
+      renderers.push(name);
+    },
+    on(name: string) {
+      hooks.push(name);
+    },
     sendMessage() {},
     sendUserMessage() {},
   } as never);
 
-  assert.deepEqual([...tools.keys()], [
-    "start_terminal",
-    "read_terminal",
-    "write_terminal",
-    "list_terminals",
-    "stop_terminal",
-  ]);
+  assert.deepEqual(
+    [...tools.keys()],
+    ["start_terminal", "read_terminal", "write_terminal", "list_terminals", "stop_terminal"],
+  );
   assert.deepEqual(commands, ["term", "ps"]);
   assert.deepEqual(renderers, ["background-terminal-result"]);
   assert.ok(hooks.includes("session_start"));
@@ -69,23 +80,31 @@ test("aborting startup stops the newly created terminal instead of orphaning it"
   const hooks = new Map<string, (...args: any[]) => any>();
   const messages: any[] = [];
   extension({
-    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
     registerCommand() {},
     registerMessageRenderer() {},
     on: addHook(hooks),
-    sendMessage(message: any) { messages.push(message); },
-    sendUserMessage(message: any) { messages.push(message); },
+    sendMessage(message: any) {
+      messages.push(message);
+    },
+    sendUserMessage(message: any) {
+      messages.push(message);
+    },
   } as never);
   const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
   hooks.get("session_start")?.({}, context);
   const controller = new AbortController();
-  const starting = tools.get("start_terminal").execute(
-    "call-abort",
-    { command: "sleep 30", title: "abort fixture", wait_ms: 5_000 },
-    controller.signal,
-    undefined,
-    context,
-  );
+  const starting = tools
+    .get("start_terminal")
+    .execute(
+      "call-abort",
+      { command: "sleep 30", title: "abort fixture", wait_ms: 5_000 },
+      controller.signal,
+      undefined,
+      context,
+    );
   setTimeout(() => controller.abort(), 50);
   await assert.rejects(starting, /aborted/);
 
@@ -102,12 +121,18 @@ test("settlement waits locally while the parent is active and flushes at agent_s
   const custom: Array<{ message: any; options: any }> = [];
   const user: Array<{ content: any; options: any }> = [];
   extension({
-    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
     registerCommand() {},
     registerMessageRenderer() {},
     on: addHook(hooks),
-    sendMessage(message: any, options: any) { custom.push({ message, options }); },
-    sendUserMessage(content: any, options: any) { user.push({ content, options }); },
+    sendMessage(message: any, options: any) {
+      custom.push({ message, options });
+    },
+    sendUserMessage(content: any, options: any) {
+      user.push({ content, options });
+    },
   } as never);
 
   const context = {
@@ -130,11 +155,9 @@ test("settlement waits locally while the parent is active and flushes at agent_s
     context,
   );
   await new Promise((resolve) => setTimeout(resolve, 500));
-  const read = await tools.get("read_terminal").execute(
-    "call-read",
-    { id: started.details.id, cursor: 0, wait_ms: 0 },
-    undefined,
-  );
+  const read = await tools
+    .get("read_terminal")
+    .execute("call-read", { id: started.details.id, cursor: 0, wait_ms: 0 }, undefined);
   assert.equal(read.details.status, "done");
   assert.equal(custom.length, 0, "active-parent settlement must stay out of Pi's visible queues");
   assert.deepEqual(user, []);
@@ -150,23 +173,31 @@ test("a terminal that settles during its initial read returns synchronously with
   const hooks = new Map<string, (...args: any[]) => any>();
   const messages: any[] = [];
   extension({
-    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
     registerCommand() {},
     registerMessageRenderer() {},
     on: addHook(hooks),
-    sendMessage(message: any) { messages.push(message); },
-    sendUserMessage(message: any) { messages.push(message); },
+    sendMessage(message: any) {
+      messages.push(message);
+    },
+    sendUserMessage(message: any) {
+      messages.push(message);
+    },
   } as never);
 
   const context = { cwd: process.cwd(), hasUI: false, isIdle: () => false, ui: {} };
   hooks.get("session_start")?.({}, context);
-  const result = await tools.get("start_terminal").execute(
-    "call-sync-settle",
-    { command: `${JSON.stringify(process.execPath)} -e ""`, title: "sync fixture", wait_ms: 5_000 },
-    undefined,
-    undefined,
-    context,
-  );
+  const result = await tools
+    .get("start_terminal")
+    .execute(
+      "call-sync-settle",
+      { command: `${JSON.stringify(process.execPath)} -e ""`, title: "sync fixture", wait_ms: 5_000 },
+      undefined,
+      undefined,
+      context,
+    );
   assert.equal(result.details.status, "done");
   assert.equal(messages.length, 0);
   await hooks.get("session_shutdown")?.();
@@ -178,12 +209,18 @@ test("a model-started terminal returns immediately and wakes an idle parent on c
   const custom: Array<{ message: any; options: any }> = [];
   const user: Array<{ content: any; options: any }> = [];
   extension({
-    registerTool(definition: any) { tools.set(definition.name, definition); },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
     registerCommand() {},
     registerMessageRenderer() {},
     on: addHook(hooks),
-    sendMessage(message: any, options: any) { custom.push({ message, options }); },
-    sendUserMessage(content: any, options: any) { user.push({ content, options }); },
+    sendMessage(message: any, options: any) {
+      custom.push({ message, options });
+    },
+    sendUserMessage(content: any, options: any) {
+      user.push({ content, options });
+    },
   } as never);
 
   const context = {
@@ -224,19 +261,34 @@ test("/term stop accepts space- and comma-separated ids", async () => {
   const commands = new Map<string, any>();
   const hooks = new Map<string, (...args: any[]) => any>();
   extension({
-    registerTool(definition: any) { tools.set(definition.name, definition); },
-    registerCommand(name: string, definition: any) { commands.set(name, definition); },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
+    registerCommand(name: string, definition: any) {
+      commands.set(name, definition);
+    },
     registerMessageRenderer() {},
     on: addHook(hooks),
     sendMessage() {},
     sendUserMessage() {},
   } as never);
   const notes: string[] = [];
-  const context = { cwd: process.cwd(), hasUI: false, isIdle: () => true, ui: { notify(message: string) { notes.push(message); } } };
+  const context = {
+    cwd: process.cwd(),
+    hasUI: false,
+    isIdle: () => true,
+    ui: {
+      notify(message: string) {
+        notes.push(message);
+      },
+    },
+  };
   hooks.get("session_start")?.({}, context);
   const ids: string[] = [];
   for (let index = 0; index < 3; index++) {
-    const started = await tools.get("start_terminal").execute(`call-${index}`, { command: "sleep 30", wait_ms: 0 }, undefined, undefined, context);
+    const started = await tools
+      .get("start_terminal")
+      .execute(`call-${index}`, { command: "sleep 30", wait_ms: 0 }, undefined, undefined, context);
     ids.push(started.details.id);
   }
   await commands.get("term").handler(`stop ${ids[0]}\t${ids[1]},${ids[2]}`, context);

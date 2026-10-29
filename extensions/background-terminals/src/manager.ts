@@ -3,12 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawnUniversalPty, type UniversalPty } from "./pty.ts";
 import { OutputBuffer } from "./output-buffer.ts";
-import type {
-  StartTerminalOptions,
-  TerminalReadResult,
-  TerminalSnapshot,
-  TerminalStatus,
-} from "./types.ts";
+import type { StartTerminalOptions, TerminalReadResult, TerminalSnapshot, TerminalStatus } from "./types.ts";
 
 export const MAX_RUNNING_TERMINALS = 8;
 export const MAX_TRACKED_TERMINALS = 32;
@@ -75,9 +70,7 @@ function shellInvocation(command: string): { file: string; args: string[] } {
     };
   }
   const configured = process.env.SHELL;
-  const file = configured && path.isAbsolute(configured) && fs.existsSync(configured)
-    ? configured
-    : "/bin/sh";
+  const file = configured && path.isAbsolute(configured) && fs.existsSync(configured) ? configured : "/bin/sh";
   return { file, args: ["-c", command] };
 }
 
@@ -102,10 +95,7 @@ export class TerminalManager {
 
   readonly view: TerminalManagerView;
 
-  constructor(
-    environment: NodeJS.ProcessEnv = process.env,
-    options: { maxFullLogBytes?: number } = {},
-  ) {
+  constructor(environment: NodeJS.ProcessEnv = process.env, options: { maxFullLogBytes?: number } = {}) {
     this.environment = environment;
     this.maxFullLogBytes = Math.max(1, options.maxFullLogBytes ?? MAX_FULL_LOG_BYTES);
     const base = path.join(os.tmpdir(), "pi-background-terminals");
@@ -342,11 +332,7 @@ export class TerminalManager {
     entry.settledFinal = true;
     entry.snapshot.exitCode = exitCode;
     entry.snapshot.signal = signal || undefined;
-    entry.snapshot.status = entry.killRequested
-      ? "killed"
-      : exitCode === 0
-        ? "done"
-        : "failed";
+    entry.snapshot.status = entry.killRequested ? "killed" : exitCode === 0 ? "done" : "failed";
     entry.snapshot.settledAt = Date.now();
     entry.dataSubscription.dispose();
     entry.exitSubscription.dispose();
@@ -400,21 +386,23 @@ export class TerminalManager {
       if (!entry) throw new Error(`Unknown background terminal "${id}".`);
       return entry;
     });
-    await Promise.all(entries.map(async (entry) => {
-      // Stop is complete only when the whole group is gone, not just the leader.
-      const running = entry.snapshot.status === "running";
-      if (!running && !this.groupAlive(entry)) return;
-      if (running) entry.killRequested = true;
-      this.signal(entry, "SIGTERM");
-      await this.waitForStop(entry, TERM_GRACE_MS);
-      if (entry.snapshot.status !== "running" && !this.groupAlive(entry)) return;
-      this.signal(entry, "SIGKILL");
-      await this.waitForStop(entry, KILL_GRACE_MS);
-      if (entry.snapshot.status === "running") {
-        entry.snapshot.errorText ??= "Process exit was not observed after SIGKILL; output may be incomplete.";
-        await this.finalize(entry, 137, 9);
-      }
-    }));
+    await Promise.all(
+      entries.map(async (entry) => {
+        // Stop is complete only when the whole group is gone, not just the leader.
+        const running = entry.snapshot.status === "running";
+        if (!running && !this.groupAlive(entry)) return;
+        if (running) entry.killRequested = true;
+        this.signal(entry, "SIGTERM");
+        await this.waitForStop(entry, TERM_GRACE_MS);
+        if (entry.snapshot.status !== "running" && !this.groupAlive(entry)) return;
+        this.signal(entry, "SIGKILL");
+        await this.waitForStop(entry, KILL_GRACE_MS);
+        if (entry.snapshot.status === "running") {
+          entry.snapshot.errorText ??= "Process exit was not observed after SIGKILL; output may be incomplete.";
+          await this.finalize(entry, 137, 9);
+        }
+      }),
+    );
     return entries.map((entry) => entry.snapshot);
   }
 

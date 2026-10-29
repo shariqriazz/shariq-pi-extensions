@@ -155,12 +155,13 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           const sourceCharacters = Number(details.sourceCharacters ?? 0);
           const serializedCharacters = Number(details.serializedCharacters ?? 0);
           const durationMs = Number(details.durationMs ?? 0);
-          const cached = details.cachedRequest as { used?: boolean; cacheReadTokens?: number; inputTokens?: number } | undefined;
+          const cached = details.cachedRequest as
+            { used?: boolean; cacheReadTokens?: number; inputTokens?: number } | undefined;
           const cachedInput = (cached?.cacheReadTokens ?? 0) + (cached?.inputTokens ?? 0);
           const reduction = cached?.used
             ? ` · cached conversation${cachedInput > 0 ? `, ${Math.round(((cached.cacheReadTokens ?? 0) / cachedInput) * 100)}% read from cache` : ""}`
             : sourceCharacters > 0 && serializedCharacters > 0
-              ? ` · input ${Math.max(0, Math.round((1 - (serializedCharacters / sourceCharacters)) * 100))}% smaller`
+              ? ` · input ${Math.max(0, Math.round((1 - serializedCharacters / sourceCharacters) * 100))}% smaller`
               : "";
           const duration = durationMs > 0 ? ` · ${(durationMs / 1000).toFixed(1)}s` : "";
           ctx.ui?.notify(`Smart Compaction completed (${model})${reduction}${duration}`, "info");
@@ -287,9 +288,7 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
 
           // Strict validation against available models in registry
           const available = cmdCtx.modelRegistry.getAvailable();
-          const match = available.find(
-            (m) => m.id === requested || `${m.provider}/${m.id}` === requested,
-          );
+          const match = available.find((m) => m.id === requested || `${m.provider}/${m.id}` === requested);
 
           if (!match) {
             cmdCtx.ui.notify(
@@ -426,18 +425,21 @@ export function createSmartCompactionExtension(options: SmartCompactionExtension
           resolvedInfo = "unresolved";
         }
 
-        const currentThinkingDesc = config.thinkingLevel === "inherit"
-          ? `inherit (${cmdCtx.thinkingLevel ?? "session default"})`
-          : (config.thinkingLevel ?? "inherit");
-        const maxTokensDesc = typeof config.maxSummaryTokens === "number"
-          ? `${config.maxSummaryTokens} tokens (custom override)`
-          : "dynamic (full model capacity)";
+        const currentThinkingDesc =
+          config.thinkingLevel === "inherit"
+            ? `inherit (${cmdCtx.thinkingLevel ?? "session default"})`
+            : (config.thinkingLevel ?? "inherit");
+        const maxTokensDesc =
+          typeof config.maxSummaryTokens === "number"
+            ? `${config.maxSummaryTokens} tokens (custom override)`
+            : "dynamic (full model capacity)";
         const thresholdMode = config.thresholdMode ?? "hybrid";
-        const thresholdDesc = thresholdMode === "percent"
-          ? `${config.thresholdPercent ?? 95}%`
-          : thresholdMode === "hard"
-            ? `${(config.hardLimitTokens ?? 400_000).toLocaleString()} tokens`
-            : `earliest of ${config.thresholdPercent ?? 95}% or ${(config.hardLimitTokens ?? 400_000).toLocaleString()} tokens`;
+        const thresholdDesc =
+          thresholdMode === "percent"
+            ? `${config.thresholdPercent ?? 95}%`
+            : thresholdMode === "hard"
+              ? `${(config.hardLimitTokens ?? 400_000).toLocaleString()} tokens`
+              : `earliest of ${config.thresholdPercent ?? 95}% or ${(config.hardLimitTokens ?? 400_000).toLocaleString()} tokens`;
 
         const status = [
           `Smart Compaction: ${config.enabled ? "ENABLED" : "DISABLED"}`,

@@ -1,8 +1,4 @@
-import type {
-  ExtensionCommandContext,
-  KeybindingsManager,
-  Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { formatSize } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { Input, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
@@ -80,24 +76,16 @@ export function reconcileTerminalSelection(
   selection: Selection,
   terminals: ReadonlyArray<Pick<TerminalSnapshot, "id">>,
 ): void {
-  const stable = selection.id
-    ? terminals.findIndex((terminal) => terminal.id === selection.id)
-    : -1;
-  selection.index = stable >= 0
-    ? stable
-    : Math.min(Math.max(0, selection.index), Math.max(0, terminals.length - 1));
+  const stable = selection.id ? terminals.findIndex((terminal) => terminal.id === selection.id) : -1;
+  selection.index = stable >= 0 ? stable : Math.min(Math.max(0, selection.index), Math.max(0, terminals.length - 1));
   selection.id = terminals[selection.index]?.id;
 }
 
-export async function openTerminalDashboard(
-  ctx: ExtensionCommandContext,
-  view: TerminalManagerView,
-): Promise<void> {
+export async function openTerminalDashboard(ctx: ExtensionCommandContext, view: TerminalManagerView): Promise<void> {
   const selection: Selection = { index: 0 };
   while (view.list().length > 0) {
     const selected = await ctx.ui.custom<string | null>(
-      (tui, theme, keybindings, done) =>
-        new TerminalDashboard(tui, theme, keybindings, view, selection, done),
+      (tui, theme, keybindings, done) => new TerminalDashboard(tui, theme, keybindings, view, selection, done),
       {
         overlay: true,
         overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
@@ -106,8 +94,7 @@ export async function openTerminalDashboard(
     if (!selected) return;
     if (!view.get(selected)) continue;
     await ctx.ui.custom<null>(
-      (tui, theme, keybindings, done) =>
-        new TerminalDetail(tui, theme, keybindings, view, selected, done),
+      (tui, theme, keybindings, done) => new TerminalDetail(tui, theme, keybindings, view, selected, done),
       {
         overlay: true,
         overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
@@ -222,7 +209,9 @@ export class TerminalDashboard implements Component {
       running ? stateLabel(theme, "active", `${running} running`) : "",
       completed ? stateLabel(theme, "success", `${completed} settled`) : "",
       failed ? stateLabel(theme, "error", `${failed} failed`) : "",
-    ].filter(Boolean).join(theme.fg("dim", " · "));
+    ]
+      .filter(Boolean)
+      .join(theme.fg("dim", " · "));
     const lines = [
       joinSides(
         `  ${theme.fg("accent", theme.bold("Background terminals"))}`,
@@ -240,10 +229,10 @@ export class TerminalDashboard implements Component {
       for (let row = 0; row < bodyHeight; row++) {
         lines.push(
           theme.fg("border", "│") +
-          padLine(list[row] ?? "", leftWidth) +
-          theme.fg("borderMuted", "│") +
-          padLine(detail[row] ?? "", rightWidth) +
-          theme.fg("border", "│"),
+            padLine(list[row] ?? "", leftWidth) +
+            theme.fg("borderMuted", "│") +
+            padLine(detail[row] ?? "", rightWidth) +
+            theme.fg("border", "│"),
         );
       }
     } else {
@@ -256,18 +245,17 @@ export class TerminalDashboard implements Component {
     const killHint = this.killArmed ? theme.fg("warning", "x again to stop") : "x stop (confirm)";
     lines.push(
       truncateToWidth(
-        theme.fg("dim", `  ${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} inspect · ${killHint} · ${configuredKeys(this.keybindings, "tui.select.cancel")} close`),
+        theme.fg(
+          "dim",
+          `  ${configuredKeys(this.keybindings, "tui.select.up")}/${configuredKeys(this.keybindings, "tui.select.down")}/jk select · ${configuredKeys(this.keybindings, "tui.select.confirm")} inspect · ${killHint} · ${configuredKeys(this.keybindings, "tui.select.cancel")} close`,
+        ),
         width,
       ),
     );
     return lines;
   }
 
-  private renderList(
-    terminals: ReadonlyArray<TerminalSnapshot>,
-    width: number,
-    height: number,
-  ): string[] {
+  private renderList(terminals: ReadonlyArray<TerminalSnapshot>, width: number, height: number): string[] {
     const viewport = viewportSlice(terminals, this.selection.index, height);
     return viewport.items.map((terminal, row) => {
       const selected = viewport.start + row === this.selection.index;
@@ -285,7 +273,9 @@ export class TerminalDashboard implements Component {
       ` ${theme.fg("dim", `${terminal.id} · pid ${terminal.pid} · ${formatDurationMs(terminalElapsedMs(terminal))}`)}`,
       "",
       ` ${theme.fg("muted", "COMMAND")}`,
-      ...wrapTextWithAnsi(oneLine(terminal.command), Math.max(10, width - 2)).slice(0, 2).map((line) => ` ${theme.fg("text", line)}`),
+      ...wrapTextWithAnsi(oneLine(terminal.command), Math.max(10, width - 2))
+        .slice(0, 2)
+        .map((line) => ` ${theme.fg("text", line)}`),
       "",
       ` ${theme.fg("muted", "OUTPUT")} ${theme.fg("text", formatSize(terminal.output.totalBytes))}${terminal.output.truncatedBytes ? theme.fg("warning", " · retained tail") : ""}`,
       ` ${theme.fg("muted", "SIZE")} ${theme.fg("text", `${terminal.cols}×${terminal.rows}`)}`,
@@ -427,7 +417,12 @@ export class TerminalDetail implements Component, Focusable {
   render(width: number): string[] {
     const theme = this.theme;
     const terminal = this.view.get(this.id);
-    if (!terminal) return [frameTop(theme, width, "Terminal"), framedRow(theme, "No longer tracked", width), frameBottom(theme, width)];
+    if (!terminal)
+      return [
+        frameTop(theme, width, "Terminal"),
+        framedRow(theme, "No longer tracked", width),
+        frameBottom(theme, width),
+      ];
     const viewport = this.viewportHeight();
     if (terminal.status === "running") {
       this.view.requestResize(this.id, Math.max(20, width - 2), viewport);
@@ -439,7 +434,11 @@ export class TerminalDetail implements Component, Focusable {
         width,
       ),
       truncateToWidth(`  ${theme.fg("dim", "$ ")}${theme.fg("text", oneLine(terminal.command))}`, width),
-      frameTop(theme, width, `live output · ${formatSize(terminal.output.totalBytes)} · ${terminal.cols}×${terminal.rows}`),
+      frameTop(
+        theme,
+        width,
+        `live output · ${formatSize(terminal.output.totalBytes)} · ${terminal.cols}×${terminal.rows}`,
+      ),
     ];
     const output = this.outputCache.get(terminal, Math.max(10, width - 4));
     const maxOffset = Math.max(0, output.length - viewport);
@@ -456,7 +455,10 @@ export class TerminalDetail implements Component, Focusable {
     const stop = this.killArmed ? theme.fg("warning", "ctrl+x again to stop") : "ctrl+x stop (confirm)";
     lines.push(
       truncateToWidth(
-        theme.fg("dim", `  enter send · ctrl+c interrupt PTY · ${stop} · pgup/pgdn scroll · ${configuredKeys(this.keybindings, "tui.select.cancel")} back`),
+        theme.fg(
+          "dim",
+          `  enter send · ctrl+c interrupt PTY · ${stop} · pgup/pgdn scroll · ${configuredKeys(this.keybindings, "tui.select.cancel")} back`,
+        ),
         width,
       ),
     );

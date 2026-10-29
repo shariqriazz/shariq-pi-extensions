@@ -27,7 +27,12 @@ function snapshot(text: string) {
 
 test("model-facing terminal output is bounded and points to the private log", () => {
   const terminal = snapshot(Array.from({ length: 5_000 }, (_, index) => `line-${index} ${"x".repeat(40)}`).join("\n"));
-  const read = formatReadResult({ snapshot: terminal, text: terminal.output.text, cursor: terminal.output.cursor, omittedBytes: 10 });
+  const read = formatReadResult({
+    snapshot: terminal,
+    text: terminal.output.text,
+    cursor: terminal.output.cursor,
+    omittedBytes: 10,
+  });
   assert.ok(Buffer.byteLength(read, "utf8") < MODEL_OUTPUT_MAX_BYTES + 2_000);
   assert.match(read, /Private log: \/tmp\/full\.log/);
   assert.match(read, /omitted/);

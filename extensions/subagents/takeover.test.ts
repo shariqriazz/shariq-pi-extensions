@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import {
-  reconcileDashboardSelection,
-  SubagentDashboard,
-  type DashboardSelection,
-} from "./src/ui/takeover.ts";
+import { reconcileDashboardSelection, SubagentDashboard, type DashboardSelection } from "./src/ui/takeover.ts";
 
 test("dashboard selection follows its subagent id and falls back by row", () => {
   const selection: DashboardSelection = { id: "sa-7", index: 6 };
@@ -61,9 +57,16 @@ test("wide dashboard renders a bounded split-pane operations view", () => {
     list: () => [snapshot],
     get: () => snapshot,
     size: () => 1,
-    subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
-    subscribeTo() { return () => {}; },
-    requestAbort(id: string) { aborted.push(id); },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    subscribeTo() {
+      return () => {};
+    },
+    requestAbort(id: string) {
+      aborted.push(id);
+    },
     requestSend() {},
   } as any;
   const theme = {

@@ -41,9 +41,11 @@ export default function childBridge(pi: ExtensionAPI) {
   const allowlist = process.env[CHILD_TOOLS_ENV] ? (JSON.parse(process.env[CHILD_TOOLS_ENV]!) as string[]) : undefined;
   const allowed = (name: string) => !excluded.has(name) && childToolAllowed(name, capability, allowlist);
 
-  pi.on("tool_call", (event) => (allowed(event.toolName)
-    ? undefined
-    : { block: true, reason: `Tool "${event.toolName}" is not permitted for this subagent.` }));
+  pi.on("tool_call", (event) =>
+    allowed(event.toolName)
+      ? undefined
+      : { block: true, reason: `Tool "${event.toolName}" is not permitted for this subagent.` },
+  );
   const restrict = () => {
     const active = pi.getActiveTools();
     const next = active.filter(allowed);
@@ -61,7 +63,10 @@ export default function childBridge(pi: ExtensionAPI) {
     exposure: "model-only",
     parameters: Type.Object({ message: Type.String({ description: "Parent update" }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      ctx.ui.notify(`${BRIDGE_MARK}${JSON.stringify({ kind: "notify", message: params.message } satisfies BridgeRequest)}`, "info");
+      ctx.ui.notify(
+        `${BRIDGE_MARK}${JSON.stringify({ kind: "notify", message: params.message } satisfies BridgeRequest)}`,
+        "info",
+      );
       return { content: [{ type: "text", text: "Update sent to parent." }], details: {} };
     },
   });
@@ -83,7 +88,11 @@ export default function childBridge(pi: ExtensionAPI) {
     exposure: "model-only",
     parameters: Type.Object({}),
     async execute(_id, _params, signal, _onUpdate, ctx) {
-      const peers = JSON.parse(await request(ctx, { kind: "peers" }, signal)) as Array<{ id: string; status: string; title: string }>;
+      const peers = JSON.parse(await request(ctx, { kind: "peers" }, signal)) as Array<{
+        id: string;
+        status: string;
+        title: string;
+      }>;
       const text = peers.length
         ? peers.map((peer) => `${peer.id}\t${peer.status}\t${peer.title}`).join("\n")
         : "No peer agents are currently tracked.";
@@ -93,7 +102,8 @@ export default function childBridge(pi: ExtensionAPI) {
   pi.registerTool({
     name: "message_peer",
     label: "Message Peer Agent",
-    description: "Route a message to an existing sibling agent through the main-thread manager. This cannot create agents.",
+    description:
+      "Route a message to an existing sibling agent through the main-thread manager. This cannot create agents.",
     exposure: "model-only",
     parameters: Type.Object({
       id: Type.String({ description: "Target peer id from list_peers" }),

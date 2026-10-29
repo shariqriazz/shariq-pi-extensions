@@ -2,29 +2,52 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import performanceStatus, { formatPerformanceStatus } from "./index.ts";
 
-const theme = { fg(_color: string, text: string) { return text; } };
+const theme = {
+  fg(_color: string, text: string) {
+    return text;
+  },
+};
 
 test("formats finalized per-message throughput without an estimate marker", () => {
-  const line = formatPerformanceStatus({
-    requestStartedAt: 1_000,
-    firstTokenAt: 2_000,
-    completedAt: 4_000,
-    streamedChars: 400,
-    exactOutputTokens: 200,
-    runningTools: new Map(),
-    phase: "done",
-  }, { ui: { theme } } as never, 4_000);
+  const line = formatPerformanceStatus(
+    {
+      requestStartedAt: 1_000,
+      firstTokenAt: 2_000,
+      completedAt: 4_000,
+      streamedChars: 400,
+      exactOutputTokens: 200,
+      runningTools: new Map(),
+      phase: "done",
+    },
+    { ui: { theme } } as never,
+    4_000,
+  );
   assert.equal(line, "◆ last response · TPS 100 tok/s · TTFT 1.0s · 3.0s · 200 out");
 });
 
 function lifecycle() {
   const handlers = new Map<string, (event: any, ctx: any) => void>();
   const statuses: Array<string | undefined> = [];
-  performanceStatus({ on(name: string, handler: any) { handlers.set(name, handler); } } as never);
-  const ctx = { hasUI: true, ui: { theme, setStatus(_id: string, value: string | undefined) { statuses.push(value); } } };
+  performanceStatus({
+    on(name: string, handler: any) {
+      handlers.set(name, handler);
+    },
+  } as never);
+  const ctx = {
+    hasUI: true,
+    ui: {
+      theme,
+      setStatus(_id: string, value: string | undefined) {
+        statuses.push(value);
+      },
+    },
+  };
   const emit = (name: string, event: any = {}) => handlers.get(name)?.(event, ctx);
   const assistant = (output: number) => ({ role: "assistant", usage: { output } });
-  const delta = (text: string) => ({ message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: text } });
+  const delta = (text: string) => ({
+    message: { role: "assistant" },
+    assistantMessageEvent: { type: "text_delta", delta: text },
+  });
   return { handlers, statuses, emit, assistant, delta };
 }
 

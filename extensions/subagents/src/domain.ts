@@ -16,15 +16,7 @@ export type BackendName = "pi";
 export type SubagentOrigin = "model" | "btw" | "orchestration";
 
 /** Pi thinking levels. Omitted means inherit the parent level. */
-export const REASONING_EFFORTS = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const;
+export const REASONING_EFFORTS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export type SubagentStatus = "running" | "done" | "error" | "cancelled";
@@ -268,9 +260,7 @@ export function formatElapsed(snap: SubagentSnapshot) {
   const totalSeconds = Math.max(0, Math.round((end - snap.createdAt) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return minutes > 0
-    ? `${minutes}m${seconds.toString().padStart(2, "0")}s`
-    : `${seconds}s`;
+  return minutes > 0 ? `${minutes}m${seconds.toString().padStart(2, "0")}s` : `${seconds}s`;
 }
 
 // --- Errors -------------------------------------------------------------------
@@ -279,15 +269,11 @@ export class SpawnError extends Data.TaggedError("SpawnError")<{
   readonly message: string;
 }> {}
 
-export class BackendUnavailableError extends Data.TaggedError(
-  "BackendUnavailableError",
-)<{
+export class BackendUnavailableError extends Data.TaggedError("BackendUnavailableError")<{
   readonly message: string;
 }> {}
 
-export class ConcurrencyLimitError extends Data.TaggedError(
-  "ConcurrencyLimitError",
-)<{
+export class ConcurrencyLimitError extends Data.TaggedError("ConcurrencyLimitError")<{
   readonly message: string;
 }> {}
 

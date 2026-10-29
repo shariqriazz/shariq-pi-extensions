@@ -14,11 +14,7 @@ import { settlementDelivery } from "../shared/settlement-delivery.ts";
 import { toolCallCard, toolResultCard } from "../shared/tool-card.ts";
 import { formatDurationMs, oneLine, sanitizeTerminalText, stateLabel } from "../shared/tui-dashboard.ts";
 import { TerminalManager, MAX_RUNNING_TERMINALS } from "./src/manager.ts";
-import {
-  formatCompletion,
-  formatReadResult,
-  formatTerminal,
-} from "./src/presentation.ts";
+import { formatCompletion, formatReadResult, formatTerminal } from "./src/presentation.ts";
 import { terminalElapsedMs, type TerminalReadResult, type TerminalSnapshot } from "./src/types.ts";
 import { openTerminalDashboard } from "./src/ui.ts";
 
@@ -55,7 +51,10 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     manager = new TerminalManager();
     (globalThis as any).__pi_get_active_terminals = () => {
       if (!manager) return [];
-      return manager.list().filter((s) => s.status === "running").map((s) => `${s.id}: "${oneLine(s.title)}" (pid ${s.pid})`);
+      return manager
+        .list()
+        .filter((s) => s.status === "running")
+        .map((s) => `${s.id}: "${oneLine(s.title)}" (pid ${s.pid})`);
     };
     manager.setOnSettled((snapshot) => {
       if (!modelOwned.delete(snapshot.id)) {
@@ -81,23 +80,25 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     if (!ui || !manager) return;
     const terminals = manager.list();
     const running = terminals.filter((terminal) => terminal.status === "running").length;
-    const next = running > 0
-      ? `${running} background terminal${running === 1 ? "" : "s"} · /term`
-      : "";
+    const next = running > 0 ? `${running} background terminal${running === 1 ? "" : "s"} · /term` : "";
     if (activityContext) {
-      setActivitySource(activityContext, ACTIVITY_SOURCE, terminals
-        .filter((terminal) => terminal.status === "running")
-        .map((terminal) => {
-          const latest = sanitizeTerminalText(terminal.output.text).split(/\r?\n/).filter(Boolean).at(-1);
-          return {
-            id: terminal.id,
-            label: "Terminal",
-            title: terminal.title,
-            detail: `${formatDurationMs(terminalElapsedMs(terminal))}${latest ? ` · ${oneLine(latest)}` : ""}`,
-            state: "active" as const,
-            priority: 50,
-          };
-        }));
+      setActivitySource(
+        activityContext,
+        ACTIVITY_SOURCE,
+        terminals
+          .filter((terminal) => terminal.status === "running")
+          .map((terminal) => {
+            const latest = sanitizeTerminalText(terminal.output.text).split(/\r?\n/).filter(Boolean).at(-1);
+            return {
+              id: terminal.id,
+              label: "Terminal",
+              title: terminal.title,
+              detail: `${formatDurationMs(terminalElapsedMs(terminal))}${latest ? ` · ${oneLine(latest)}` : ""}`,
+              state: "active" as const,
+              priority: 50,
+            };
+          }),
+      );
     }
     if (next === lastStatus) return;
     lastStatus = next;
@@ -162,7 +163,9 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       command: Type.String({ minLength: 1, maxLength: 32_000, description: "Shell command." }),
       title: Type.Optional(Type.String({ maxLength: 100, description: "Short name; defaults to the command." })),
       working_dir: Type.Optional(Type.String({ description: "Directory, relative to the workspace or absolute." })),
-      wait_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 5_000, description: "Wait for startup output; default 300." })),
+      wait_ms: Type.Optional(
+        Type.Integer({ minimum: 0, maximum: 5_000, description: "Wait for startup output; default 300." }),
+      ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const command = params.command.trim();
@@ -184,7 +187,9 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       } catch (error) {
         starting.delete(terminal.id);
         modelOwned.delete(terminal.id);
-        await getManager().kill([terminal.id]).catch(() => undefined);
+        await getManager()
+          .kill([terminal.id])
+          .catch(() => undefined);
         consume(terminal.id);
         throw error;
       }
@@ -235,7 +240,9 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     parameters: Type.Object({
       id: Type.String({ description: 'Terminal id, such as "term-1".' }),
       cursor: Type.Optional(Type.Integer({ minimum: 0, description: "Cursor from the previous terminal result." })),
-      wait_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 10_000, description: "Wait for new output; default 0." })),
+      wait_ms: Type.Optional(
+        Type.Integer({ minimum: 0, maximum: 10_000, description: "Wait for new output; default 0." }),
+      ),
     }),
     async execute(_toolCallId, params, signal) {
       const result = await getManager().read(params.id, {
@@ -260,9 +267,21 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Reading terminal…"), 0, 0);
-      const details = result.details as { id?: string; status?: string; cursor?: number; omittedBytes?: number } | undefined;
+      const details = result.details as
+        { id?: string; status?: string; cursor?: number; omittedBytes?: number } | undefined;
       const state = details?.status === "failed" ? "error" : details?.status === "running" ? "active" : "success";
-      return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "terminal", `${details?.status ?? "unknown"} · cursor ${details?.cursor ?? "?"}${details?.omittedBytes ? ` · ${formatSize(details.omittedBytes)} omitted` : ""}`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          state,
+          details?.id ?? "terminal",
+          `${details?.status ?? "unknown"} · cursor ${details?.cursor ?? "?"}${details?.omittedBytes ? ` · ${formatSize(details.omittedBytes)} omitted` : ""}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -278,7 +297,9 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       input: Type.String({ maxLength: 65_536, description: "Text or control characters." }),
       press_enter: Type.Optional(Type.Boolean({ description: "Default true." })),
       cursor: Type.Optional(Type.Integer({ minimum: 0, description: "Cursor from the previous terminal result." })),
-      wait_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 5_000, description: "Wait for output; default 250." })),
+      wait_ms: Type.Optional(
+        Type.Integer({ minimum: 0, maximum: 5_000, description: "Wait for output; default 250." }),
+      ),
     }),
     async execute(_toolCallId, params, signal) {
       const current = getManager().get(params.id);
@@ -302,14 +323,28 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       };
     },
     renderCall(args, theme) {
-      const input = args.input === "\u0003" ? "Ctrl+C" : `${Array.from(args.input ?? "").length} chars${args.press_enter === false ? "" : " + Enter"}`;
+      const input =
+        args.input === "\u0003"
+          ? "Ctrl+C"
+          : `${Array.from(args.input ?? "").length} chars${args.press_enter === false ? "" : " + Enter"}`;
       return new Text(toolCallCard(theme, "terminal input", args.id, input), 0, 0);
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Sending terminal input…"), 0, 0);
       const details = result.details as { id?: string; status?: string; cursor?: number } | undefined;
       const state = details?.status === "failed" ? "error" : details?.status === "running" ? "active" : "success";
-      return new Text(toolResultCard(result, expanded, theme, state, details?.id ?? "terminal", `${details?.status ?? "unknown"} · cursor ${details?.cursor ?? "?"}`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          state,
+          details?.id ?? "terminal",
+          `${details?.status ?? "unknown"} · cursor ${details?.cursor ?? "?"}`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -322,8 +357,20 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     async execute() {
       const terminals = getManager().list();
       return {
-        content: [{ type: "text", text: terminals.length ? terminals.map(formatTerminal).join("\n") : "No background terminals." }],
-        details: { terminals: terminals.map((terminal) => ({ id: terminal.id, title: terminal.title, status: terminal.status, pid: terminal.pid })) },
+        content: [
+          {
+            type: "text",
+            text: terminals.length ? terminals.map(formatTerminal).join("\n") : "No background terminals.",
+          },
+        ],
+        details: {
+          terminals: terminals.map((terminal) => ({
+            id: terminal.id,
+            title: terminal.title,
+            status: terminal.status,
+            pid: terminal.pid,
+          })),
+        },
       };
     },
     renderCall(_args, theme) {
@@ -333,7 +380,18 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       const details = result.details as { terminals?: Array<{ status?: string }> } | undefined;
       const terminals = details?.terminals ?? [];
       const running = terminals.filter((terminal) => terminal.status === "running").length;
-      return new Text(toolResultCard(result, expanded, theme, running ? "active" : "muted", "terminals", `${terminals.length} tracked · ${running} running`), 0, 0);
+      return new Text(
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          running ? "active" : "muted",
+          "terminals",
+          `${terminals.length} tracked · ${running} running`,
+        ),
+        0,
+        0,
+      );
     },
   });
 
@@ -350,50 +408,95 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       const terminals = await getManager().kill(params.ids);
       for (const terminal of terminals) consume(terminal.id);
       return {
-        content: [{ type: "text", text: terminals.map((terminal) => `${terminal.id} "${oneLine(terminal.title)}" is ${terminal.status} (exit ${terminal.exitCode ?? "?"}).`).join("\n") }],
-        details: { terminals: terminals.map((terminal) => ({ id: terminal.id, status: terminal.status, exitCode: terminal.exitCode })) },
+        content: [
+          {
+            type: "text",
+            text: terminals
+              .map(
+                (terminal) =>
+                  `${terminal.id} "${oneLine(terminal.title)}" is ${terminal.status} (exit ${terminal.exitCode ?? "?"}).`,
+              )
+              .join("\n"),
+          },
+        ],
+        details: {
+          terminals: terminals.map((terminal) => ({
+            id: terminal.id,
+            status: terminal.status,
+            exitCode: terminal.exitCode,
+          })),
+        },
       };
     },
     renderCall(args, theme) {
-      return new Text(toolCallCard(theme, "terminal stop", `${args.ids?.length ?? 0} terminal${args.ids?.length === 1 ? "" : "s"}`, (args.ids ?? []).join(", ")), 0, 0);
+      return new Text(
+        toolCallCard(
+          theme,
+          "terminal stop",
+          `${args.ids?.length ?? 0} terminal${args.ids?.length === 1 ? "" : "s"}`,
+          (args.ids ?? []).join(", "),
+        ),
+        0,
+        0,
+      );
     },
     renderResult(result, { expanded, isPartial }, theme) {
       if (isPartial) return new Text(theme.fg("warning", "Stopping terminals…"), 0, 0);
       const details = result.details as { terminals?: Array<{ status?: string }> } | undefined;
       const terminals = details?.terminals ?? [];
       const failed = terminals.some((terminal) => terminal.status === "failed");
-      return new Text(toolResultCard(result, expanded, theme, failed ? "error" : "success", "terminals stopped", `${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`), 0, 0);
-    },
-  });
-
-  pi.registerMessageRenderer(
-    "background-terminal-result",
-    (message, { expanded }, theme) => {
-      const details = (message.details ?? {}) as { id?: string; title?: string; status?: string; exitCode?: number };
-      const state = details.status === "done" ? "success" : details.status === "killed" ? "muted" : "error";
-      const header = `${stateLabel(theme, state, details.status ?? "settled")} ${theme.fg("accent", theme.bold(`${details.id ?? "?"} · ${oneLine(details.title ?? "terminal")}`))}${theme.fg("muted", ` · exit ${details.exitCode ?? "?"}`)}`;
-      const body = sanitizeTerminalText(typeof message.content === "string" ? message.content : "").split("\n").slice(1).join("\n").trim();
-      if (expanded) {
-        const markdown = new Markdown(body, 0, 0, getMarkdownTheme());
-        const title = new Text(header, 0, 0);
-        return {
-          render: (width: number) => [...title.render(width), ...markdown.render(width)],
-          invalidate: () => { title.invalidate(); markdown.invalidate(); },
-        };
-      }
-      const preview = body.split("\n").slice(0, 8);
       return new Text(
-        [header, ...preview.map((line) => theme.fg("toolOutput", line)), ...(body.split("\n").length > 8 ? [theme.fg("dim", "… ctrl+o to expand")] : [])].join("\n"),
+        toolResultCard(
+          result,
+          expanded,
+          theme,
+          failed ? "error" : "success",
+          "terminals stopped",
+          `${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`,
+        ),
         0,
         0,
       );
     },
-  );
+  });
+
+  pi.registerMessageRenderer("background-terminal-result", (message, { expanded }, theme) => {
+    const details = (message.details ?? {}) as { id?: string; title?: string; status?: string; exitCode?: number };
+    const state = details.status === "done" ? "success" : details.status === "killed" ? "muted" : "error";
+    const header = `${stateLabel(theme, state, details.status ?? "settled")} ${theme.fg("accent", theme.bold(`${details.id ?? "?"} · ${oneLine(details.title ?? "terminal")}`))}${theme.fg("muted", ` · exit ${details.exitCode ?? "?"}`)}`;
+    const body = sanitizeTerminalText(typeof message.content === "string" ? message.content : "")
+      .split("\n")
+      .slice(1)
+      .join("\n")
+      .trim();
+    if (expanded) {
+      const markdown = new Markdown(body, 0, 0, getMarkdownTheme());
+      const title = new Text(header, 0, 0);
+      return {
+        render: (width: number) => [...title.render(width), ...markdown.render(width)],
+        invalidate: () => {
+          title.invalidate();
+          markdown.invalidate();
+        },
+      };
+    }
+    const preview = body.split("\n").slice(0, 8);
+    return new Text(
+      [
+        header,
+        ...preview.map((line) => theme.fg("toolOutput", line)),
+        ...(body.split("\n").length > 8 ? [theme.fg("dim", "… ctrl+o to expand")] : []),
+      ].join("\n"),
+      0,
+      0,
+    );
+  });
 
   const openCommand = async (ctx: ExtensionCommandContext) => {
     const terminals = getManager().list();
     if (ctx.mode !== "tui") {
-      if (ctx.hasUI) ctx.ui.notify(terminals.length ? terminals.map(formatTerminal).join("\n") : "No background terminals.", "info");
+      if (ctx.hasUI)
+        ctx.ui.notify(terminals.length ? terminals.map(formatTerminal).join("\n") : "No background terminals.", "info");
       return;
     }
     if (terminals.length === 0) {
@@ -431,7 +534,14 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         return;
       }
       if (trimmed.startsWith("stop ")) {
-        const ids = [...new Set(trimmed.slice("stop ".length).split(/[\s,]+/).filter(Boolean))];
+        const ids = [
+          ...new Set(
+            trimmed
+              .slice("stop ".length)
+              .split(/[\s,]+/)
+              .filter(Boolean),
+          ),
+        ];
         if (ids.length === 0) {
           ctx.ui.notify("Usage: /term stop <id> [id…]", "error");
           return;

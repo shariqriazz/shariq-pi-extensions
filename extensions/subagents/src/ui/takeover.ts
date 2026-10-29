@@ -6,30 +6,16 @@
  *   to steer/continue it.
  */
 
-import type {
-  ExtensionCommandContext,
-  KeybindingsManager,
-  Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { Input, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { formatElapsed, latestText, type SubagentSnapshot } from "../domain.ts";
 import { contextPercent, formatContextUtilization } from "../../../shared/context-utilization.ts";
-import {
-  joinSides,
-  meter,
-  oneLine,
-  padLine,
-  stateLabel,
-  viewportSlice,
-} from "../../../shared/tui-dashboard.ts";
+import { joinSides, meter, oneLine, padLine, stateLabel, viewportSlice } from "../../../shared/tui-dashboard.ts";
 import type { SubagentReadModel } from "../manager.ts";
 import { buildTranscriptLines } from "./transcript.ts";
 
-function configuredKeys(
-  keybindings: KeybindingsManager,
-  binding: Parameters<KeybindingsManager["getKeys"]>[0],
-) {
+function configuredKeys(keybindings: KeybindingsManager, binding: Parameters<KeybindingsManager["getKeys"]>[0]) {
   return keybindings.getKeys(binding).join("/") || "unbound";
 }
 
@@ -61,10 +47,7 @@ function statusWord(snap: SubagentSnapshot, theme: Theme): string {
 
 // --- Entry point ---------------------------------------------------------------
 
-export async function openSubagentPicker(
-  ctx: ExtensionCommandContext,
-  view: SubagentReadModel,
-) {
+export async function openSubagentPicker(ctx: ExtensionCommandContext, view: SubagentReadModel) {
   const selection: DashboardSelection = { index: 0 };
 
   while (true) {
@@ -74,8 +57,7 @@ export async function openSubagentPicker(
     }
 
     const picked = await ctx.ui.custom<string | null>(
-      (tui, theme, keybindings, done) =>
-        new SubagentDashboard(tui, theme, keybindings, view, selection, done),
+      (tui, theme, keybindings, done) => new SubagentDashboard(tui, theme, keybindings, view, selection, done),
       {
         overlay: true,
         overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
@@ -90,18 +72,13 @@ export async function openSubagentPicker(
   }
 }
 
-export async function openSubagentTakeover(
-  ctx: ExtensionCommandContext,
-  view: SubagentReadModel,
-  id: string,
-) {
+export async function openSubagentTakeover(ctx: ExtensionCommandContext, view: SubagentReadModel, id: string) {
   if (!view.get(id)) {
     ctx.ui.notify(`Subagent ${id} is no longer tracked`, "warning");
     return;
   }
   await ctx.ui.custom<null>(
-    (tui, theme, keybindings, done) =>
-      new TakeoverView(tui, theme, keybindings, id, view, done),
+    (tui, theme, keybindings, done) => new TakeoverView(tui, theme, keybindings, id, view, done),
     {
       overlay: true,
       overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
@@ -109,10 +86,7 @@ export async function openSubagentTakeover(
   );
 }
 
-export async function openPeerMessageViewer(
-  ctx: ExtensionCommandContext,
-  view: SubagentReadModel,
-) {
+export async function openPeerMessageViewer(ctx: ExtensionCommandContext, view: SubagentReadModel) {
   if (view.peerMessages().length === 0) {
     ctx.ui.notify("No peer messages yet", "info");
     return;
@@ -129,23 +103,19 @@ export async function openPeerMessageViewer(
       };
       return {
         handleInput(data: string) {
-          if (
-            keybindings.matches(data, "tui.select.cancel") ||
-            keybindings.matches(data, "tui.select.confirm")
-          ) close();
+          if (keybindings.matches(data, "tui.select.cancel") || keybindings.matches(data, "tui.select.confirm"))
+            close();
         },
         render(width: number) {
           const messages = view.peerMessages().slice(-Math.max(1, (tui.terminal.rows || 30) - 5));
           const lines = [theme.fg("accent", theme.bold("Peer coordination")), theme.fg("border", "─".repeat(width))];
           for (const message of messages) {
             const time = new Date(message.sentAt).toLocaleTimeString();
-            const state = message.status === "delivered"
-              ? theme.fg("success", "✓")
-              : theme.fg("error", "✗");
-            const sender = message.senderId
-              ? `${message.sender} (${message.senderId})`
-              : message.sender;
-            lines.push(truncateToWidth(`${state} ${time} ${sender} → ${message.targetTitle} (${message.targetId})`, width));
+            const state = message.status === "delivered" ? theme.fg("success", "✓") : theme.fg("error", "✗");
+            const sender = message.senderId ? `${message.sender} (${message.senderId})` : message.sender;
+            lines.push(
+              truncateToWidth(`${state} ${time} ${sender} → ${message.targetTitle} (${message.targetId})`, width),
+            );
             lines.push(truncateToWidth(`  ${message.message}`, width));
             if (message.error) lines.push(truncateToWidth(theme.fg("error", `  ${message.error}`), width));
           }
@@ -175,13 +145,9 @@ export function reconcileDashboardSelection(
   selection: DashboardSelection,
   subs: ReadonlyArray<Pick<SubagentSnapshot, "id">>,
 ) {
-  const stableIndex = selection.id
-    ? subs.findIndex((snap) => snap.id === selection.id)
-    : -1;
+  const stableIndex = selection.id ? subs.findIndex((snap) => snap.id === selection.id) : -1;
   selection.index =
-    stableIndex >= 0
-      ? stableIndex
-      : Math.min(Math.max(0, selection.index), Math.max(0, subs.length - 1));
+    stableIndex >= 0 ? stableIndex : Math.min(Math.max(0, selection.index), Math.max(0, subs.length - 1));
   selection.id = subs[selection.index]?.id;
 }
 
@@ -258,8 +224,7 @@ export class SubagentDashboard implements Component {
     }
     if (this.keybindings.matches(data, "tui.select.up") || data === "k") {
       if (subs.length > 0) {
-        this.selection.index =
-          (this.selection.index - 1 + subs.length) % subs.length;
+        this.selection.index = (this.selection.index - 1 + subs.length) % subs.length;
         this.selection.id = subs[this.selection.index]?.id;
         this.abortArmed = undefined;
         this.tui.requestRender();
@@ -296,9 +261,7 @@ export class SubagentDashboard implements Component {
 
   private borderSegment(width: number, title: string): string {
     const theme = this.theme;
-    const label = title
-      ? ` ${truncateToWidth(title, Math.max(0, width - 3))} `
-      : "";
+    const label = title ? ` ${truncateToWidth(title, Math.max(0, width - 3))} ` : "";
     const labelWidth = visibleWidth(label);
     return (
       theme.fg("border", "─") +
@@ -327,7 +290,9 @@ export class SubagentDashboard implements Component {
       done > 0 ? stateLabel(theme, "success", `${done} done`) : "",
       failed > 0 ? stateLabel(theme, "error", `${failed} failed`) : "",
       cancelled > 0 ? stateLabel(theme, "muted", `${cancelled} cancelled`) : "",
-    ].filter(Boolean).join(theme.fg("dim", " · "));
+    ]
+      .filter(Boolean)
+      .join(theme.fg("dim", " · "));
     const lines = [joinSides(`  ${headerLeft}`, `${counts || theme.fg("muted", "idle")}  `, width)];
 
     lines.push(
@@ -358,11 +323,7 @@ export class SubagentDashboard implements Component {
       }
     }
 
-    lines.push(
-      theme.fg("border", "╰") +
-        theme.fg("border", "─".repeat(innerWidth)) +
-        theme.fg("border", "╯"),
-    );
+    lines.push(theme.fg("border", "╰") + theme.fg("border", "─".repeat(innerWidth)) + theme.fg("border", "╯"));
     lines.push(
       truncateToWidth(
         theme.fg(
@@ -375,12 +336,7 @@ export class SubagentDashboard implements Component {
     return lines;
   }
 
-  private renderRows(
-    subs: ReadonlyArray<SubagentSnapshot>,
-    width: number,
-    height: number,
-    compact: boolean,
-  ): string[] {
+  private renderRows(subs: ReadonlyArray<SubagentSnapshot>, width: number, height: number, compact: boolean): string[] {
     const theme = this.theme;
     const out: string[] = [];
     const viewport = viewportSlice(subs, this.selection.index, height);
@@ -390,9 +346,7 @@ export class SubagentDashboard implements Component {
       const index = viewport.start + row;
       const selected = index === this.selection.index;
       const marker = selected ? theme.fg("accent", "❯") : " ";
-      const title = selected
-        ? theme.fg("accent", oneLine(snap.title))
-        : theme.fg("text", oneLine(snap.title));
+      const title = selected ? theme.fg("accent", oneLine(snap.title)) : theme.fg("text", oneLine(snap.title));
       const left = ` ${marker} ${statusGlyph(snap, theme)} ${title} ${theme.fg("dim", snap.id)}`;
       const utilization = formatContextUtilization(snap.usage);
       const rightParts = compact
@@ -416,13 +370,16 @@ export class SubagentDashboard implements Component {
     return out;
   }
 
-  private renderSelected(
-    snap: SubagentSnapshot,
-    width: number,
-    height: number,
-  ): string[] {
+  private renderSelected(snap: SubagentSnapshot, width: number, height: number): string[] {
     const theme = this.theme;
-    const state = snap.status === "running" ? "warning" : snap.status === "done" ? "success" : snap.status === "cancelled" ? "muted" : "error";
+    const state =
+      snap.status === "running"
+        ? "warning"
+        : snap.status === "done"
+          ? "success"
+          : snap.status === "cancelled"
+            ? "muted"
+            : "error";
     const percent = contextPercent(snap.usage);
     const activeTools = snap.liveTools.filter((tool) => !tool.done);
     const lines: string[] = [
@@ -435,18 +392,25 @@ export class SubagentDashboard implements Component {
       ` ${theme.fg("muted", "SOURCE")} ${theme.fg("text", snap.meta.origin === "btw" ? "user aside" : "model delegation")}`,
     ];
     if (percent !== undefined) {
-      lines.push("", ` ${theme.fg("muted", "CONTEXT")} ${meter(theme, percent, 100, Math.max(12, width - 12), percent >= 85 ? "warning" : "active")}`);
+      lines.push(
+        "",
+        ` ${theme.fg("muted", "CONTEXT")} ${meter(theme, percent, 100, Math.max(12, width - 12), percent >= 85 ? "warning" : "active")}`,
+      );
     }
     lines.push("");
     if (activeTools.length > 0) {
-      lines.push(` ${theme.fg("muted", "NOW")} ${theme.fg("toolTitle", oneLine(activeTools[0]!.name))}${activeTools.length > 1 ? theme.fg("dim", ` +${activeTools.length - 1}`) : ""}`);
+      lines.push(
+        ` ${theme.fg("muted", "NOW")} ${theme.fg("toolTitle", oneLine(activeTools[0]!.name))}${activeTools.length > 1 ? theme.fg("dim", ` +${activeTools.length - 1}`) : ""}`,
+      );
     } else if (snap.status === "running") {
       lines.push(` ${theme.fg("muted", "NOW")} ${theme.fg("warning", "thinking / responding")}`);
     } else {
       lines.push(` ${theme.fg("muted", "NOW")} ${theme.fg("dim", "settled")}`);
     }
     if (snap.queued.length > 0) {
-      lines.push(` ${theme.fg("muted", "QUEUE")} ${theme.fg("warning", `${snap.queued.length} message${snap.queued.length === 1 ? "" : "s"}`)}`);
+      lines.push(
+        ` ${theme.fg("muted", "QUEUE")} ${theme.fg("warning", `${snap.queued.length} message${snap.queued.length === 1 ? "" : "s"}`)}`,
+      );
     }
     lines.push("", ` ${theme.fg("muted", "LATEST")}`);
     const latest = oneLine(latestText(snap) || snap.errorText || "No output yet.");
@@ -556,10 +520,7 @@ export class TakeoverView implements Component, Focusable {
       if (snap?.status === "running") this.view.requestAbort(this.id);
       return;
     }
-    if (
-      this.keybindings.matches(data, "app.interrupt") ||
-      this.keybindings.matches(data, "tui.select.cancel")
-    ) {
+    if (this.keybindings.matches(data, "app.interrupt") || this.keybindings.matches(data, "tui.select.cancel")) {
       this.close();
       return;
     }
@@ -569,10 +530,7 @@ export class TakeoverView implements Component, Focusable {
       return;
     }
     if (this.keybindings.matches(data, "tui.editor.cursorDown")) {
-      this.scrollOffset = Math.max(
-        0,
-        this.scrollOffset - TRANSCRIPT_SCROLL_STEP,
-      );
+      this.scrollOffset = Math.max(0, this.scrollOffset - TRANSCRIPT_SCROLL_STEP);
       this.tui.requestRender();
       return;
     }
@@ -582,10 +540,7 @@ export class TakeoverView implements Component, Focusable {
       return;
     }
     if (this.keybindings.matches(data, "tui.editor.pageDown")) {
-      this.scrollOffset = Math.max(
-        0,
-        this.scrollOffset - this.viewportHeight(),
-      );
+      this.scrollOffset = Math.max(0, this.scrollOffset - this.viewportHeight());
       this.tui.requestRender();
       return;
     }
@@ -649,11 +604,12 @@ export class TakeoverView implements Component, Focusable {
     const metaLeft =
       ` ${theme.fg("muted", "MODEL")} ${theme.fg("text", snap.meta.modelLabel ?? "inherit")}` +
       theme.fg("dim", ` · ${snap.meta.capability ?? "all"}${snap.meta.isolation === "worktree" ? " · worktree" : ""}`);
-    const metaRight = percent === undefined
-      ? activeTools.length > 0
-        ? theme.fg("toolTitle", oneLine(activeTools[0]!.name))
-        : ""
-      : `${meter(theme, percent, 100, Math.min(24, Math.max(10, Math.floor(width / 4))), percent >= 85 ? "warning" : "active")}`;
+    const metaRight =
+      percent === undefined
+        ? activeTools.length > 0
+          ? theme.fg("toolTitle", oneLine(activeTools[0]!.name))
+          : ""
+        : `${meter(theme, percent, 100, Math.min(24, Math.max(10, Math.floor(width / 4))), percent >= 85 ? "warning" : "active")}`;
     lines.push(joinSides(metaLeft, `${metaRight} `, width));
     lines.push(border);
 
@@ -669,27 +625,17 @@ export class TakeoverView implements Component, Focusable {
 
     const body: string[] = [];
     if (snap.errorText) {
-      body.push(
-        truncateToWidth(theme.fg("error", `error: ${snap.errorText}`), width),
-      );
+      body.push(truncateToWidth(theme.fg("error", `error: ${snap.errorText}`), width));
     }
 
-    const capacity = Math.max(
-      1,
-      viewport - body.length - (this.scrollOffset > 0 ? 1 : 0),
-    );
+    const capacity = Math.max(1, viewport - body.length - (this.scrollOffset > 0 ? 1 : 0));
     const end = transcript.length - this.scrollOffset;
     const visible = transcript.slice(Math.max(0, end - capacity), end);
     if (visible.length === 0) body.push(theme.fg("dim", "(no output yet)"));
     else body.push(...visible);
 
     if (this.scrollOffset > 0) {
-      body.push(
-        truncateToWidth(
-          theme.fg("dim", `... ${this.scrollOffset} lines below · ↓/pgdn`),
-          width,
-        ),
-      );
+      body.push(truncateToWidth(theme.fg("dim", `... ${this.scrollOffset} lines below · ↓/pgdn`), width));
     }
     while (body.length < viewport) body.push("");
     lines.push(...body.slice(0, viewport));

@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { applyAgentWorktree, createAgentWorktree, discardAgentWorktree, integrateAgentWorktree } from "./src/worktree.ts";
+import {
+  applyAgentWorktree,
+  createAgentWorktree,
+  discardAgentWorktree,
+  integrateAgentWorktree,
+} from "./src/worktree.ts";
 
 const runFile = promisify(execFile);
 const exec = async (command: string, args: string[]) => {
@@ -29,10 +34,7 @@ test("worktree isolation rejects a dirty source instead of hiding uncommitted ch
     await exec("git", ["-C", repo, "commit", "-qm", "initial"]);
     writeFileSync(join(repo, "file.txt"), "uncommitted\n");
 
-    await assert.rejects(
-      createAgentWorktree(exec, repo, "dirty-test"),
-      /requires a clean source checkout/,
-    );
+    await assert.rejects(createAgentWorktree(exec, repo, "dirty-test"), /requires a clean source checkout/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

@@ -35,15 +35,7 @@ export const SEP = " \u00b7 "; // ·
  * Ink tones (design language §2): the neutral ramp (text/muted/dim), the status
  * tones (success/warning/error/running), and the family accent.
  */
-export type Tone =
-  | "text"
-  | "muted"
-  | "dim"
-  | "success"
-  | "warning"
-  | "error"
-  | "running"
-  | "accent";
+export type Tone = "text" | "muted" | "dim" | "success" | "warning" | "error" | "running" | "accent";
 
 const THEME_ROLE: Partial<Record<Tone, ThemeColor>> = {
   text: "text",
@@ -219,13 +211,7 @@ export function middleTruncate(line: string, width: number, theme?: Theme): stri
  * wins when the width is starved. `reserve` (design language §9.8) is a minimum
  * right-side reservation — gap included — so callers can hold every body in a block to
  * the same budget regardless of each row's own suffix. */
-export function rightAlignSuffix(
-  body: string,
-  suffix: string,
-  width: number,
-  theme?: Theme,
-  reserve = 0,
-): string {
+export function rightAlignSuffix(body: string, suffix: string, width: number, theme?: Theme, reserve = 0): string {
   const maxWidth = Math.max(1, width);
   const bodyText = body.trimEnd();
   if (!suffix) {

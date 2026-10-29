@@ -21,15 +21,33 @@ function withAgentDir(run: () => void) {
 test("catalog updates keep records from every writer and track live owners", () => {
   withAgentDir(() => {
     const record = (id: string, extra = {}) => ({
-      id, title: id, cwd: "/tmp", status: "done" as const, sessionFile: `/tmp/${id}.jsonl`, updatedAt: Date.now(), ...extra,
+      id,
+      title: id,
+      cwd: "/tmp",
+      status: "done" as const,
+      sessionFile: `/tmp/${id}.jsonl`,
+      updatedAt: Date.now(),
+      ...extra,
     });
     upsertSubagentCatalog(record("sa-a"));
     upsertSubagentCatalog(record("sa-b"));
     assert.deepEqual([...loadSubagentCatalog().keys()].sort(), ["sa-a", "sa-b"]);
 
-    assert.equal(ownedByAnotherProcess(record("sa-c", { status: "running", ownerPid: process.pid, ownerHost: hostname() })), false);
-    assert.equal(ownedByAnotherProcess(record("sa-d", { status: "running", ownerPid: process.ppid, ownerHost: hostname() })), true);
-    assert.equal(ownedByAnotherProcess(record("sa-e", { status: "running", ownerPid: 2 ** 30, ownerHost: hostname() })), false);
-    assert.equal(ownedByAnotherProcess(record("sa-f", { status: "done", ownerPid: process.ppid, ownerHost: hostname() })), false);
+    assert.equal(
+      ownedByAnotherProcess(record("sa-c", { status: "running", ownerPid: process.pid, ownerHost: hostname() })),
+      false,
+    );
+    assert.equal(
+      ownedByAnotherProcess(record("sa-d", { status: "running", ownerPid: process.ppid, ownerHost: hostname() })),
+      true,
+    );
+    assert.equal(
+      ownedByAnotherProcess(record("sa-e", { status: "running", ownerPid: 2 ** 30, ownerHost: hostname() })),
+      false,
+    );
+    assert.equal(
+      ownedByAnotherProcess(record("sa-f", { status: "done", ownerPid: process.ppid, ownerHost: hostname() })),
+      false,
+    );
   });
 });

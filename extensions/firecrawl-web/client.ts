@@ -118,11 +118,12 @@ export function buildScrapeBody(params: WebScrapeParams): Record<string, unknown
   if ((format === "question" || format === "highlights") && !query) {
     throw new Error(`web_scrape format ${format} requires query.`);
   }
-  const formatSpec = format === "question"
-    ? { type: "question", question: query }
-    : format === "highlights"
-      ? { type: "highlights", query }
-      : { type: format };
+  const formatSpec =
+    format === "question"
+      ? { type: "question", question: query }
+      : format === "highlights"
+        ? { type: "highlights", query }
+        : { type: format };
 
   return {
     url,
@@ -168,8 +169,12 @@ export function buildDeveloperSearchBody(params: DeveloperSearchParams): Record<
     ...(params.language?.trim() ? { language: params.language.trim() } : {}),
     ...(params.topic?.trim() ? { topic: params.topic.trim() } : {}),
     ...(params.license?.trim() ? { license: params.license.trim() } : {}),
-    ...(typeof params.min_stars === "number" && params.min_stars >= 0 ? { min_stars: Math.floor(params.min_stars) } : {}),
-    ...(typeof params.max_stars === "number" && params.max_stars >= 0 ? { max_stars: Math.floor(params.max_stars) } : {}),
+    ...(typeof params.min_stars === "number" && params.min_stars >= 0
+      ? { min_stars: Math.floor(params.min_stars) }
+      : {}),
+    ...(typeof params.max_stars === "number" && params.max_stars >= 0
+      ? { max_stars: Math.floor(params.max_stars) }
+      : {}),
     ...(typeof params.archived === "boolean" ? { archived: params.archived } : {}),
     ...(typeof params.fork === "boolean" ? { fork: params.fork } : {}),
   };
@@ -286,7 +291,7 @@ export async function firecrawlRequest(
         await delay(retryAfterMs(response.headers.get("retry-after")) ?? RETRY_DELAYS_MS[attempt], signal);
         continue;
       }
-      const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+      const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
       const message = typeof record.error === "string" ? record.error : `HTTP ${response.status}`;
       throw new Error(`Firecrawl ${endpoint} failed: ${redactSecrets(message).slice(0, 1_000)}`);
     } catch (error) {

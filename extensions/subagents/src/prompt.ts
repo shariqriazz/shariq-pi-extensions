@@ -55,15 +55,13 @@ export const SUBAGENT_WAIT_PARAMETER_DESCRIPTIONS = {
   ids: 'Subagent ids, such as ["sa-1"].',
 };
 
-export const SUBAGENT_CANCEL_TOOL_DESCRIPTION =
-  "Stop running subagents. Their partial transcripts are kept.";
+export const SUBAGENT_CANCEL_TOOL_DESCRIPTION = "Stop running subagents. Their partial transcripts are kept.";
 
 export const SUBAGENT_CANCEL_PARAMETER_DESCRIPTIONS = {
   ids: 'Subagent ids, such as ["sa-1"].',
 };
 
-export const SUBAGENT_CHECK_TOOL_DESCRIPTION =
-  "Show one subagent's status and latest output without waiting.";
+export const SUBAGENT_CHECK_TOOL_DESCRIPTION = "Show one subagent's status and latest output without waiting.";
 
 export const SUBAGENT_CHECK_PARAMETER_DESCRIPTIONS = {
   id: "Subagent id.",

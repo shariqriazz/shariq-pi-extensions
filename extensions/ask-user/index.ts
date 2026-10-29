@@ -1,8 +1,4 @@
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import {
   Editor,
   type EditorTheme,
@@ -13,13 +9,7 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import {
-  frameBottom,
-  frameTop,
-  oneLine,
-  padLine,
-  sanitizeTerminalText,
-} from "../shared/tui-dashboard.ts";
+import { frameBottom, frameTop, oneLine, padLine, sanitizeTerminalText } from "../shared/tui-dashboard.ts";
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 5;
@@ -104,7 +94,8 @@ function normalizeQuestionInput(
 }
 
 export function answerMessage(selection: Selection | null): string {
-  if (!selection) return "The user dismissed the question. Do not guess repeatedly; continue only if a safe path remains, otherwise explain what is blocked.";
+  if (!selection)
+    return "The user dismissed the question. Do not guess repeatedly; continue only if a safe path remains, otherwise explain what is blocked.";
   return selection.custom
     ? `The user wrote: ${selection.answer}`
     : `The user selected option ${selection.optionIndex}: ${selection.answer}`;
@@ -244,8 +235,9 @@ export class AskUserView implements Focusable {
     if (this.cachedWidth === width && this.cachedLines) return this.cachedLines;
     const safeWidth = Math.max(1, width);
     const inner = Math.max(1, safeWidth - 4);
-    const questionLines = wrapTextWithAnsi(this.theme.bold(cleanMultiline(this.question)), inner)
-      .map((line) => padLine(`  ${this.theme.fg("text", line)}`, safeWidth));
+    const questionLines = wrapTextWithAnsi(this.theme.bold(cleanMultiline(this.question)), inner).map((line) =>
+      padLine(`  ${this.theme.fg("text", line)}`, safeWidth),
+    );
 
     const rest: string[] = [padLine("", safeWidth)];
     this.options.forEach((option, index) => {
@@ -256,12 +248,14 @@ export class AskUserView implements Focusable {
       const labelLines = wrapTextWithAnsi(oneLine(option.label), Math.max(8, inner - 4));
       labelLines.forEach((text, lineIndex) => {
         const label = lineIndex === 0 ? `${prefix} ${marker} ${text}` : `${" ".repeat(marker.length + 3)}${text}`;
-        rest.push(padLine(
-          active
-            ? this.theme.bg("selectedBg", this.theme.fg("accent", label))
-            : this.theme.fg(option.custom ? "muted" : "text", label),
-          safeWidth,
-        ));
+        rest.push(
+          padLine(
+            active
+              ? this.theme.bg("selectedBg", this.theme.fg("accent", label))
+              : this.theme.fg(option.custom ? "muted" : "text", label),
+            safeWidth,
+          ),
+        );
       });
       if (option.description) {
         for (const description of wrapTextWithAnsi(oneLine(option.description), Math.max(8, inner - 4))) {
@@ -383,10 +377,12 @@ export default function askUserExtension(pi: ExtensionAPI) {
       const normalized = normalizeQuestionInput(params.question, params.options);
       if (ctx.mode !== "tui") {
         return {
-          content: [{
-            type: "text",
-            text: "Interactive choices are unavailable in this mode. Ask the user plainly in the final response only if the decision still blocks progress.",
-          }],
+          content: [
+            {
+              type: "text",
+              text: "Interactive choices are unavailable in this mode. Ask the user plainly in the final response only if the decision still blocks progress.",
+            },
+          ],
           details: {
             question: normalized.question,
             options: normalized.options.map((option) => option.label),
@@ -397,16 +393,8 @@ export default function askUserExtension(pi: ExtensionAPI) {
           } satisfies AskUserDetails,
         };
       }
-      const choices: DisplayOption[] = [
-        ...normalized.options,
-        { label: "Write my own answer…", custom: true },
-      ];
-      const selection = await openQuestion(
-        ctx,
-        normalized.question,
-        choices,
-        signal,
-      );
+      const choices: DisplayOption[] = [...normalized.options, { label: "Write my own answer…", custom: true }];
+      const selection = await openQuestion(ctx, normalized.question, choices, signal);
       const details: AskUserDetails = {
         question: normalized.question,
         options: choices.filter((option) => !option.custom).map((option) => option.label),
@@ -423,10 +411,7 @@ export default function askUserExtension(pi: ExtensionAPI) {
       const question = typeof args.question === "string" ? oneLine(args.question) : "";
       return {
         render: (width: number) => [
-          truncateToWidth(
-            `${theme.fg("toolTitle", theme.bold("ask user"))} ${theme.fg("muted", question)}`,
-            width,
-          ),
+          truncateToWidth(`${theme.fg("toolTitle", theme.bold("ask user"))} ${theme.fg("muted", question)}`, width),
         ],
         invalidate() {},
       };
@@ -437,8 +422,8 @@ export default function askUserExtension(pi: ExtensionAPI) {
       const text = context.isError
         ? `${theme.fg("error", "● not asked")} ${theme.fg("muted", oneLine(errorText))}`
         : !details || details.cancelled
-        ? theme.fg("warning", "● dismissed")
-        : `${theme.fg("success", "● answered")} ${theme.fg("accent", oneLine(details.answer ?? ""))}`;
+          ? theme.fg("warning", "● dismissed")
+          : `${theme.fg("success", "● answered")} ${theme.fg("accent", oneLine(details.answer ?? ""))}`;
       return { render: (width: number) => [truncateToWidth(text, width)], invalidate() {} };
     },
   });

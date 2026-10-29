@@ -29,8 +29,13 @@ test("terminal dashboard renders bounded live PTY metadata and output", () => {
   const view = {
     list: () => [snapshot],
     get: () => snapshot,
-    subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
-    subscribeTo() { return () => {}; },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    subscribeTo() {
+      return () => {};
+    },
     requestKill() {},
     requestWrite() {},
     requestResize() {},
@@ -66,12 +71,22 @@ test("terminal detail sends printable keys to the input and stops only on ctrl+x
   const kills: string[] = [];
   const view = {
     get: () => snapshot,
-    subscribeTo() { return () => {}; },
-    requestKill(id: string) { kills.push(id); },
-    requestWrite(_id: string, data: string) { writes.push(data); },
+    subscribeTo() {
+      return () => {};
+    },
+    requestKill(id: string) {
+      kills.push(id);
+    },
+    requestWrite(_id: string, data: string) {
+      writes.push(data);
+    },
     requestResize() {},
   } as any;
-  const theme = { fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text, bold: (text: string) => text } as any;
+  const theme = {
+    fg: (_color: string, text: string) => text,
+    bg: (_color: string, text: string) => text,
+    bold: (text: string) => text,
+  } as any;
   const detail = new TerminalDetail(
     { terminal: { rows: 28 }, requestRender() {} } as any,
     theme,

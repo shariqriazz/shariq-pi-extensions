@@ -5,13 +5,7 @@ import type {
   InputEvent,
   InputEventResult,
 } from "@earendil-works/pi-coding-agent";
-import {
-  INPUT_MODES,
-  isInputMode,
-  loadInputMode,
-  saveInputMode,
-  type InputMode,
-} from "./config.ts";
+import { INPUT_MODES, isInputMode, loadInputMode, saveInputMode, type InputMode } from "./config.ts";
 
 const STATUS_KEY = "input-mode";
 type ModelInput = Parameters<ExtensionAPI["sendUserMessage"]>[0];
@@ -54,10 +48,9 @@ export function createInputModeExtension(options: InputModeExtensionOptions = {}
         }
         selected = requested;
       } else if (ctx.hasUI) {
-        selected = await ctx.ui.select(
-          `Input behavior while agent is running (current: ${mode})`,
-          [...INPUT_MODES],
-        ) as InputMode | undefined;
+        selected = (await ctx.ui.select(`Input behavior while agent is running (current: ${mode})`, [
+          ...INPUT_MODES,
+        ])) as InputMode | undefined;
       } else {
         ctx.ui.notify(`Input mode: ${mode}. Usage: /input-mode [${INPUT_MODES.join("|")}]`, "info");
         return;
@@ -67,16 +60,20 @@ export function createInputModeExtension(options: InputModeExtensionOptions = {}
       try {
         saveInputMode(selected, options.configFile);
       } catch (error) {
-        ctx.ui.notify(`Input mode unchanged (${mode}): could not save the setting: ${error instanceof Error ? error.message : String(error)}`, "error");
+        ctx.ui.notify(
+          `Input mode unchanged (${mode}): could not save the setting: ${error instanceof Error ? error.message : String(error)}`,
+          "error",
+        );
         return;
       }
       mode = selected;
       updateStatus();
-      const explanation = mode === "interrupt"
-        ? "new Enter input aborts the active run before it is delivered"
-        : mode === "follow-up"
-          ? "new Enter input waits until the active run finishes"
-          : "new Enter input is injected before the agent's next step";
+      const explanation =
+        mode === "interrupt"
+          ? "new Enter input aborts the active run before it is delivered"
+          : mode === "follow-up"
+            ? "new Enter input waits until the active run finishes"
+            : "new Enter input is injected before the agent's next step";
       ctx.ui.notify(`Input mode: ${mode} — ${explanation}.`, "info");
     };
 

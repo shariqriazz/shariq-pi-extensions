@@ -54,9 +54,7 @@ export async function createChildResources(options: ChildResourceOptions) {
     cwd: options.cwd,
     agentDir,
     settingsManager,
-    ...(options.appendSystemPrompt
-      ? { appendSystemPrompt: options.appendSystemPrompt }
-      : {}),
+    ...(options.appendSystemPrompt ? { appendSystemPrompt: options.appendSystemPrompt } : {}),
     ...(options.extensionFactories ? { extensionFactories: options.extensionFactories } : {}),
     noSkills: options.noSkills,
     noContextFiles: options.noContextFiles,
@@ -89,9 +87,7 @@ export function resolveStandaloneChildProjectTrust(options: {
 }
 
 /** Start child extension session hooks/resources in headless print mode. */
-export async function bindChildSessionExtensions(
-  session: Pick<AgentSession, "bindExtensions">,
-) {
+export async function bindChildSessionExtensions(session: Pick<AgentSession, "bindExtensions">) {
   await session.bindExtensions({ mode: "print" });
 }
 
@@ -129,10 +125,7 @@ function waitBounded(operation: Promise<unknown>, timeoutMs: number) {
  * Emit child session_shutdown once, then dispose once. Hook failures and a
  * bounded hook deadline never prevent disposal.
  */
-export function shutdownAndDisposeChildSession(
-  session: DisposableChildSession,
-  options: { timeoutMs?: number } = {},
-) {
+export function shutdownAndDisposeChildSession(session: DisposableChildSession, options: { timeoutMs?: number } = {}) {
   const existing = childShutdowns.get(session);
   if (existing) return existing;
 

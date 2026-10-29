@@ -21,9 +21,7 @@ function formatTimeout(timeoutMs: number) {
 
 export class ToolCallTimeoutError extends Error {
   constructor(toolName: string, timeoutMs: number) {
-    super(
-      `Tool call "${toolName}" timed out after ${formatTimeout(timeoutMs)}.`,
-    );
+    super(`Tool call "${toolName}" timed out after ${formatTimeout(timeoutMs)}.`);
     this.name = "ToolCallTimeoutError";
   }
 }
@@ -35,9 +33,7 @@ export async function runWithToolCallTimeout<T>(
   execute: (signal: AbortSignal) => Promise<T>,
 ) {
   const timeoutController = new AbortController();
-  const executionSignal = signal
-    ? AbortSignal.any([signal, timeoutController.signal])
-    : timeoutController.signal;
+  const executionSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
   // Never start a tool whose call was already cancelled.
   if (signal?.aborted) {
     throw signal.reason instanceof Error ? signal.reason : new Error(`Tool call "${toolName}" was aborted.`);
@@ -55,11 +51,7 @@ export async function runWithToolCallTimeout<T>(
   const aborted = new Promise<never>((_resolve, reject) => {
     if (!signal) return;
     const onAbort = () => {
-      reject(
-        signal.reason instanceof Error
-          ? signal.reason
-          : new Error(`Tool call "${toolName}" was aborted.`),
-      );
+      reject(signal.reason instanceof Error ? signal.reason : new Error(`Tool call "${toolName}" was aborted.`));
     };
     if (signal.aborted) {
       onAbort();

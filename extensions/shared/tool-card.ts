@@ -11,12 +11,7 @@ type ToolResultLike = {
   content?: Array<{ type?: string; text?: string }>;
 };
 
-export function toolCallCard(
-  theme: ThemeLike,
-  label: string,
-  title: string,
-  detail?: string,
-) {
+export function toolCallCard(theme: ThemeLike, label: string, title: string, detail?: string) {
   return `${theme.fg("toolTitle", theme.bold(label))} ${theme.fg("accent", oneLine(title))}${detail ? `\n${theme.fg("dim", oneLine(detail))}` : ""}`;
 }
 
@@ -32,10 +27,11 @@ export function toolResultCard(
   if (!expanded) return `${header}\n${theme.fg("dim", "ctrl+o to expand")}`;
   // Result text can come from repositories, web pages, or child agents; strip
   // terminal control sequences before it reaches the display.
-  const body = sanitizeTerminalText(result.content
-    ?.filter((item) => item.type === "text" && item.text)
-    .map((item) => item.text ?? "")
-    .join("\n") ?? "")
-    .trim();
+  const body = sanitizeTerminalText(
+    result.content
+      ?.filter((item) => item.type === "text" && item.text)
+      .map((item) => item.text ?? "")
+      .join("\n") ?? "",
+  ).trim();
   return body ? `${header}\n${theme.fg("toolOutput", body)}` : header;
 }

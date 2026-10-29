@@ -15,7 +15,9 @@ interface RegisteredTool {
 test("registers a narrowly gated ask_user tool", () => {
   let tool: RegisteredTool | undefined;
   const api = {
-    registerTool(definition: RegisteredTool) { tool = definition; },
+    registerTool(definition: RegisteredTool) {
+      tool = definition;
+    },
   };
   askUserExtension(api as unknown as ExtensionAPI);
 
@@ -30,18 +32,40 @@ test("registers a narrowly gated ask_user tool", () => {
 
 test("rejects blank and duplicate choices after display normalization", async () => {
   let tool: RegisteredTool | undefined;
-  askUserExtension({ registerTool(definition: RegisteredTool) { tool = definition; } } as unknown as ExtensionAPI);
+  askUserExtension({
+    registerTool(definition: RegisteredTool) {
+      tool = definition;
+    },
+  } as unknown as ExtensionAPI);
   const ctx = { mode: "print" };
   await assert.rejects(
-    tool!.execute("blank", { question: "Choose", options: [{ label: " \u001b[31m " }, { label: "Valid" }] }, undefined, undefined, ctx),
+    tool!.execute(
+      "blank",
+      { question: "Choose", options: [{ label: " \u001b[31m " }, { label: "Valid" }] },
+      undefined,
+      undefined,
+      ctx,
+    ),
     /visible text/,
   );
   await assert.rejects(
-    tool!.execute("duplicate", { question: "Choose", options: [{ label: "Keep" }, { label: "  keep  " }] }, undefined, undefined, ctx),
+    tool!.execute(
+      "duplicate",
+      { question: "Choose", options: [{ label: "Keep" }, { label: "  keep  " }] },
+      undefined,
+      undefined,
+      ctx,
+    ),
     /distinct/,
   );
   await assert.rejects(
-    tool!.execute("spacing", { question: "Choose", options: [{ label: "Use  the  cache" }, { label: "Use the cache" }] }, undefined, undefined, ctx),
+    tool!.execute(
+      "spacing",
+      { question: "Choose", options: [{ label: "Use  the  cache" }, { label: "Use the cache" }] },
+      undefined,
+      undefined,
+      ctx,
+    ),
     /distinct/,
   );
 });
@@ -58,9 +82,20 @@ test("formats selected, custom, and dismissed answers without filler", () => {
   assert.match(answerMessage(null), /dismissed/);
 });
 
-const theme = { fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text, bold: (text: string) => text } as any;
+const theme = {
+  fg: (_color: string, text: string) => text,
+  bg: (_color: string, text: string) => text,
+  bold: (text: string) => text,
+} as any;
 function stubEditor() {
-  return { focused: false, onSubmit: undefined as any, render: () => ["> draft"], handleInput() {}, setText() {}, invalidate() {} } as any;
+  return {
+    focused: false,
+    onSubmit: undefined as any,
+    render: () => ["> draft"],
+    handleInput() {},
+    setText() {},
+    invalidate() {},
+  } as any;
 }
 
 test("long questions scroll while choices and controls stay visible; long labels wrap", () => {
@@ -70,7 +105,15 @@ test("long questions scroll while choices and controls stay visible; long labels
     { label: `Deploy to the production cluster in the primary region with the ${"x".repeat(40)} flag disabled` },
     { label: "Write my own answer…", custom: true },
   ];
-  const view = new AskUserView(question, options, theme, () => {}, () => {}, stubEditor(), () => 20);
+  const view = new AskUserView(
+    question,
+    options,
+    theme,
+    () => {},
+    () => {},
+    stubEditor(),
+    () => 20,
+  );
   const lines = view.render(60);
   assert.ok(lines.length <= 20, `rendered ${lines.length} rows`);
   assert.ok(lines.every((line) => visibleWidth(line) <= 60));
@@ -86,7 +129,16 @@ test("long questions scroll while choices and controls stay visible; long labels
 
 test("ctrl+c dismisses even while writing a custom answer", () => {
   let result: unknown = "pending";
-  const view = new AskUserView("Choose", [{ label: "A" }, { label: "B" }, { label: "Write my own answer…", custom: true }], theme, () => {}, (selection) => { result = selection; }, stubEditor());
+  const view = new AskUserView(
+    "Choose",
+    [{ label: "A" }, { label: "B" }, { label: "Write my own answer…", custom: true }],
+    theme,
+    () => {},
+    (selection) => {
+      result = selection;
+    },
+    stubEditor(),
+  );
   view.handleInput("3");
   view.handleInput("\x03");
   assert.equal(result, null);
@@ -94,13 +146,20 @@ test("ctrl+c dismisses even while writing a custom answer", () => {
 
 test("validation errors render as errors, not as a dismissed question", () => {
   let tool: any;
-  askUserExtension({ registerTool(definition: any) { tool = definition; } } as unknown as ExtensionAPI);
-  const rendered = tool.renderResult(
-    { content: [{ type: "text", text: "option labels must be distinct after normalization." }] },
-    { expanded: false, isPartial: false },
-    theme,
-    { isError: true },
-  ).render(120).join("\n");
+  askUserExtension({
+    registerTool(definition: any) {
+      tool = definition;
+    },
+  } as unknown as ExtensionAPI);
+  const rendered = tool
+    .renderResult(
+      { content: [{ type: "text", text: "option labels must be distinct after normalization." }] },
+      { expanded: false, isPartial: false },
+      theme,
+      { isError: true },
+    )
+    .render(120)
+    .join("\n");
   assert.match(rendered, /not asked/);
   assert.doesNotMatch(rendered, /dismissed/);
 });

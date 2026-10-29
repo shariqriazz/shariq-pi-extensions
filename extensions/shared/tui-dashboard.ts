@@ -1,12 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-export type SemanticState =
-  | "active"
-  | "success"
-  | "warning"
-  | "error"
-  | "muted";
+export type SemanticState = "active" | "success" | "warning" | "error" | "muted";
 
 const STATE_COLORS = {
   active: "accent",
@@ -20,11 +15,7 @@ export function stateDot(theme: Theme, state: SemanticState): string {
   return theme.fg(STATE_COLORS[state], "●");
 }
 
-export function stateLabel(
-  theme: Theme,
-  state: SemanticState,
-  label: string,
-): string {
+export function stateLabel(theme: Theme, state: SemanticState, label: string): string {
   return `${stateDot(theme, state)} ${theme.fg(STATE_COLORS[state], label)}`;
 }
 
@@ -63,12 +54,7 @@ export function rule(theme: Theme, width: number, accent = false): string {
   return theme.fg(accent ? "borderAccent" : "border", "─".repeat(Math.max(0, width)));
 }
 
-export function framedRow(
-  theme: Theme,
-  content: string,
-  width: number,
-  selected = false,
-): string {
+export function framedRow(theme: Theme, content: string, width: number, selected = false): string {
   const innerWidth = Math.max(0, width - 2);
   const body = padLine(content, innerWidth);
   const row = `${theme.fg(selected ? "borderAccent" : "border", "│")}${body}${theme.fg(selected ? "borderAccent" : "border", "│")}`;
@@ -88,11 +74,7 @@ export function frameTop(theme: Theme, width: number, title = ""): string {
 }
 
 export function frameBottom(theme: Theme, width: number): string {
-  return (
-    theme.fg("border", "╰") +
-    theme.fg("border", "─".repeat(Math.max(0, width - 2))) +
-    theme.fg("border", "╯")
-  );
+  return theme.fg("border", "╰") + theme.fg("border", "─".repeat(Math.max(0, width - 2))) + theme.fg("border", "╯");
 }
 
 export function meter(

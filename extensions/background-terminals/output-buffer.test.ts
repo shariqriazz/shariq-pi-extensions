@@ -22,7 +22,9 @@ test("retains a bounded UTF-8 tail and reports omitted cursor bytes", () => {
 
 test("spills every chunk before in-memory eviction", () => {
   let spilled = "";
-  const buffer = new OutputBuffer(5, (chunk) => { spilled += chunk; });
+  const buffer = new OutputBuffer(5, (chunk) => {
+    spilled += chunk;
+  });
   buffer.push("abc");
   buffer.push("def");
   assert.equal(spilled, "abcdef");

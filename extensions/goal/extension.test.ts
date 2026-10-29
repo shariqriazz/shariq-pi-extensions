@@ -24,10 +24,18 @@ function harness(sessionFile: string | null = "/tmp/pi-goal-test.jsonl") {
     theme,
     notifications: [] as any[],
     statuses: new Map<string, string | undefined>(),
-    notify(message: string, level: string) { this.notifications.push({ message, level }); },
-    setStatus(name: string, value: string | undefined) { this.statuses.set(name, value); },
-    async confirm() { return true; },
-    async editor(_title: string, value: string) { return value; },
+    notify(message: string, level: string) {
+      this.notifications.push({ message, level });
+    },
+    setStatus(name: string, value: string | undefined) {
+      this.statuses.set(name, value);
+    },
+    async confirm() {
+      return true;
+    },
+    async editor(_title: string, value: string) {
+      return value;
+    },
     async custom(factory: any) {
       const component = factory(
         { terminal: { rows: 30 }, requestRender() {} },
@@ -52,13 +60,26 @@ function harness(sessionFile: string | null = "/tmp/pi-goal-test.jsonl") {
     hasPendingMessages: () => false,
   };
   const pi = {
-    on(name: string, handler: Handler) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
-    registerTool(definition: any) { tools.set(definition.name, definition); },
-    registerCommand(name: string, definition: any) { commands.set(name, definition); },
-    appendEntry(customType: string, data: unknown) { entries.push({ type: "custom", id: `e${++sequence}`, customType, data }); },
-    sendMessage(message: unknown, options: unknown) { sent.push({ message, options }); },
+    on(name: string, handler: Handler) {
+      handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+    },
+    registerTool(definition: any) {
+      tools.set(definition.name, definition);
+    },
+    registerCommand(name: string, definition: any) {
+      commands.set(name, definition);
+    },
+    appendEntry(customType: string, data: unknown) {
+      entries.push({ type: "custom", id: `e${++sequence}`, customType, data });
+    },
+    sendMessage(message: unknown, options: unknown) {
+      sent.push({ message, options });
+    },
     getActiveTools: () => [...active],
-    setActiveTools(names: string[]) { active.clear(); for (const name of names) active.add(name); },
+    setActiveTools(names: string[]) {
+      active.clear();
+      for (const name of names) active.add(name);
+    },
   };
   goalExtension(pi as never);
 
@@ -70,10 +91,28 @@ function harness(sessionFile: string | null = "/tmp/pi-goal-test.jsonl") {
     entries.push({
       type: "message",
       id: `e${++sequence}`,
-      message: { role: "assistant", provider: "test", model: "test", content: [], usage: { ...usage, cacheRead: 0, cacheWrite: 0, reasoning: 0, totalTokens: usage.input + usage.output, cost: {} }, stopReason, errorMessage, timestamp: Date.now() },
+      message: {
+        role: "assistant",
+        provider: "test",
+        model: "test",
+        content: [],
+        usage: {
+          ...usage,
+          cacheRead: 0,
+          cacheWrite: 0,
+          reasoning: 0,
+          totalTokens: usage.input + usage.output,
+          cost: {},
+        },
+        stopReason,
+        errorMessage,
+        timestamp: Date.now(),
+      },
     });
   }
-  async function shutdown() { await emit("session_shutdown"); }
+  async function shutdown() {
+    await emit("session_shutdown");
+  }
 
   return { handlers, tools, commands, entries, sent, active, ctx, ui, customRenders, emit, addAssistant, shutdown };
 }
@@ -94,7 +133,9 @@ test("accounts only assistant usage after goal creation and includes final compl
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
   h.addAssistant({ input: 900, output: 100 });
-  await h.tools.get("create_goal").execute("c1", { objective: "Ship the feature", token_budget: 10_000 }, undefined, undefined, h.ctx);
+  await h.tools
+    .get("create_goal")
+    .execute("c1", { objective: "Ship the feature", token_budget: 10_000 }, undefined, undefined, h.ctx);
   h.addAssistant({ input: 100, output: 20 });
   await h.emit("turn_end");
   h.addAssistant({ input: 50, output: 10 });
@@ -108,7 +149,9 @@ test("accounts only assistant usage after goal creation and includes final compl
 test("enforces the budget between model/tool turns", async () => {
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
-  await h.tools.get("create_goal").execute("c1", { objective: "Budgeted work", token_budget: 100 }, undefined, undefined, h.ctx);
+  await h.tools
+    .get("create_goal")
+    .execute("c1", { objective: "Budgeted work", token_budget: 100 }, undefined, undefined, h.ctx);
   h.addAssistant({ input: 90, output: 20 });
   await h.emit("turn_end");
   const current = await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx);
@@ -121,14 +164,18 @@ test("enforces the budget between model/tool turns", async () => {
 test("supports blocked goals, usage-limit stops, and replacing completed goals", async () => {
   const blocked = harness();
   await blocked.emit("session_start", { reason: "startup" });
-  await blocked.tools.get("create_goal").execute("c1", { objective: "Blocked work" }, undefined, undefined, blocked.ctx);
-  await blocked.tools.get("update_goal_progress").execute(
-    "p1",
-    { items: [{ id: "dependency", title: "Obtain required external input", status: "blocked" }] },
-    undefined,
-    undefined,
-    blocked.ctx,
-  );
+  await blocked.tools
+    .get("create_goal")
+    .execute("c1", { objective: "Blocked work" }, undefined, undefined, blocked.ctx);
+  await blocked.tools
+    .get("update_goal_progress")
+    .execute(
+      "p1",
+      { items: [{ id: "dependency", title: "Obtain required external input", status: "blocked" }] },
+      undefined,
+      undefined,
+      blocked.ctx,
+    );
   await assert.rejects(
     blocked.tools.get("update_goal").execute("u0", { status: "blocked" }, undefined, undefined, blocked.ctx),
     /0\/3 goal turns/,
@@ -139,25 +186,37 @@ test("supports blocked goals, usage-limit stops, and replacing completed goals",
     await blocked.emit("agent_end", { messages: [] });
   }
   await blocked.emit("agent_start");
-  const blockedResult = await blocked.tools.get("update_goal").execute("u1", { status: "blocked" }, undefined, undefined, blocked.ctx);
+  const blockedResult = await blocked.tools
+    .get("update_goal")
+    .execute("u1", { status: "blocked" }, undefined, undefined, blocked.ctx);
   assert.equal(blockedResult.details.goal.status, "blocked");
   await blocked.commands.get("goal").handler("resume", blocked.ctx);
-  assert.equal((await blocked.tools.get("get_goal").execute("g1", {}, undefined, undefined, blocked.ctx)).details.goal.status, "active");
+  assert.equal(
+    (await blocked.tools.get("get_goal").execute("g1", {}, undefined, undefined, blocked.ctx)).details.goal.status,
+    "active",
+  );
   await blocked.shutdown();
 
   const limited = harness();
   await limited.emit("session_start", { reason: "startup" });
-  await limited.tools.get("create_goal").execute("c1", { objective: "Rate-limited work" }, undefined, undefined, limited.ctx);
+  await limited.tools
+    .get("create_goal")
+    .execute("c1", { objective: "Rate-limited work" }, undefined, undefined, limited.ctx);
   limited.addAssistant({ input: 10, output: 1 }, "error", "429 usage limit exceeded");
   await limited.emit("agent_before_settle", { outcome: "error" });
-  assert.equal((await limited.tools.get("get_goal").execute("g1", {}, undefined, undefined, limited.ctx)).details.goal.status, "usage_limited");
+  assert.equal(
+    (await limited.tools.get("get_goal").execute("g1", {}, undefined, undefined, limited.ctx)).details.goal.status,
+    "usage_limited",
+  );
   await limited.shutdown();
 
   const completed = harness();
   await completed.emit("session_start", { reason: "startup" });
   await completed.tools.get("create_goal").execute("c1", { objective: "First" }, undefined, undefined, completed.ctx);
   await completed.tools.get("update_goal").execute("u1", { status: "complete" }, undefined, undefined, completed.ctx);
-  const replacement = await completed.tools.get("create_goal").execute("c2", { objective: "Second" }, undefined, undefined, completed.ctx);
+  const replacement = await completed.tools
+    .get("create_goal")
+    .execute("c2", { objective: "Second" }, undefined, undefined, completed.ctx);
   assert.equal(replacement.details.goal.objective, "Second");
   assert.equal(replacement.details.goal.status, "active");
   await completed.shutdown();
@@ -167,25 +226,29 @@ test("changing a blocked item's meaning resets the persistence gate", async () =
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
   await h.tools.get("create_goal").execute("c1", { objective: "Track one real blocker" }, undefined, undefined, h.ctx);
-  await h.tools.get("update_goal_progress").execute(
-    "p1",
-    { items: [{ id: "dependency", title: "Wait for account access", status: "blocked" }] },
-    undefined,
-    undefined,
-    h.ctx,
-  );
+  await h.tools
+    .get("update_goal_progress")
+    .execute(
+      "p1",
+      { items: [{ id: "dependency", title: "Wait for account access", status: "blocked" }] },
+      undefined,
+      undefined,
+      h.ctx,
+    );
   for (let turn = 0; turn < 2; turn++) {
     await h.emit("agent_start");
     await h.emit("tool_execution_start", { toolName: "read" });
     await h.emit("agent_end", { messages: [] });
   }
-  await h.tools.get("update_goal_progress").execute(
-    "p2",
-    { items: [{ id: "dependency", title: "Wait for vendor deployment", status: "blocked" }] },
-    undefined,
-    undefined,
-    h.ctx,
-  );
+  await h.tools
+    .get("update_goal_progress")
+    .execute(
+      "p2",
+      { items: [{ id: "dependency", title: "Wait for vendor deployment", status: "blocked" }] },
+      undefined,
+      undefined,
+      h.ctx,
+    );
   await h.emit("agent_start");
   await h.emit("tool_execution_start", { toolName: "read" });
   await h.emit("agent_end", { messages: [] });
@@ -200,7 +263,9 @@ test("swapping in a new blocker cannot inherit the old blocker's count", async (
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
   await h.tools.get("create_goal").execute("c1", { objective: "Track one real blocker" }, undefined, undefined, h.ctx);
-  await h.tools.get("update_goal_progress").execute("p1", { items: [{ id: "a", title: "Blocker A", status: "blocked" }] }, undefined, undefined, h.ctx);
+  await h.tools
+    .get("update_goal_progress")
+    .execute("p1", { items: [{ id: "a", title: "Blocker A", status: "blocked" }] }, undefined, undefined, h.ctx);
   for (let turn = 0; turn < 3; turn++) {
     await h.emit("agent_start");
     await h.emit("tool_execution_start", { toolName: "read" });
@@ -209,7 +274,12 @@ test("swapping in a new blocker cannot inherit the old blocker's count", async (
   await h.emit("agent_start");
   await h.tools.get("update_goal_progress").execute(
     "p2",
-    { items: [{ id: "a", title: "Blocker A", status: "complete", evidence: "resolved" }, { id: "b", title: "Blocker B", status: "blocked" }] },
+    {
+      items: [
+        { id: "a", title: "Blocker A", status: "complete", evidence: "resolved" },
+        { id: "b", title: "Blocker B", status: "blocked" },
+      ],
+    },
     undefined,
     undefined,
     h.ctx,
@@ -234,7 +304,10 @@ test("tree navigation restores the destination branch's goal", async () => {
   await h.emit("session_tree", { newLeafId: branchOne.at(-1)?.id, oldLeafId: null });
   assert.equal(h.entries.length, branchOne.length, "navigation must not write onto the new leaf");
   assert.ok(entriesBeforeNavigation > branchOne.length);
-  assert.equal((await h.tools.get("get_goal").execute("g2", {}, undefined, undefined, h.ctx)).details.goal.objective, "Branch one goal");
+  assert.equal(
+    (await h.tools.get("get_goal").execute("g2", {}, undefined, undefined, h.ctx)).details.goal.objective,
+    "Branch one goal",
+  );
   await h.shutdown();
 });
 
@@ -257,34 +330,40 @@ test("checklist completion requires evidence and blocks premature goal completio
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
   await h.tools.get("create_goal").execute("c1", { objective: "Verified work" }, undefined, undefined, h.ctx);
-  await h.tools.get("update_goal_progress").execute(
-    "p1",
-    { items: [{ id: "tests", title: "Run the relevant tests", status: "pending" }] },
-    undefined,
-    undefined,
-    h.ctx,
-  );
+  await h.tools
+    .get("update_goal_progress")
+    .execute(
+      "p1",
+      { items: [{ id: "tests", title: "Run the relevant tests", status: "pending" }] },
+      undefined,
+      undefined,
+      h.ctx,
+    );
   await assert.rejects(
     h.tools.get("update_goal").execute("u1", { status: "complete" }, undefined, undefined, h.ctx),
     /checklist items remain unfinished/,
   );
   await assert.rejects(
-    h.tools.get("update_goal_progress").execute(
-      "p2",
-      { items: [{ id: "tests", title: "Run the relevant tests", status: "complete" }] },
+    h.tools
+      .get("update_goal_progress")
+      .execute(
+        "p2",
+        { items: [{ id: "tests", title: "Run the relevant tests", status: "complete" }] },
+        undefined,
+        undefined,
+        h.ctx,
+      ),
+    /needs concrete evidence/,
+  );
+  await h.tools
+    .get("update_goal_progress")
+    .execute(
+      "p3",
+      { items: [{ id: "tests", title: "Run the relevant tests", status: "complete", evidence: "npm test passed" }] },
       undefined,
       undefined,
       h.ctx,
-    ),
-    /needs concrete evidence/,
-  );
-  await h.tools.get("update_goal_progress").execute(
-    "p3",
-    { items: [{ id: "tests", title: "Run the relevant tests", status: "complete", evidence: "npm test passed" }] },
-    undefined,
-    undefined,
-    h.ctx,
-  );
+    );
   const completed = await h.tools.get("update_goal").execute("u2", { status: "complete" }, undefined, undefined, h.ctx);
   assert.equal(completed.details.goal.status, "complete");
   assert.equal(completed.details.goal.progress[0].evidence, "npm test passed");
@@ -296,13 +375,15 @@ test("goal status renders the objective and checklist in the TUI panel", async (
   (h.ctx as any).mode = "tui";
   await h.emit("session_start", { reason: "startup" });
   await h.tools.get("create_goal").execute("c1", { objective: "Render visible progress" }, undefined, undefined, h.ctx);
-  await h.tools.get("update_goal_progress").execute(
-    "p1",
-    { items: [{ id: "panel", title: "Render the progress panel", status: "in_progress" }] },
-    undefined,
-    undefined,
-    h.ctx,
-  );
+  await h.tools
+    .get("update_goal_progress")
+    .execute(
+      "p1",
+      { items: [{ id: "panel", title: "Render the progress panel", status: "in_progress" }] },
+      undefined,
+      undefined,
+      h.ctx,
+    );
   await h.commands.get("goal").handler("status", h.ctx);
   const rendered = h.customRenders.at(-1)?.join("\n") ?? "";
   assert.match(rendered, /Goal control center/);
@@ -315,7 +396,9 @@ test("goal status renders the objective and checklist in the TUI panel", async (
 test("a narration-only run suppresses automatic continuation until resumed", async () => {
   const h = harness();
   await h.emit("session_start", { reason: "startup" });
-  await h.tools.get("create_goal").execute("c1", { objective: "Keep making real progress" }, undefined, undefined, h.ctx);
+  await h.tools
+    .get("create_goal")
+    .execute("c1", { objective: "Keep making real progress" }, undefined, undefined, h.ctx);
   const sentBefore = h.sent.length;
   await h.emit("agent_start");
   await h.emit("agent_end", { messages: [] });
@@ -325,7 +408,10 @@ test("a narration-only run suppresses automatic continuation until resumed", asy
   assert.equal(current.details.goal.continuationSuppressed.reason, "no_tool_progress");
   assert.equal(h.sent.length, sentBefore);
   await h.commands.get("goal").handler("resume", h.ctx);
-  assert.equal((await h.tools.get("get_goal").execute("g2", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed, null);
+  assert.equal(
+    (await h.tools.get("get_goal").execute("g2", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed,
+    null,
+  );
   assert.equal(h.sent.length, sentBefore + 1);
   await h.shutdown();
 });
@@ -340,7 +426,11 @@ test("status-only tool calls do not count as progress", async () => {
   await h.emit("agent_end", { messages: [] });
   await new Promise((resolve) => setTimeout(resolve, 150));
   assert.equal(h.sent.length, sentBefore);
-  assert.equal((await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed.reason, "no_tool_progress");
+  assert.equal(
+    (await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed
+      .reason,
+    "no_tool_progress",
+  );
   await h.shutdown();
 });
 
@@ -356,12 +446,18 @@ test("tool-backed work continues automatically at the next safe idle boundary", 
   await h.emit("agent_settled");
   await new Promise((resolve) => setTimeout(resolve, 150));
   assert.equal(h.sent.length, sentBefore + 1);
-  assert.equal((await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed, null);
+  assert.equal(
+    (await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx)).details.goal.continuationSuppressed,
+    null,
+  );
   await h.shutdown();
 });
 
 test("interruptions and ordinary run errors pause instead of bypassing the blocked gate", async () => {
-  for (const [message, reason] of [["Request aborted by user", "interrupted"], ["provider connection failed", "error"]] as const) {
+  for (const [message, reason] of [
+    ["Request aborted by user", "interrupted"],
+    ["provider connection failed", "error"],
+  ] as const) {
     const h = harness();
     await h.emit("session_start", { reason: "startup" });
     await h.tools.get("create_goal").execute("c1", { objective: "Recover safely" }, undefined, undefined, h.ctx);
@@ -391,7 +487,19 @@ test("recovers assistant usage written after the latest persisted snapshot", asy
     type: "custom",
     id: "snapshot",
     customType: "goal-state",
-    data: { goal: { id: "goal-1", objective: "Recover accounting", status: "active", tokenBudget: 1_000, tokensUsed: 0, timeUsedSeconds: 0, createdAt: 1, updatedAt: 1, activeStartedAt: null } },
+    data: {
+      goal: {
+        id: "goal-1",
+        objective: "Recover accounting",
+        status: "active",
+        tokenBudget: 1_000,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+        createdAt: 1,
+        updatedAt: 1,
+        activeStartedAt: null,
+      },
+    },
   });
   h.addAssistant({ input: 40, output: 2 });
   await h.emit("session_start", { reason: "resume" });
@@ -407,8 +515,14 @@ test("accepts objectives through 20,000 Unicode characters", async () => {
   await h.tools.get("create_goal").execute("c1", { objective: "🧠".repeat(20_000) }, undefined, undefined, h.ctx);
   const current = await h.tools.get("get_goal").execute("g1", {}, undefined, undefined, h.ctx);
   assert.equal(Array.from(current.details.goal.objective).length, 20_000);
-  await assert.rejects(h.tools.get("create_goal").execute("c2", { objective: "replacement" }, undefined, undefined, h.ctx), /unfinished goal/);
+  await assert.rejects(
+    h.tools.get("create_goal").execute("c2", { objective: "replacement" }, undefined, undefined, h.ctx),
+    /unfinished goal/,
+  );
   await h.commands.get("goal").handler("clear", h.ctx);
-  await assert.rejects(h.tools.get("create_goal").execute("c3", { objective: "x".repeat(20_001) }, undefined, undefined, h.ctx), /too long/);
+  await assert.rejects(
+    h.tools.get("create_goal").execute("c3", { objective: "x".repeat(20_001) }, undefined, undefined, h.ctx),
+    /too long/,
+  );
   await h.shutdown();
 });

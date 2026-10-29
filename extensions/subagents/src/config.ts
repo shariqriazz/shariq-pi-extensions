@@ -74,12 +74,14 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
   explore: {
     description: "Read, search, and execute diagnostics without editing files",
     capability: "execute",
-    instructions: "Investigate only as far as needed to answer the task. Do not modify files. Report concrete evidence and paths, and distinguish verified facts from inference.",
+    instructions:
+      "Investigate only as far as needed to answer the task. Do not modify files. Report concrete evidence and paths, and distinguish verified facts from inference.",
   },
   plan: {
     description: "Read-only planning agent that produces an implementation plan",
     capability: "execute",
-    instructions: "Inspect the relevant code without modifying files. Return an ordered implementation plan tied to current paths, dependencies, material risks, and validation steps."
+    instructions:
+      "Inspect the relevant code without modifying files. Return an ordered implementation plan tied to current paths, dependencies, material risks, and validation steps.",
   },
 };
 
@@ -105,9 +107,7 @@ function readJson(file: string): Record<string, unknown> | undefined {
 }
 
 function boundedInt(value: unknown, fallback: number, min: number, max: number) {
-  return typeof value === "number" && Number.isInteger(value)
-    ? Math.max(min, Math.min(max, value))
-    : fallback;
+  return typeof value === "number" && Number.isInteger(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
 function enumValue<T extends readonly string[]>(value: unknown, values: T): T[number] | undefined {
@@ -242,12 +242,15 @@ function validateProfileDocument(name: string, value: unknown, persona: boolean)
   }
   if (
     value.tools !== undefined &&
-    (!Array.isArray(value.tools) || value.tools.length === 0 || !value.tools.every((tool) => typeof tool === "string" && tool.trim()))
+    (!Array.isArray(value.tools) ||
+      value.tools.length === 0 ||
+      !value.tools.every((tool) => typeof tool === "string" && tool.trim()))
   ) {
     throw new Error(`${name}.tools must be a non-empty array of tool names.`);
   }
   for (const key of ["skills", "contextFiles", "extensions"]) {
-    if (value[key] !== undefined && typeof value[key] !== "boolean") throw new Error(`${name}.${key} must be true or false.`);
+    if (value[key] !== undefined && typeof value[key] !== "boolean")
+      throw new Error(`${name}.${key} must be true or false.`);
   }
 }
 
@@ -305,7 +308,11 @@ export function saveConfigDocument(scope: ConfigScope, cwd: string, text: string
  * `resumable` also defines Fusion profiles that no file defines, so a child
  * started under Fusion mode can be continued after the mode is turned off.
  */
-export function loadSubagentConfig(cwd: string, projectTrusted: boolean, options: { resumable?: boolean } = {}): SubagentConfig {
+export function loadSubagentConfig(
+  cwd: string,
+  projectTrusted: boolean,
+  options: { resumable?: boolean } = {},
+): SubagentConfig {
   const global = readJson(subagentConfigPath("global", cwd));
   const project = projectTrusted ? readJson(subagentConfigPath("project", cwd)) : undefined;
   // Fusion profiles sit under user documents so either file can tune them.
@@ -345,7 +352,9 @@ export function resolveProfile(
   const personaName = options.persona?.trim();
   const persona = personaName ? config.personas[personaName] : undefined;
   if (personaName && !persona) {
-    throw new Error(`Unknown persona "${personaName}". Available: ${Object.keys(config.personas).join(", ") || "none"}.`);
+    throw new Error(
+      `Unknown persona "${personaName}". Available: ${Object.keys(config.personas).join(", ") || "none"}.`,
+    );
   }
   const instructions = [profile.instructions, persona?.instructions].filter(Boolean).join("\n\n");
   const tier = profile.tier ? config.tiers[profile.tier] : undefined;

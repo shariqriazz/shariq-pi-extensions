@@ -117,7 +117,11 @@ function lineSafeTail(text: string, limit: number): string {
   return text.slice(boundary >= 0 && boundary < text.length - 1 ? boundary + 1 : start);
 }
 
-export function truncateHeadAndTail(text: string, headChars = TOOL_RESULT_HEAD_CHARS, tailChars = TOOL_RESULT_TAIL_CHARS): string {
+export function truncateHeadAndTail(
+  text: string,
+  headChars = TOOL_RESULT_HEAD_CHARS,
+  tailChars = TOOL_RESULT_TAIL_CHARS,
+): string {
   const maxTotal = headChars + tailChars;
   if (text.length <= maxTotal) return text;
 
@@ -128,9 +132,7 @@ export function truncateHeadAndTail(text: string, headChars = TOOL_RESULT_HEAD_C
 }
 
 export function cleanTerminalOutput(text: string): string {
-  const withoutAnsi = text
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+  const withoutAnsi = text.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
   const lines: string[] = [];
   let repeated = 0;
   for (const rawLine of withoutAnsi.split("\n")) {
@@ -217,7 +219,8 @@ function cleanExtractedUrl(rawUrl: string): string {
 
 // Everything from the first appended state block on is regenerated on every
 // compaction, so it is never fed back to the model as part of a previous checkpoint.
-const APPENDED_STATE = /\n\n<(?:read-files|touched-files|uncommitted-dirty-files|modified-lockfiles-and-assets|active-background-processes|running-subagents|uncommitted-diff|uncommitted-state-unavailable)\b/i;
+const APPENDED_STATE =
+  /\n\n<(?:read-files|touched-files|uncommitted-dirty-files|modified-lockfiles-and-assets|active-background-processes|running-subagents|uncommitted-diff|uncommitted-state-unavailable)\b/i;
 
 /** A previous checkpoint without the state blocks appended after its model-written sections. */
 export function semanticSummary(summary: string): string {
@@ -252,8 +255,7 @@ export function extractProtectedFacts(messages: AgentMessage[], previousSummary?
   return [...facts];
 }
 
-export const CHECKPOINT_RESUMPTION_PREAMBLE =
-  `> **Context Checkpoint**: This is an automatically generated checkpoint condensing earlier conversation turns to free up context. Treat this captured context as established ground truth and continue the task directly without acknowledging or discussing this summary. Historical items under "Done" are closed records and must not be re-executed.\n\n`;
+export const CHECKPOINT_RESUMPTION_PREAMBLE = `> **Context Checkpoint**: This is an automatically generated checkpoint condensing earlier conversation turns to free up context. Treat this captured context as established ground truth and continue the task directly without acknowledging or discussing this summary. Historical items under "Done" are closed records and must not be re-executed.\n\n`;
 
 /** One labelled transcript entry and the summarized message it came from. */
 export interface TranscriptPart {
@@ -266,7 +268,9 @@ export const TRANSCRIPT_SEPARATOR = "\n\n---\n\n";
 
 /** The serialized transcript of `messages`, with exact repeats collapsed. */
 export function serializeConversationForCompaction(messages: AgentMessage[]): string {
-  return serializeConversationParts(messages).parts.map((part) => part.text).join(TRANSCRIPT_SEPARATOR);
+  return serializeConversationParts(messages)
+    .parts.map((part) => part.text)
+    .join(TRANSCRIPT_SEPARATOR);
 }
 
 function minuteUtc(timestamp: unknown): string | undefined {
@@ -325,7 +329,7 @@ function rawConversationParts(messages: AgentMessage[]): Array<TranscriptPart & 
 
   for (let i = 0; i < totalMessages; i++) {
     const msg = messages[i];
-    const isRecent = (totalMessages - i) <= 14;
+    const isRecent = totalMessages - i <= 14;
     const parts = {
       push: (text: string) => raw.push({ index: i, text, timestamp: (msg as any).timestamp }),
     };
@@ -360,7 +364,9 @@ function rawConversationParts(messages: AgentMessage[]): Array<TranscriptPart & 
 
       if (thinkingBlocks.length > 0) {
         const combinedThinking = thinkingBlocks.join("\n");
-        parts.push(`[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, isRecent ? 2000 : 1000, isRecent ? 2000 : 1000))}`);
+        parts.push(
+          `[Assistant Thinking]:\n${sanitizeTagContent(truncateHeadAndTail(combinedThinking, isRecent ? 2000 : 1000, isRecent ? 2000 : 1000))}`,
+        );
       }
       if (textBlocks.length > 0) {
         parts.push(`[Assistant]:\n${sanitizeTagContent(textBlocks.join("\n"))}`);
@@ -375,7 +381,9 @@ function rawConversationParts(messages: AgentMessage[]): Array<TranscriptPart & 
         const isError = (msg as any).isError === true;
         const [head, tail] = toolResultBudget(toolName, isError, isRecent);
         const cleaned = toolName === "bash" || toolName === "powershell" ? cleanTerminalOutput(text) : text;
-        parts.push(`[Tool Result: ${toolName}; ${isError ? "error" : "success"}]:\n${sanitizeTagContent(truncateHeadAndTail(cleaned, head, tail))}`);
+        parts.push(
+          `[Tool Result: ${toolName}; ${isError ? "error" : "success"}]:\n${sanitizeTagContent(truncateHeadAndTail(cleaned, head, tail))}`,
+        );
       }
     } else if (msg.role === "custom") {
       const text = extractTextContent((msg as any).content);
@@ -385,7 +393,9 @@ function rawConversationParts(messages: AgentMessage[]): Array<TranscriptPart & 
       const out = cleanTerminalOutput((msg as any).output ?? "");
       const exitCode = (msg as any).exitCode;
       const status = typeof exitCode === "number" ? `exit ${exitCode}` : "exit unknown";
-      parts.push(`[Command Executed: ${status}]:\n$ ${sanitizeTagContent(cmd)}\n${sanitizeTagContent(truncateHeadAndTail(out, isRecent ? 1200 : 600, isRecent ? 1200 : 600))}`);
+      parts.push(
+        `[Command Executed: ${status}]:\n$ ${sanitizeTagContent(cmd)}\n${sanitizeTagContent(truncateHeadAndTail(out, isRecent ? 1200 : 600, isRecent ? 1200 : 600))}`,
+      );
     } else if (msg.role === "compactionSummary" || msg.role === "branchSummary") {
       const summary = (msg as any).summary ?? "";
       if (summary) parts.push(`[Prior Summary]:\n${sanitizeTagContent(summary)}`);
@@ -433,14 +443,20 @@ export function formatFileOperationsXml(options?: {
     sections.push(`<uncommitted-dirty-files>\n${dirty.map(escapeXml).join("\n")}\n</uncommitted-dirty-files>`);
   }
   if (lockfiles.length > 0) {
-    sections.push(`<modified-lockfiles-and-assets>\n${lockfiles.map(escapeXml).join("\n")}\n</modified-lockfiles-and-assets>`);
+    sections.push(
+      `<modified-lockfiles-and-assets>\n${lockfiles.map(escapeXml).join("\n")}\n</modified-lockfiles-and-assets>`,
+    );
   }
   if (background.length > 0) {
-    sections.push(`<active-background-processes>\n${background.map(escapeXml).join("\n")}\n</active-background-processes>`);
+    sections.push(
+      `<active-background-processes>\n${background.map(escapeXml).join("\n")}\n</active-background-processes>`,
+    );
   }
   const subagents = [...(options.runningSubagents ?? [])];
   if (subagents.length > 0) {
-    sections.push(`<running-subagents>\n${[RUNNING_SUBAGENTS_NOTE, ...subagents].map(escapeXml).join("\n")}\n</running-subagents>`);
+    sections.push(
+      `<running-subagents>\n${[RUNNING_SUBAGENTS_NOTE, ...subagents].map(escapeXml).join("\n")}\n</running-subagents>`,
+    );
   }
   if (options.dirtyPatch) {
     sections.push(`<uncommitted-diff>\n${escapeXml(options.dirtyPatch)}\n</uncommitted-diff>`);

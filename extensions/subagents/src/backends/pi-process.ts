@@ -80,13 +80,12 @@ function prepareSessionFile(task: SpawnTask): string | undefined {
 
 type RpcRecord = { type?: string; id?: string; [key: string]: any };
 
-export const makeProcessSession = (
-  task: SpawnTask,
-): Effect.Effect<SubagentSession, SpawnError, Scope.Scope> =>
+export const makeProcessSession = (task: SpawnTask): Effect.Effect<SubagentSession, SpawnError, Scope.Scope> =>
   Effect.gen(function* () {
     const registry = task.parent.modelRegistry;
     const model = yield* Effect.try({
-      try: () => (registry ? resolvePiModel(registry, task.model, task.parent.inheritedModel) : task.parent.inheritedModel),
+      try: () =>
+        registry ? resolvePiModel(registry, task.model, task.parent.inheritedModel) : task.parent.inheritedModel,
       catch: (error) => new SpawnError({ message: boundedError(error) }),
     });
     const sessionFile = yield* Effect.try({
@@ -131,22 +130,26 @@ export const makeProcessSession = (
       for (const entry of pending.values()) entry.reject(error);
       pending.clear();
     };
-    const exitError = () => new Error(`The subagent process exited.${state.stderr.trim() ? ` ${state.stderr.trim().slice(-STDERR_TAIL_CHARS)}` : ""}`);
+    const exitError = () =>
+      new Error(
+        `The subagent process exited.${state.stderr.trim() ? ` ${state.stderr.trim().slice(-STDERR_TAIL_CHARS)}` : ""}`,
+      );
 
     const write = (record: RpcRecord) => {
       if (state.exited || !child.stdin?.writable) throw exitError();
       child.stdin.write(`${JSON.stringify(record)}\n`);
     };
-    const request = (record: RpcRecord) => new Promise<unknown>((resolve, reject) => {
-      const id = `req-${++state.nextId}`;
-      pending.set(id, { resolve, reject });
-      try {
-        write({ ...record, id });
-      } catch (error) {
-        pending.delete(id);
-        reject(error as Error);
-      }
-    });
+    const request = (record: RpcRecord) =>
+      new Promise<unknown>((resolve, reject) => {
+        const id = `req-${++state.nextId}`;
+        pending.set(id, { resolve, reject });
+        try {
+          write({ ...record, id });
+        } catch (error) {
+          pending.delete(id);
+          reject(error as Error);
+        }
+      });
 
     const settle = () => {
       if (state.settled) return;
@@ -155,7 +158,9 @@ export const makeProcessSession = (
     };
 
     const currentMeta = (): SubagentMeta => {
-      const last = [...state.messages].reverse().find((message) => (message as { role?: string })?.role === "assistant") as AssistantMessage | undefined;
+      const last = [...state.messages]
+        .reverse()
+        .find((message) => (message as { role?: string })?.role === "assistant") as AssistantMessage | undefined;
       const label = last ? `${last.provider}/${last.model}` : model ? `${model.provider}/${model.id}` : undefined;
       return {
         backend: "pi",
@@ -183,9 +188,10 @@ export const makeProcessSession = (
           // The child exited; nothing is waiting for the answer.
         }
       };
-      const marked = (text: unknown) => typeof text === "string" && text.startsWith(BRIDGE_MARK)
-        ? JSON.parse(text.slice(BRIDGE_MARK.length)) as BridgeRequest
-        : undefined;
+      const marked = (text: unknown) =>
+        typeof text === "string" && text.startsWith(BRIDGE_MARK)
+          ? (JSON.parse(text.slice(BRIDGE_MARK.length)) as BridgeRequest)
+          : undefined;
       if (record.method === "notify") {
         const body = marked(record.message);
         if (body?.kind === "notify") task.parent.bridge?.notify(body.message);
@@ -305,10 +311,16 @@ export const makeProcessSession = (
 
     // Wait until the child answers before handing the session to the manager.
     const ready = yield* Effect.tryPromise({
-      try: () => Promise.race([
-        request({ type: "get_state" }),
-        new Promise((_resolve, reject) => setTimeout(() => reject(new Error("The subagent process did not start in time.")), STARTUP_TIMEOUT_MS).unref?.()),
-      ]) as Promise<{ sessionFile?: string; sessionId?: string }>,
+      try: () =>
+        Promise.race([
+          request({ type: "get_state" }),
+          new Promise((_resolve, reject) =>
+            setTimeout(
+              () => reject(new Error("The subagent process did not start in time.")),
+              STARTUP_TIMEOUT_MS,
+            ).unref?.(),
+          ),
+        ]) as Promise<{ sessionFile?: string; sessionId?: string }>,
       catch: (error) => new SpawnError({ message: boundedError(error) }),
     });
     state.sessionFile = ready.sessionFile ?? state.sessionFile;

@@ -1,7 +1,4 @@
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface GenerationMetrics {
   requestStartedAt?: number;
@@ -24,9 +21,7 @@ function duration(seconds: number) {
 }
 
 function tokenCount(tokens: number, estimated = false) {
-  const value = tokens < 1_000
-    ? `${Math.max(0, Math.round(tokens))}`
-    : `${(tokens / 1_000).toFixed(1)}k`;
+  const value = tokens < 1_000 ? `${Math.max(0, Math.round(tokens))}` : `${(tokens / 1_000).toFixed(1)}k`;
   return `${estimated ? "~" : ""}${value}`;
 }
 
@@ -34,9 +29,10 @@ function values(metrics: GenerationMetrics, now = Date.now()) {
   const elapsed = metrics.requestStartedAt
     ? Math.max(0, (Math.min(metrics.completedAt ?? now, now) - metrics.requestStartedAt) / 1_000)
     : undefined;
-  const ttft = metrics.requestStartedAt && metrics.firstTokenAt
-    ? Math.max(0, (metrics.firstTokenAt - metrics.requestStartedAt) / 1_000)
-    : undefined;
+  const ttft =
+    metrics.requestStartedAt && metrics.firstTokenAt
+      ? Math.max(0, (metrics.firstTokenAt - metrics.requestStartedAt) / 1_000)
+      : undefined;
   const estimatedTokens = metrics.streamedChars / 4;
   const outputTokens = metrics.exactOutputTokens ?? estimatedTokens;
   // TPS is reported output tokens per second after the first streamed delta.
@@ -45,9 +41,7 @@ function values(metrics: GenerationMetrics, now = Date.now()) {
   const generationSeconds = metrics.firstTokenAt
     ? Math.max(0, ((metrics.completedAt ?? now) - metrics.firstTokenAt) / 1_000)
     : undefined;
-  const tps = generationSeconds && generationSeconds > 0.05
-    ? outputTokens / generationSeconds
-    : undefined;
+  const tps = generationSeconds && generationSeconds > 0.05 ? outputTokens / generationSeconds : undefined;
   return {
     elapsed,
     ttft,
@@ -63,20 +57,17 @@ function toolLabel(running: Map<string, string>) {
   return running.size > 1 ? `tool ${first} +${running.size - 1}` : `tool ${first}`;
 }
 
-export function formatPerformanceStatus(
-  metrics: GenerationMetrics,
-  ctx: ExtensionContext,
-  now = Date.now(),
-) {
+export function formatPerformanceStatus(metrics: GenerationMetrics, ctx: ExtensionContext, now = Date.now()) {
   const theme = ctx.ui.theme;
   const measured = values(metrics, now);
-  const label = metrics.phase === "waiting"
-    ? "waiting"
-    : metrics.phase === "generating"
-      ? "generating"
-      : metrics.phase === "tool"
-        ? toolLabel(metrics.runningTools)
-        : "last response";
+  const label =
+    metrics.phase === "waiting"
+      ? "waiting"
+      : metrics.phase === "generating"
+        ? "generating"
+        : metrics.phase === "tool"
+          ? toolLabel(metrics.runningTools)
+          : "last response";
   const parts = [
     `${theme.fg("accent", "◆")} ${theme.fg(metrics.phase === "done" ? "muted" : "accent", label)}`,
     measured.tps === undefined

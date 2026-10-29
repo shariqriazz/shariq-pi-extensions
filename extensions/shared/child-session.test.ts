@@ -51,10 +51,7 @@ test("child denylist keeps extension and workflow structured tools available", a
           pi.on("session_shutdown", () => {
             shutdowns++;
           });
-          for (const name of [
-            "fixture_extension_tool",
-            ...CHILD_EXCLUDED_TOOL_NAMES,
-          ]) {
+          for (const name of ["fixture_extension_tool", ...CHILD_EXCLUDED_TOOL_NAMES]) {
             pi.registerTool({
               name,
               label: name,
@@ -121,24 +118,13 @@ test("child denylist keeps extension and workflow structured tools available", a
     assert.equal(activeTools.has("structured_output"), true);
     for (const denied of CHILD_EXCLUDED_TOOL_NAMES) {
       assert.equal(allTools.has(denied), false, `${denied} should be denied`);
-      assert.equal(
-        activeTools.has(denied),
-        false,
-        `${denied} should be inactive`,
-      );
+      assert.equal(activeTools.has(denied), false, `${denied} should be inactive`);
     }
     for (const builtin of ["read", "bash", "edit", "write"]) {
-      assert.equal(
-        activeTools.has(builtin),
-        true,
-        `${builtin} should stay active`,
-      );
+      assert.equal(activeTools.has(builtin), true, `${builtin} should stay active`);
     }
 
-    await Promise.all([
-      shutdownAndDisposeChildSession(session),
-      shutdownAndDisposeChildSession(session),
-    ]);
+    await Promise.all([shutdownAndDisposeChildSession(session), shutdownAndDisposeChildSession(session)]);
     assert.equal(shutdowns, 1);
   });
 });
@@ -158,14 +144,8 @@ test("resource loading gates project extensions but retains global extensions", 
         });
       }
     `;
-    await writeFile(
-      path.join(agentDir, "extensions", "global.ts"),
-      extensionSource("global_fixture"),
-    );
-    await writeFile(
-      path.join(cwd, ".pi", "extensions", "project.ts"),
-      extensionSource("project_fixture"),
-    );
+    await writeFile(path.join(agentDir, "extensions", "global.ts"), extensionSource("global_fixture"));
+    await writeFile(path.join(cwd, ".pi", "extensions", "project.ts"), extensionSource("project_fixture"));
 
     const untrusted = await createChildResources({
       cwd,
@@ -183,9 +163,7 @@ test("resource loading gates project extensions but retains global extensions", 
       agentDir,
       projectTrusted: true,
     });
-    const trustedTools = trusted.loader
-      .getExtensions()
-      .extensions.flatMap((extension) => [...extension.tools.keys()]);
+    const trustedTools = trusted.loader.getExtensions().extensions.flatMap((extension) => [...extension.tools.keys()]);
     assert.equal(trustedTools.includes("global_fixture"), true);
     assert.equal(trustedTools.includes("project_fixture"), true);
   });

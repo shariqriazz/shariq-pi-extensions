@@ -95,14 +95,14 @@ Fusion mode is optional and off by default. When it is on, the main session acts
 
 Fusion adds these profiles and tiers:
 
-| Profile | Tier | Capability | Use |
-|---|---|---|---|
-| `sidekick` | medium | all | decided implementation and debugging from a concrete failure |
-| `explore` | medium | execute | substantive read-only tracing |
-| `reviewer` | medium | execute | one fresh review of a final diff |
-| `worker` | light | all | fully specified mechanical edits, docs, narrow tests |
-| `verifier` | light | execute | builds, tests, and reproductions; reports failures only |
-| `general-purpose` | heavy | all | hard decided work after the sidekick is blocked |
+| Profile           | Tier   | Capability | Use                                                          |
+| ----------------- | ------ | ---------- | ------------------------------------------------------------ |
+| `sidekick`        | medium | all        | decided implementation and debugging from a concrete failure |
+| `explore`         | medium | execute    | substantive read-only tracing                                |
+| `reviewer`        | medium | execute    | one fresh review of a final diff                             |
+| `worker`          | light  | all        | fully specified mechanical edits, docs, narrow tests         |
+| `verifier`        | light  | execute    | builds, tests, and reproductions; reports failures only      |
+| `general-purpose` | heavy  | all        | hard decided work after the sidekick is blocked              |
 
 Each tier maps to a model and thinking level for children; the lead keeps the model you selected in Pi. An unset tier, or an unset field, inherits the parent session's, so with no `tiers` block every child runs on the parent's model:
 

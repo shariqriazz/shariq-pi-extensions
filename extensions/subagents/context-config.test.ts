@@ -4,7 +4,13 @@ import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildTaskPrompt, forkConversation, parseForkTurns } from "./src/context.ts";
-import { loadConfigDocument, loadSubagentConfig, resolveProfile, saveConfigDocument, type SubagentConfig } from "./src/config.ts";
+import {
+  loadConfigDocument,
+  loadSubagentConfig,
+  resolveProfile,
+  saveConfigDocument,
+  type SubagentConfig,
+} from "./src/config.ts";
 import { SUBAGENT_SPAWN_PROMPT_GUIDELINES, WORKTREE_ISOLATION_DESCRIPTION } from "./src/prompt.ts";
 import { allocateSubagentId } from "./src/catalog.ts";
 import { capabilityGuardExtension, childToolAllowed, filterToolsForCapability } from "./src/backends/pi.ts";
@@ -66,7 +72,10 @@ test("fork_turns accepts none, all, and positive counts", () => {
 test("context forks keep selected conversation but remove tool protocol and thinking", () => {
   const messages = [user("one"), assistant("answer one"), user("two"), assistant("answer two")];
   const forked = forkConversation(messages, 1);
-  assert.deepEqual(forked.map((message) => message.role), ["user", "assistant"]);
+  assert.deepEqual(
+    forked.map((message) => message.role),
+    ["user", "assistant"],
+  );
   assert.ok(forked[0]?.role === "user");
   assert.deepEqual(forked[0].content, [{ type: "text", text: "two" }]);
   const final = forked[1];
@@ -81,10 +90,7 @@ test("configuration editor validates and saves trusted project documents", () =>
     const text = JSON.stringify({ maxConcurrent: 7, profiles: { reviewer: { capability: "execute" } }, personas: {} });
     saveConfigDocument("project", cwd, text);
     assert.equal(JSON.parse(loadConfigDocument("project", cwd)).maxConcurrent, 7);
-    assert.throws(
-      () => saveConfigDocument("project", cwd, '{"maxConcurrent":99}'),
-      /1 to 50/,
-    );
+    assert.throws(() => saveConfigDocument("project", cwd, '{"maxConcurrent":99}'), /1 to 50/);
     assert.throws(
       () => saveConfigDocument("project", cwd, '{"profiles":{"bad":{"capability":"root"}}}'),
       /capability must be one of/,
@@ -129,18 +135,29 @@ test("restrictive capabilities fail closed for extension execution tools", () =>
     "unknown_project_tool",
     "message_parent",
   ];
-  assert.deepEqual(
-    filterToolsForCapability(inventory, "read-only"),
-    ["read", "web_fetch", "task_list", "message_parent"],
-  );
-  assert.deepEqual(
-    filterToolsForCapability(inventory, "read-write"),
-    ["read", "write", "edit", "web_fetch", "task_list", "message_parent"],
-  );
-  assert.deepEqual(
-    filterToolsForCapability(inventory, "execute"),
-    ["read", "bash", "web_fetch", "task_list", "start_terminal", "write_terminal", "message_parent"],
-  );
+  assert.deepEqual(filterToolsForCapability(inventory, "read-only"), [
+    "read",
+    "web_fetch",
+    "task_list",
+    "message_parent",
+  ]);
+  assert.deepEqual(filterToolsForCapability(inventory, "read-write"), [
+    "read",
+    "write",
+    "edit",
+    "web_fetch",
+    "task_list",
+    "message_parent",
+  ]);
+  assert.deepEqual(filterToolsForCapability(inventory, "execute"), [
+    "read",
+    "bash",
+    "web_fetch",
+    "task_list",
+    "start_terminal",
+    "write_terminal",
+    "message_parent",
+  ]);
   assert.deepEqual(filterToolsForCapability(inventory, "all"), inventory);
 });
 
@@ -152,21 +169,24 @@ test("profile resolution applies explicit overrides before profile and persona d
     profiles: { reviewer: { capability: "read-only", model: "profile-model", instructions: "Review." } },
     personas: { concise: { instructions: "Be concise.", model: "persona-model", isolation: "worktree" } },
   };
-  assert.deepEqual(resolveProfile(config, {
-    agentType: "reviewer",
-    persona: "concise",
-    model: "explicit-model",
-    capability: "execute",
-  }), {
-    agentType: "reviewer",
-    persona: "concise",
-    instructions: "Review.\n\nBe concise.",
-    capability: "execute",
-    model: "explicit-model",
-    thinking: undefined,
-    isolation: "worktree",
-    childOptions: { runtime: "in-process", tools: undefined, skills: true, contextFiles: true, extensions: true },
-  });
+  assert.deepEqual(
+    resolveProfile(config, {
+      agentType: "reviewer",
+      persona: "concise",
+      model: "explicit-model",
+      capability: "execute",
+    }),
+    {
+      agentType: "reviewer",
+      persona: "concise",
+      instructions: "Review.\n\nBe concise.",
+      capability: "execute",
+      model: "explicit-model",
+      thinking: undefined,
+      isolation: "worktree",
+      childOptions: { runtime: "in-process", tools: undefined, skills: true, contextFiles: true, extensions: true },
+    },
+  );
 });
 
 function withAgentDir(run: (cwd: string) => void) {
@@ -195,8 +215,20 @@ test("fusion mode is off by default and adds tiered profiles when enabled", () =
     const on = loadSubagentConfig(cwd, true);
     assert.equal(on.fusion, true);
     assert.deepEqual(
-      Object.fromEntries(["sidekick", "explore", "reviewer", "worker", "verifier", "general-purpose"].map((name) => [name, on.profiles[name]?.tier])),
-      { sidekick: "medium", explore: "medium", reviewer: "medium", worker: "light", verifier: "light", "general-purpose": "heavy" },
+      Object.fromEntries(
+        ["sidekick", "explore", "reviewer", "worker", "verifier", "general-purpose"].map((name) => [
+          name,
+          on.profiles[name]?.tier,
+        ]),
+      ),
+      {
+        sidekick: "medium",
+        explore: "medium",
+        reviewer: "medium",
+        worker: "light",
+        verifier: "light",
+        "general-purpose": "heavy",
+      },
     );
     assert.equal(on.profiles.verifier?.capability, "execute");
     assert.equal(on.profiles.explore?.capability, "execute");
@@ -216,13 +248,20 @@ test("fusion mode is off by default and adds tiered profiles when enabled", () =
 
 test("tiers supply model and thinking below profile and call overrides", () => {
   withAgentDir((cwd) => {
-    saveConfigDocument("global", cwd, JSON.stringify({
-      fusion: true,
-      tiers: { light: { model: "light/model", thinking: "low" }, medium: { model: "medium/model" } },
-      profiles: { worker: { thinking: "minimal" }, custom: { tier: "light" } },
-    }));
+    saveConfigDocument(
+      "global",
+      cwd,
+      JSON.stringify({
+        fusion: true,
+        tiers: { light: { model: "light/model", thinking: "low" }, medium: { model: "medium/model" } },
+        profiles: { worker: { thinking: "minimal" }, custom: { tier: "light" } },
+      }),
+    );
     const config = loadSubagentConfig(cwd, true);
-    assert.deepEqual(config.tiers, { light: { model: "light/model", thinking: "low" }, medium: { model: "medium/model" } });
+    assert.deepEqual(config.tiers, {
+      light: { model: "light/model", thinking: "low" },
+      medium: { model: "medium/model" },
+    });
     const pick = (agentType: string, extra: { model?: string } = {}) => {
       const { model, thinking } = resolveProfile(config, { agentType, ...extra });
       return { model, thinking };
@@ -241,10 +280,22 @@ test("tiers supply model and thinking below profile and call overrides", () => {
 
 test("fusion and tier settings are validated when saved", () => {
   withAgentDir((cwd) => {
-    assert.throws(() => saveConfigDocument("global", cwd, JSON.stringify({ fusion: "yes" })), /fusion must be true or false/);
-    assert.throws(() => saveConfigDocument("global", cwd, JSON.stringify({ tiers: { huge: {} } })), /Unknown tier "huge"/);
-    assert.throws(() => saveConfigDocument("global", cwd, JSON.stringify({ tiers: { light: { thinking: "lots" } } })), /tiers.light.thinking/);
-    assert.throws(() => saveConfigDocument("global", cwd, JSON.stringify({ profiles: { a: { tier: "huge" } } })), /tier must be one of/);
+    assert.throws(
+      () => saveConfigDocument("global", cwd, JSON.stringify({ fusion: "yes" })),
+      /fusion must be true or false/,
+    );
+    assert.throws(
+      () => saveConfigDocument("global", cwd, JSON.stringify({ tiers: { huge: {} } })),
+      /Unknown tier "huge"/,
+    );
+    assert.throws(
+      () => saveConfigDocument("global", cwd, JSON.stringify({ tiers: { light: { thinking: "lots" } } })),
+      /tiers.light.thinking/,
+    );
+    assert.throws(
+      () => saveConfigDocument("global", cwd, JSON.stringify({ profiles: { a: { tier: "huge" } } })),
+      /tier must be one of/,
+    );
   });
 });
 
@@ -272,14 +323,41 @@ test("profiles carry runtime, tool allowlist, and resource switches without touc
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
-    saveConfigDocument("global", cwd, JSON.stringify({
-      profiles: { reviewer: { capability: "execute", runtime: "process", tools: ["read", "bash"], skills: false, contextFiles: false } },
-    }));
-    assert.throws(() => saveConfigDocument("global", cwd, '{"profiles":{"bad":{"runtime":"vm"}}}'), /runtime must be one of/);
+    saveConfigDocument(
+      "global",
+      cwd,
+      JSON.stringify({
+        profiles: {
+          reviewer: {
+            capability: "execute",
+            runtime: "process",
+            tools: ["read", "bash"],
+            skills: false,
+            contextFiles: false,
+          },
+        },
+      }),
+    );
+    assert.throws(
+      () => saveConfigDocument("global", cwd, '{"profiles":{"bad":{"runtime":"vm"}}}'),
+      /runtime must be one of/,
+    );
     assert.throws(() => saveConfigDocument("global", cwd, '{"profiles":{"bad":{"tools":[]}}}'), /non-empty array/);
     const profile = resolveProfile(loadSubagentConfig(cwd, false), { agentType: "reviewer" });
-    assert.deepEqual(profile.childOptions, { runtime: "process", tools: ["read", "bash"], skills: false, contextFiles: false, extensions: true });
-    assert.deepEqual(resolveProfile(loadSubagentConfig(cwd, false), {}).childOptions, { runtime: "in-process", tools: undefined, skills: true, contextFiles: true, extensions: true });
+    assert.deepEqual(profile.childOptions, {
+      runtime: "process",
+      tools: ["read", "bash"],
+      skills: false,
+      contextFiles: false,
+      extensions: true,
+    });
+    assert.deepEqual(resolveProfile(loadSubagentConfig(cwd, false), {}).childOptions, {
+      runtime: "in-process",
+      tools: undefined,
+      skills: true,
+      contextFiles: true,
+      extensions: true,
+    });
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
@@ -294,7 +372,9 @@ test("an exact tool allowlist narrows the capability at call time", () => {
   assert.equal(childToolAllowed("grep", "execute", ["read", "bash"]), false, "not in the allowlist");
   assert.equal(childToolAllowed("bash", "read-only", ["read", "bash"]), false, "the capability still applies");
   const handlers = new Map<string, (event: any) => any>();
-  capabilityGuardExtension("all", ["read"])({ on: (name: string, handler: any) => handlers.set(name, handler) } as never);
+  capabilityGuardExtension("all", ["read"])({
+    on: (name: string, handler: any) => handlers.set(name, handler),
+  } as never);
   assert.equal(handlers.get("tool_call")!({ toolName: "write" }).block, true);
 });
 
@@ -306,7 +386,19 @@ test("process children start the same Pi build with the profile's switches and t
     parent: { projectTrusted: false },
   } as never;
   const args = childArgs(task, { provider: "prov", id: "model-1" } as never, "/tmp/child.jsonl");
-  assert.deepEqual(args.slice(0, 11), ["--mode", "rpc", "--session", "/tmp/child.jsonl", "--provider", "prov", "--model", "model-1", "--thinking", "low", "--no-approve"]);
+  assert.deepEqual(args.slice(0, 11), [
+    "--mode",
+    "rpc",
+    "--session",
+    "/tmp/child.jsonl",
+    "--provider",
+    "prov",
+    "--model",
+    "model-1",
+    "--thinking",
+    "low",
+    "--no-approve",
+  ]);
   assert.ok(args.includes("--no-skills") && args.includes("--no-context-files") && args.includes("--no-extensions"));
   assert.match(args.at(-1)!, /child-bridge\.ts$/);
   assert.ok(!args.includes("--tools"), "the bridge filters tools so defaultTools such as codemode still apply");
@@ -318,8 +410,15 @@ test("process children run the same Pi entry script, following a pi symlink", ()
     const cli = join(dir, "cli.js");
     writeFileSync(cli, "#!/usr/bin/env node\n");
     symlinkSync(cli, join(dir, "pi"));
-    assert.deepEqual(piCommand(["/usr/bin/node", join(dir, "pi")], process.execPath), { file: process.execPath, args: [realpathSync(cli)] });
-    assert.deepEqual(piCommand([process.execPath], process.execPath), { file: process.execPath, args: [] }, "a compiled binary runs itself");
+    assert.deepEqual(piCommand(["/usr/bin/node", join(dir, "pi")], process.execPath), {
+      file: process.execPath,
+      args: [realpathSync(cli)],
+    });
+    assert.deepEqual(
+      piCommand([process.execPath], process.execPath),
+      { file: process.execPath, args: [] },
+      "a compiled binary runs itself",
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

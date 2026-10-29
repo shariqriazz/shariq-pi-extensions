@@ -45,11 +45,13 @@ export class OutputBuffer {
       let start = Math.max(0, raw.length - this.maxRetainedBytes);
       while (start < raw.length && (raw[start]! & 0xc0) === 0x80) start++;
       const retained = raw.subarray(start).toString("utf8");
-      this.chunks = [{
-        start: chunk.end - Buffer.byteLength(retained, "utf8"),
-        end: chunk.end,
-        text: retained,
-      }];
+      this.chunks = [
+        {
+          start: chunk.end - Buffer.byteLength(retained, "utf8"),
+          end: chunk.end,
+          text: retained,
+        },
+      ];
       this.retainedBytes = Buffer.byteLength(retained, "utf8");
       this._truncatedBytes = this._totalBytes - this.retainedBytes;
       this.cacheValid = false;
@@ -72,9 +74,10 @@ export class OutputBuffer {
     cursor: number;
     omittedBytes: number;
   } {
-    const requested = Number.isSafeInteger(cursor) && (cursor ?? 0) >= 0
-      ? Math.min(cursor!, this._totalBytes)
-      : Math.max(0, this._totalBytes - this.retainedBytes);
+    const requested =
+      Number.isSafeInteger(cursor) && (cursor ?? 0) >= 0
+        ? Math.min(cursor!, this._totalBytes)
+        : Math.max(0, this._totalBytes - this.retainedBytes);
     const firstAvailable = this.chunks[0]?.start ?? this._totalBytes;
     const effective = Math.max(requested, firstAvailable);
     const omittedBytes = Math.max(0, firstAvailable - requested);

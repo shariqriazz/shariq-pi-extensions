@@ -65,7 +65,10 @@ function hasSignedThinking(message: any): boolean {
   return (
     message?.role === "assistant" &&
     Array.isArray(message.content) &&
-    message.content.some((block: any) => block?.type === "thinking" && typeof block.thinkingSignature === "string" && block.thinkingSignature)
+    message.content.some(
+      (block: any) =>
+        block?.type === "thinking" && typeof block.thinkingSignature === "string" && block.thinkingSignature,
+    )
   );
 }
 
@@ -92,7 +95,9 @@ export function selectStructuredTail(
   }
   if (lastAssistant >= 0) {
     const answered = new Set(
-      messages.slice(lastAssistant + 1).flatMap((message: any) => (message.role === "toolResult" ? [message.toolCallId] : [])),
+      messages
+        .slice(lastAssistant + 1)
+        .flatMap((message: any) => (message.role === "toolResult" ? [message.toolCallId] : [])),
     );
     if (toolCalls(messages[lastAssistant]).some((call) => !answered.has(call.id))) end = lastAssistant;
   }

@@ -7,11 +7,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Model, Api, AssistantMessage, Context } from "@earendil-works/pi-ai";
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  SessionBeforeCompactEvent,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
 import {
   compactionThresholdTokens,
   loadSmartCompactionConfig,
@@ -168,9 +164,11 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
     assert.ok(facts.includes(sha));
     assert.ok(facts.includes("https://opencode.ai/zen/v1"));
     const uuidv7Id = "0190a3c4-7b2e-7d4f-9a1b-2c3d4e5f6a7b";
-    assert.ok(extractProtectedFacts([
-      { role: "user", content: `Track session ${uuidv7Id}`, timestamp: Date.now() },
-    ] as AgentMessage[]).includes(uuidv7Id));
+    assert.ok(
+      extractProtectedFacts([
+        { role: "user", content: `Track session ${uuidv7Id}`, timestamp: Date.now() },
+      ] as AgentMessage[]).includes(uuidv7Id),
+    );
     assert.ok(!facts.includes("https://opencode.ai/zen/v1`,"));
   });
 
@@ -207,31 +205,37 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
     });
     assert.match(xml, /<read-files>\nREADME\.md\n<\/read-files>/);
     assert.match(xml, /<touched-files>\nsrc\/out\.ts\nsrc\/index\.ts\n<\/touched-files>/, "recency order is kept");
-    assert.ok(xml.includes(`<running-subagents>\n${RUNNING_SUBAGENTS_NOTE}\nsa-1: &quot;audit&quot; (explore)\n</running-subagents>`));
+    assert.ok(
+      xml.includes(
+        `<running-subagents>\n${RUNNING_SUBAGENTS_NOTE}\nsa-1: &quot;audit&quot; (explore)\n</running-subagents>`,
+      ),
+    );
     assert.match(xml, /<uncommitted-dirty-files>\nsrc\/out\.ts\n<\/uncommitted-dirty-files>/);
     assert.match(xml, /<modified-lockfiles-and-assets>\npackage-lock\.json\n<\/modified-lockfiles-and-assets>/);
-    assert.match(xml, /<active-background-processes>\nterm-1: npm run dev \(pid 1234\)\n<\/active-background-processes>/);
+    assert.match(
+      xml,
+      /<active-background-processes>\nterm-1: npm run dev \(pid 1234\)\n<\/active-background-processes>/,
+    );
     assert.ok(xml.includes("<uncommitted-diff>"));
     assert.ok(xml.includes("&lt;value&gt;"));
   });
 
   it("marks unavailable worktree state explicitly", () => {
-    assert.match(
-      formatFileOperationsXml({ dirtyStateAvailable: false }),
-      /<uncommitted-state-unavailable \/>/,
-    );
+    assert.match(formatFileOperationsXml({ dirtyStateAvailable: false }), /<uncommitted-state-unavailable \/>/);
   });
 
   it("faithfully preserves user-provided credentials and tool details in transcript", () => {
     const serialized = serializeConversationForCompaction([
       {
         role: "assistant",
-        content: [{
-          type: "toolCall",
-          id: "secret-call",
-          name: "read",
-          arguments: { path: "/tmp/.env" },
-        }],
+        content: [
+          {
+            type: "toolCall",
+            id: "secret-call",
+            name: "read",
+            arguments: { path: "/tmp/.env" },
+          },
+        ],
       } as any,
       {
         role: "toolResult",
@@ -245,7 +249,7 @@ describe("smart-compaction prompt, sanitization, and XML escaping", () => {
       },
     ]);
 
-    assert.ok(serialized.includes("read(path=\"/tmp/.env\")"));
+    assert.ok(serialized.includes('read(path="/tmp/.env")'));
     assert.ok(serialized.includes("API_KEY=my-active-production-key"));
     assert.ok(serialized.includes("api_key=fk-user-supplied-key"));
   });
@@ -356,10 +360,10 @@ describe("smart-compaction retained-identifiers repair", () => {
   const fact = "a93dbf84-d608-49fb-9168-ce25cc623863";
 
   it("reports only the facts missing verbatim", () => {
-    const dropped = getDroppedProtectedFacts(
-      `see https://example.invalid/x for details ${VALID_SIX_SECTION_SUMMARY}`,
-      ["https://example.invalid/x", fact],
-    );
+    const dropped = getDroppedProtectedFacts(`see https://example.invalid/x for details ${VALID_SIX_SECTION_SUMMARY}`, [
+      "https://example.invalid/x",
+      fact,
+    ]);
     assert.deepEqual(dropped, [fact]);
   });
 
@@ -398,7 +402,12 @@ describe("smart-compaction token ceiling, usage, and error classification", () =
     const boundedModel: Model<Api> = { maxTokens: 8192 } as any;
 
     const defaultConfig: SmartCompactionConfig = { version: 1, enabled: true, model: "inherit" };
-    const overrideConfig: SmartCompactionConfig = { version: 1, enabled: true, model: "inherit", maxSummaryTokens: 12000 };
+    const overrideConfig: SmartCompactionConfig = {
+      version: 1,
+      enabled: true,
+      model: "inherit",
+      maxSummaryTokens: 12000,
+    };
 
     // Dynamic model ceiling returns full native capacity
     assert.equal(computeCompactionTokenCeiling(largeModel, defaultConfig), 65536);
@@ -408,7 +417,6 @@ describe("smart-compaction token ceiling, usage, and error classification", () =
     // Explicit override is respected when configured
     assert.equal(computeCompactionTokenCeiling(largeModel, overrideConfig), 12000);
     assert.equal(computeCompactionTokenCeiling(boundedModel, overrideConfig), 8192);
-
   });
 
   it("classifies fatal authentication and quota errors vs transient errors", () => {
@@ -418,15 +426,30 @@ describe("smart-compaction token ceiling, usage, and error classification", () =
     assert.equal(isFatalCompactionError(new DOMException("Compaction aborted", "AbortError")), true);
     assert.equal(isFatalCompactionError(new Error("Socket timeout")), false);
     assert.equal(isFatalCompactionError(new Error("stopReason=length")), false);
-    assert.equal(
-      isFatalCompactionError(new Error("invalid_request_error: reasoning effort is unsupported")),
-      false,
-    );
+    assert.equal(isFatalCompactionError(new Error("invalid_request_error: reasoning effort is unsupported")), false);
   });
 
   it("accumulates token usage across multiple retry attempts", () => {
-    const usage1: any = { input: 100, output: 50, cacheRead: 10, cacheWrite: 2, cacheWrite1h: 1, reasoning: 20, totalTokens: 160, cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 } };
-    const usage2: any = { input: 200, output: 80, cacheRead: 20, cacheWrite: 4, cacheWrite1h: 2, reasoning: 30, totalTokens: 300, cost: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, total: 14 } };
+    const usage1: any = {
+      input: 100,
+      output: 50,
+      cacheRead: 10,
+      cacheWrite: 2,
+      cacheWrite1h: 1,
+      reasoning: 20,
+      totalTokens: 160,
+      cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 },
+    };
+    const usage2: any = {
+      input: 200,
+      output: 80,
+      cacheRead: 20,
+      cacheWrite: 4,
+      cacheWrite1h: 2,
+      reasoning: 30,
+      totalTokens: 300,
+      cost: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, total: 14 },
+    };
     const combined = combineCompactionUsage(usage1, usage2);
 
     assert.equal(combined?.input, 300);
@@ -484,7 +507,12 @@ describe("smart-compaction Git engineering state", () => {
       assert.ok(state.patch.includes("TAIL-MARKER"));
       assert.ok(state.patch.length < 100_000);
       assert.equal(state.available, true);
-      assert.deepEqual(state.files.map((file) => file.path).sort(), ["large.txt", "linked-secret.txt", "tracked.ts", "untracked.ts"]);
+      assert.deepEqual(state.files.map((file) => file.path).sort(), [
+        "large.txt",
+        "linked-secret.txt",
+        "tracked.ts",
+        "untracked.ts",
+      ]);
       assert.ok(state.patch.includes("export const value = 2"));
       assert.ok(state.patch.includes("export const fresh = true"));
       assert.ok(state.patch.includes("fk-my-production-key-999"));
@@ -508,9 +536,15 @@ describe("smart-compaction 10-cycle dynamic retention test", () => {
     const CANARY_CONSTRAINT = "CRITICAL: Never modify legacy-auth.ts under any circumstance";
 
     const mockRegistry = {
-      find() { return undefined; },
-      getAvailable() { return [dummyModel]; },
-      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
+      find() {
+        return undefined;
+      },
+      getAvailable() {
+        return [dummyModel];
+      },
+      streamSimple(m: any, c: any, o: any) {
+        return { result: () => (this as any).complete(m, c, o) };
+      },
       async complete(_m: any, context: Context) {
         const userPrompt = context.messages[0]?.content[0];
         const promptText = typeof userPrompt === "object" && "text" in userPrompt ? userPrompt.text : "";
@@ -520,7 +554,10 @@ describe("smart-compaction 10-cycle dynamic retention test", () => {
             promptText.includes(CANARY_CONSTRAINT),
             "Submitted context to LLM did not contain previous canary constraint!",
           );
-          const previous = promptText.slice(promptText.indexOf("<previous-summary>"), promptText.indexOf("</previous-summary>"));
+          const previous = promptText.slice(
+            promptText.indexOf("<previous-summary>"),
+            promptText.indexOf("</previous-summary>"),
+          );
           assert.ok(!previous.includes("<touched-files>"), "appended state is regenerated, not fed back");
         }
 
@@ -555,7 +592,12 @@ describe("smart-compaction 10-cycle dynamic retention test", () => {
           role: "assistant",
           content: [{ type: "text", text: dynamicSummary }],
           stopReason: "stop",
-          usage: { input: 1000, output: 500, totalTokens: 1500, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+          usage: {
+            input: 1000,
+            output: 500,
+            totalTokens: 1500,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
         };
       },
     };
@@ -574,17 +616,14 @@ describe("smart-compaction 10-cycle dynamic retention test", () => {
       const modifiedFile = `src/module_${cycle}.ts`;
       const readFile = `src/read_${cycle}.ts`;
 
-      const initialMessageContent = cycle === 1
-        ? `Initial prompt: build feature with constraint: ${CANARY_CONSTRAINT}`
-        : `Continue cycle ${cycle}`;
+      const initialMessageContent =
+        cycle === 1 ? `Initial prompt: build feature with constraint: ${CANARY_CONSTRAINT}` : `Continue cycle ${cycle}`;
 
       const event: SessionBeforeCompactEvent = {
         type: "session_before_compact",
         preparation: {
           firstKeptEntryId: `entry-cycle-${cycle}`,
-          messagesToSummarize: [
-            { role: "user", content: initialMessageContent, timestamp: Date.now() },
-          ],
+          messagesToSummarize: [{ role: "user", content: initialMessageContent, timestamp: Date.now() }],
           turnPrefixMessages: [],
           isSplitTurn: false,
           tokensBefore: 40000,
@@ -647,9 +686,15 @@ describe("smart-compaction classified retry ladder", () => {
 
     let calls = 0;
     const mockRegistry = {
-      find() { return undefined; },
-      getAvailable() { return [dummyModel]; },
-      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
+      find() {
+        return undefined;
+      },
+      getAvailable() {
+        return [dummyModel];
+      },
+      streamSimple(m: any, c: any, o: any) {
+        return { result: () => (this as any).complete(m, c, o) };
+      },
       async complete() {
         calls++;
         throw new Error("HTTP 401: Unauthorized API key");
@@ -690,22 +735,38 @@ describe("smart-compaction classified retry ladder", () => {
   it("retries the next stage when a stage times out without user cancellation", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const dummyModel: Model<Api> = {
-      id: "session-model", name: "Session Model", provider: "session-provider",
-      api: "openai-responses", maxTokens: 128000, reasoning: true,
+      id: "session-model",
+      name: "Session Model",
+      provider: "session-provider",
+      api: "openai-responses",
+      maxTokens: 128000,
+      reasoning: true,
     } as any;
     let attempts = 0;
     let firstCallStarted: () => void = () => {};
-    const started = new Promise<void>((resolve) => { firstCallStarted = resolve; });
+    const started = new Promise<void>((resolve) => {
+      firstCallStarted = resolve;
+    });
     const mockRegistry = {
-      find() { return undefined; },
-      getAvailable() { return [dummyModel]; },
-      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
+      find() {
+        return undefined;
+      },
+      getAvailable() {
+        return [dummyModel];
+      },
+      streamSimple(m: any, c: any, o: any) {
+        return { result: () => (this as any).complete(m, c, o) };
+      },
       async complete(_m: any, _c: any, options: any) {
         attempts++;
         if (attempts === 1) {
           firstCallStarted();
           await new Promise((_resolve, reject) => {
-            options.signal.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")), { once: true });
+            options.signal.addEventListener(
+              "abort",
+              () => reject(new DOMException("This operation was aborted", "AbortError")),
+              { once: true },
+            );
           });
         }
         return { role: "assistant", content: [{ type: "text", text: VALID_SIX_SECTION_SUMMARY }], stopReason: "stop" };
@@ -729,7 +790,12 @@ describe("smart-compaction classified retry ladder", () => {
     };
     const pending = runSmartCompaction({
       event,
-      ctx: { model: dummyModel, modelRegistry: mockRegistry as any, thinkingLevel: "medium" as const, cwd: os.tmpdir() },
+      ctx: {
+        model: dummyModel,
+        modelRegistry: mockRegistry as any,
+        thinkingLevel: "medium" as const,
+        cwd: os.tmpdir(),
+      },
       config: { version: 1, enabled: true, model: "inherit" },
     });
     await started;
@@ -751,9 +817,15 @@ describe("smart-compaction classified retry ladder", () => {
 
     let attemptCount = 0;
     const mockRegistry = {
-      find() { return undefined; },
-      getAvailable() { return [dummyModel]; },
-      streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
+      find() {
+        return undefined;
+      },
+      getAvailable() {
+        return [dummyModel];
+      },
+      streamSimple(m: any, c: any, o: any) {
+        return { result: () => (this as any).complete(m, c, o) };
+      },
       async complete(_m: any, _c: any, options: any) {
         attemptCount++;
         if (attemptCount === 1) {
@@ -833,8 +905,12 @@ describe("smart-compaction classified retry ladder", () => {
       hasUI: true,
       model: dummyModel,
       modelRegistry: {
-        getAvailable() { return [dummyModel]; },
-        streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
+        getAvailable() {
+          return [dummyModel];
+        },
+        streamSimple(m: any, c: any, o: any) {
+          return { result: () => (this as any).complete(m, c, o) };
+        },
         async complete() {
           throw new Error("HTTP 500: Upstream timeout");
         },
@@ -871,7 +947,9 @@ describe("smart-compaction classified retry ladder", () => {
     const outcome = await beforeCompactHandler(event, mockCtx);
     // Strict fail-closed: must return cancel: true rather than undefined (which would trigger fallback default compactor)
     assert.deepEqual(outcome, { cancel: true });
-    assert.ok(notifications.some((n) => n.type === "error" && n.msg.includes("Compaction cancelled to protect context")));
+    assert.ok(
+      notifications.some((n) => n.type === "error" && n.msg.includes("Compaction cancelled to protect context")),
+    );
 
     cleanup();
   });
@@ -884,9 +962,13 @@ describe("smart-compaction extension commands & UI validation", () => {
     const continuations: Array<{ content: unknown; options: unknown }> = [];
     let compactOptions: any;
     const mockPi: ExtensionAPI = {
-      on(name: string, handler: any) { eventHandlers.set(name, handler); },
+      on(name: string, handler: any) {
+        eventHandlers.set(name, handler);
+      },
       registerCommand() {},
-      sendUserMessage(content: unknown, options: unknown) { continuations.push({ content, options }); },
+      sendUserMessage(content: unknown, options: unknown) {
+        continuations.push({ content, options });
+      },
     } as any;
     createSmartCompactionExtension({ configFile: file })(mockPi);
 
@@ -894,10 +976,15 @@ describe("smart-compaction extension commands & UI validation", () => {
     assert.equal(eventHandlers.has("turn_end"), false);
     const contextHandler = eventHandlers.get("context");
     assert.ok(contextHandler);
-    contextHandler({}, {
-      getContextUsage: () => ({ tokens: 410_000, contextWindow: 1_000_000, percent: 41 }),
-      compact(options: unknown) { compactOptions = options; },
-    });
+    contextHandler(
+      {},
+      {
+        getContextUsage: () => ({ tokens: 410_000, contextWindow: 1_000_000, percent: 41 }),
+        compact(options: unknown) {
+          compactOptions = options;
+        },
+      },
+    );
     assert.ok(compactOptions);
     compactOptions.onComplete();
     assert.deepEqual(continuations, [{ content: "Continue.", options: { deliverAs: "followUp" } }]);
@@ -956,8 +1043,13 @@ describe("smart-compaction extension commands & UI validation", () => {
       mode: "rpc",
       ui: {
         ...mockCtx.ui,
-        custom() { throw new Error("custom components are TUI-only"); },
-        async select(_title: string, choices: string[]) { offered = choices; return "inherit"; },
+        custom() {
+          throw new Error("custom components are TUI-only");
+        },
+        async select(_title: string, choices: string[]) {
+          offered = choices;
+          return "inherit";
+        },
       },
     });
     assert.deepEqual(offered, ["inherit", "session-provider/session-model", "anthropic/claude-3-5-sonnet"]);
@@ -969,19 +1061,42 @@ describe("smart-compaction extension commands & UI validation", () => {
 
 describe("smart-compaction same-model structured tail", () => {
   const sessionModel: Model<Api> = {
-    id: "session-model", name: "Session Model", provider: "session-provider",
-    api: "openai-responses", maxTokens: 128000, reasoning: true,
+    id: "session-model",
+    name: "Session Model",
+    provider: "session-provider",
+    api: "openai-responses",
+    maxTokens: 128000,
+    reasoning: true,
   } as any;
   const signature = (id: string) => JSON.stringify({ type: "reasoning", id, encrypted_content: `ENC-${id}` });
   const user = (text: string): any => ({ role: "user", content: text, timestamp: 1 });
   const assistant = (content: any[], model = "session-model"): any => ({
-    role: "assistant", content, provider: "session-provider", api: "openai-responses", model,
-    stopReason: "toolUse", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    role: "assistant",
+    content,
+    provider: "session-provider",
+    api: "openai-responses",
+    model,
+    stopReason: "toolUse",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
     timestamp: 1,
   });
   const thinking = (id: string) => ({ type: "thinking", thinking: "", thinkingSignature: signature(id) });
   const call = (id: string, name = "read") => ({ type: "toolCall", id, name, arguments: { path: `${id}.ts` } });
-  const result = (id: string, name = "read"): any => ({ role: "toolResult", toolCallId: id, toolName: name, content: [{ type: "text", text: `body of ${id}` }], isError: false, timestamp: 1 });
+  const result = (id: string, name = "read"): any => ({
+    role: "toolResult",
+    toolCallId: id,
+    toolName: name,
+    content: [{ type: "text", text: `body of ${id}` }],
+    isError: false,
+    timestamp: 1,
+  });
 
   const conversation = (): any[] => [
     user("Start the migration"),
@@ -996,16 +1111,32 @@ describe("smart-compaction same-model structured tail", () => {
 
   it("selects the newest complete same-model turns and declares the tools they used", () => {
     const messages = conversation();
-    const tail = selectStructuredTail(messages, sessionModel, [{ name: "read", description: "Read a file", parameters: { type: "object", properties: { path: { type: "string" } } } }]);
+    const tail = selectStructuredTail(messages, sessionModel, [
+      {
+        name: "read",
+        description: "Read a file",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+      },
+    ]);
     assert.ok(tail);
     assert.equal(tail.start, 3, "starts after the other model's turn, at a user message");
     assert.equal(tail.end, 7, "a trailing call answered only in the kept part stays text");
-    assert.deepEqual(tail.messages.map((message) => message.role), ["user", "assistant", "toolResult", "assistant"]);
+    assert.deepEqual(
+      tail.messages.map((message) => message.role),
+      ["user", "assistant", "toolResult", "assistant"],
+    );
     const replayed = (tail.messages[1] as any).content[0];
     assert.equal(replayed.thinkingSignature, signature("rs_1"));
-    assert.deepEqual(tail.tools.map((tool) => [tool.name, tool.description]), [["read", "Read a file"]]);
+    assert.deepEqual(
+      tail.tools.map((tool) => [tool.name, tool.description]),
+      [["read", "Read a file"]],
+    );
 
-    assert.equal(selectStructuredTail(messages.slice(0, 3), sessionModel), undefined, "no signed thinking from this model");
+    assert.equal(
+      selectStructuredTail(messages.slice(0, 3), sessionModel),
+      undefined,
+      "no signed thinking from this model",
+    );
     const small = selectStructuredTail(messages, sessionModel, [], 900);
     assert.ok(!small || small.start > 3, "a smaller byte cap keeps only newer turns");
     assert.ok(STRUCTURED_MAX_BYTES <= 2_500_000);
@@ -1033,13 +1164,24 @@ describe("smart-compaction same-model structured tail", () => {
     return {
       calls,
       registry: {
-        find() { return undefined; },
-        getAvailable() { return [sessionModel]; },
-        streamSimple(m: any, c: any, o: any) { return { result: () => (this as any).complete(m, c, o) }; },
+        find() {
+          return undefined;
+        },
+        getAvailable() {
+          return [sessionModel];
+        },
+        streamSimple(m: any, c: any, o: any) {
+          return { result: () => (this as any).complete(m, c, o) };
+        },
         async complete(_model: any, context: Context, options: any) {
           calls.push({ context, options });
           const next = responses[Math.min(calls.length - 1, responses.length - 1)];
-          return { role: "assistant", content: [{ type: "text", text: VALID_SIX_SECTION_SUMMARY }], stopReason: "stop", ...next };
+          return {
+            role: "assistant",
+            content: [{ type: "text", text: VALID_SIX_SECTION_SUMMARY }],
+            stopReason: "stop",
+            ...next,
+          };
         },
       },
     };
@@ -1056,14 +1198,27 @@ describe("smart-compaction same-model structured tail", () => {
 
     assert.equal(calls.length, 1);
     const { context, options } = calls[0]!;
-    const texts = context.messages.map((message: any) => typeof message.content === "string" ? message.content : message.content.map((block: any) => block.text ?? block.type).join("|"));
+    const texts = context.messages.map((message: any) =>
+      typeof message.content === "string"
+        ? message.content
+        : message.content.map((block: any) => block.text ?? block.type).join("|"),
+    );
     assert.match(texts[0]!, /Start the migration/, "older turns stay in the text transcript");
     assert.ok(texts[0]!.startsWith("<conversation>"));
-    assert.ok(context.messages.some((message: any) => message.role === "assistant" && message.content.some((block: any) => block.thinkingSignature === signature("rs_1"))));
+    assert.ok(
+      context.messages.some(
+        (message: any) =>
+          message.role === "assistant" &&
+          message.content.some((block: any) => block.thinkingSignature === signature("rs_1")),
+      ),
+    );
     const closing = texts.at(-1)!;
     assert.match(closing, /call_2/, "the unfinished trailing turn is kept as text");
     assert.match(closing, /## 6\. Resume Anchor/);
-    assert.deepEqual(context.tools?.map((tool) => tool.name), ["read"]);
+    assert.deepEqual(
+      context.tools?.map((tool) => tool.name),
+      ["read"],
+    );
     assert.equal(options.toolChoice, "none");
     assert.equal(result.details?.structuredMessages, 4);
     assert.ok((result.details?.structuredBytes ?? 0) > 0);
@@ -1071,7 +1226,11 @@ describe("smart-compaction same-model structured tail", () => {
 
   it("falls back to the text transcript on the same model when the structured request is rejected", async () => {
     const { calls, registry } = recordingRegistry([
-      { stopReason: "error", content: [], errorMessage: "status 413: request_too_large: Factory said: Request Entity Too Large" } as any,
+      {
+        stopReason: "error",
+        content: [],
+        errorMessage: "status 413: request_too_large: Factory said: Request Entity Too Large",
+      } as any,
       {},
     ]);
     const result = await runSmartCompaction({
@@ -1091,12 +1250,22 @@ describe("smart-compaction same-model structured tail", () => {
   });
 
   it("uses only the text transcript when the turns came from another model or reasoning is off", async () => {
-    const otherModelTurns = conversation().map((message) => message.role === "assistant" ? { ...message, model: "other-model" } : message);
-    for (const [messages, thinkingLevel] of [[otherModelTurns, "high"], [conversation(), "off"]] as const) {
+    const otherModelTurns = conversation().map((message) =>
+      message.role === "assistant" ? { ...message, model: "other-model" } : message,
+    );
+    for (const [messages, thinkingLevel] of [
+      [otherModelTurns, "high"],
+      [conversation(), "off"],
+    ] as const) {
       const { calls, registry } = recordingRegistry([{}]);
       await runSmartCompaction({
         event: compactionEvent(messages as any[]),
-        ctx: { model: sessionModel, modelRegistry: registry as any, thinkingLevel: thinkingLevel as any, cwd: os.tmpdir() },
+        ctx: {
+          model: sessionModel,
+          modelRegistry: registry as any,
+          thinkingLevel: thinkingLevel as any,
+          cwd: os.tmpdir(),
+        },
         config: { version: 1, enabled: true, model: "inherit" },
       });
       assert.equal(calls[0]!.context.messages.length, 1);

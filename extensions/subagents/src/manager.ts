@@ -12,16 +12,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import {
-  Context,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Result,
-  Scope,
-  Stream,
-} from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Result, Scope, Stream } from "effect";
 import type { SubagentBackend, SubagentSession } from "./backend.ts";
 import { BackendRegistry } from "./backend.ts";
 import type {
@@ -36,13 +27,7 @@ import type {
   SubagentStatus,
   TranscriptItem,
 } from "./domain.ts";
-import {
-  BackendUnavailableError,
-  ConcurrencyLimitError,
-  latestText,
-  SendError,
-  SpawnError,
-} from "./domain.ts";
+import { BackendUnavailableError, ConcurrencyLimitError, latestText, SendError, SpawnError } from "./domain.ts";
 
 export const MAX_RUNNING = 4;
 export const MAX_TRACKED = 64;
@@ -115,9 +100,7 @@ export interface SubagentReadModel {
    * wait_agent/close_agent is collecting the result (so it must not also be
    * delivered as a follow-up message).
    */
-  setOnSettled(
-    hook: ((snap: SubagentSnapshot, consumed: boolean) => void) | undefined,
-  ): void;
+  setOnSettled(hook: ((snap: SubagentSnapshot, consumed: boolean) => void) | undefined): void;
 }
 
 // --- Service --------------------------------------------------------------------
@@ -133,32 +116,21 @@ export interface SubagentManagerShape {
   spawn(
     backend: BackendName,
     task: SpawnTask,
-  ): Effect.Effect<
-    SubagentSnapshot,
-    SpawnError | ConcurrencyLimitError | BackendUnavailableError
-  >;
+  ): Effect.Effect<SubagentSnapshot, SpawnError | ConcurrencyLimitError | BackendUnavailableError>;
   /** Atomically reserve capacity for a complete fan-out before starting it. */
   spawnBatch(
     backend: BackendName,
     tasks: ReadonlyArray<SpawnTask>,
-  ): Effect.Effect<
-    ReadonlyArray<SubagentSnapshot>,
-    SpawnError | ConcurrencyLimitError | BackendUnavailableError
-  >;
+  ): Effect.Effect<ReadonlyArray<SubagentSnapshot>, SpawnError | ConcurrencyLimitError | BackendUnavailableError>;
   /**
    * Wait until all listed subagents are settled. Unknown ids are treated as
    * settled (the tool layer validates ids first). While waiting, settles for
    * these ids are marked "consumed". Interruption (tool abort) releases the
    * interest and leaves the subagents running.
    */
-  waitFor(
-    ids: ReadonlyArray<string>,
-    onPending?: (pending: string[]) => void,
-  ): Effect.Effect<void>;
+  waitFor(ids: ReadonlyArray<string>, onPending?: (pending: string[]) => void): Effect.Effect<void>;
   /** Cancel running subagents; resolves when they have settled. */
-  cancel(
-    ids: ReadonlyArray<string>,
-  ): Effect.Effect<ReadonlyArray<CancelResult>>;
+  cancel(ids: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<CancelResult>>;
   send(id: string, text: string): Effect.Effect<void, SendError>;
   get(id: string): Effect.Effect<SubagentSnapshot | undefined>;
   readonly list: Effect.Effect<ReadonlyArray<SubagentSnapshot>>;
@@ -166,10 +138,9 @@ export interface SubagentManagerShape {
   readonly view: SubagentReadModel;
 }
 
-export class SubagentManager extends Context.Service<
-  SubagentManager,
-  SubagentManagerShape
->()("subagents/SubagentManager") {}
+export class SubagentManager extends Context.Service<SubagentManager, SubagentManagerShape>()(
+  "subagents/SubagentManager",
+) {}
 
 // --- Implementation --------------------------------------------------------------
 
@@ -215,16 +186,14 @@ const makeManager = Effect.gen(function* () {
   };
   const reservedByGroup = new Map<string, number>();
   const reservedIn = (group: string) => reservedByGroup.get(group) ?? 0;
-  const reserve = (group: string, count: number) =>
-    reservedByGroup.set(group, reservedIn(group) + count);
+  const reserve = (group: string, count: number) => reservedByGroup.set(group, reservedIn(group) + count);
   const release = (group: string, count: number) => {
     const next = reservedIn(group) - count;
     if (next > 0) reservedByGroup.set(group, next);
     else reservedByGroup.delete(group);
   };
   let disposed = false;
-  let onSettled:
-    ((snap: SubagentSnapshot, consumed: boolean) => void) | undefined;
+  let onSettled: ((snap: SubagentSnapshot, consumed: boolean) => void) | undefined;
 
   const notify = (id?: string) => {
     const waiters = changeWaiters;
@@ -260,9 +229,7 @@ const makeManager = Effect.gen(function* () {
 
   const runningCount = (group: string) =>
     [...entries.values()].filter(
-      (entry) =>
-        entry.concurrencyGroup === group &&
-        (entry.snapshot.status === "running" || entry.restarting === true),
+      (entry) => entry.concurrencyGroup === group && (entry.snapshot.status === "running" || entry.restarting === true),
     ).length;
 
   const addInterest = (ids: ReadonlyArray<string>) => {
@@ -276,23 +243,15 @@ const makeManager = Effect.gen(function* () {
     }
   };
 
-  const closeEntryScope = (entry: Entry) =>
-    Scope.close(entry.scope, Exit.void).pipe(Effect.ignore);
+  const closeEntryScope = (entry: Entry) => Scope.close(entry.scope, Exit.void).pipe(Effect.ignore);
 
   const pruneSettled = () => {
     if (entries.size <= MAX_TRACKED) return;
     const candidates = [...entries.values()]
       .filter(
-        (e) =>
-          e.snapshot.status !== "running" &&
-          !waitInterest.has(e.snapshot.id) &&
-          !retained.has(e.snapshot.id),
+        (e) => e.snapshot.status !== "running" && !waitInterest.has(e.snapshot.id) && !retained.has(e.snapshot.id),
       )
-      .sort(
-        (a, b) =>
-          (a.snapshot.settledAt ?? a.snapshot.createdAt) -
-          (b.snapshot.settledAt ?? b.snapshot.createdAt),
-      );
+      .sort((a, b) => (a.snapshot.settledAt ?? a.snapshot.createdAt) - (b.snapshot.settledAt ?? b.snapshot.createdAt));
     for (const entry of candidates) {
       if (entries.size <= MAX_TRACKED) break;
       entries.delete(entry.snapshot.id);
@@ -417,32 +376,26 @@ const makeManager = Effect.gen(function* () {
     notify(s.id);
   };
 
-  const spawnInternal = (
-    backendName: BackendName,
-    task: SpawnTask,
-    preReserved = false,
-  ) =>
+  const spawnInternal = (backendName: BackendName, task: SpawnTask, preReserved = false) =>
     Effect.gen(function* () {
       // Reserve synchronously (before the first yield inside doSpawn) so
       // parallel tool calls cannot race past the global cap.
       if (!preReserved) {
-        yield* Effect.suspend(
-          (): Effect.Effect<void, SpawnError | ConcurrencyLimitError> => {
-            if (disposed) {
-              return new SpawnError({
-                message: "Subagent manager is shutting down.",
-              });
-            }
-            const group = task.concurrencyGroup ?? "default";
-            if (runningCount(group) + reservedIn(group) >= task.maxConcurrent) {
-              return new ConcurrencyLimitError({
-                message: `Max ${task.maxConcurrent} Pi subagents can run concurrently. Let one finish or close one before spawning another. Use /subagents config to change maxConcurrent.`,
-              });
-            }
-            reserve(group, 1);
-            return Effect.void;
-          },
-        );
+        yield* Effect.suspend((): Effect.Effect<void, SpawnError | ConcurrencyLimitError> => {
+          if (disposed) {
+            return new SpawnError({
+              message: "Subagent manager is shutting down.",
+            });
+          }
+          const group = task.concurrencyGroup ?? "default";
+          if (runningCount(group) + reservedIn(group) >= task.maxConcurrent) {
+            return new ConcurrencyLimitError({
+              message: `Max ${task.maxConcurrent} Pi subagents can run concurrently. Let one finish or close one before spawning another. Use /subagents config to change maxConcurrent.`,
+            });
+          }
+          reserve(group, 1);
+          return Effect.void;
+        });
       }
 
       const doSpawn = Effect.gen(function* () {
@@ -500,9 +453,7 @@ const makeManager = Effect.gen(function* () {
         // Pump: fold the event stream into the snapshot. Tied to the entry
         // scope, so closing the scope stops it. If the stream ends while the
         // subagent still looks running, the backend died out from under us.
-        const pump = Stream.runForEach(session.events, (event) =>
-          Effect.sync(() => foldEvent(entry, event)),
-        ).pipe(
+        const pump = Stream.runForEach(session.events, (event) => Effect.sync(() => foldEvent(entry, event))).pipe(
           Effect.ensuring(
             Effect.sync(() => {
               if (entry.snapshot.status === "running") {
@@ -520,7 +471,7 @@ const makeManager = Effect.gen(function* () {
         return entry.snapshot as SubagentSnapshot;
       });
 
-      return yield* (preReserved
+      return yield* preReserved
         ? doSpawn
         : doSpawn.pipe(
             Effect.ensuring(
@@ -529,11 +480,10 @@ const makeManager = Effect.gen(function* () {
                 notify();
               }),
             ),
-          ));
+          );
     });
 
-  const spawn = (backendName: BackendName, task: SpawnTask) =>
-    spawnInternal(backendName, task);
+  const spawn = (backendName: BackendName, task: SpawnTask) => spawnInternal(backendName, task);
 
   const spawnBatch = (backendName: BackendName, tasks: ReadonlyArray<SpawnTask>) =>
     Effect.gen(function* () {
@@ -544,20 +494,18 @@ const makeManager = Effect.gen(function* () {
         return yield* new SpawnError({ message: "A batch must use one concurrency group." });
       }
       const group = [...groups][0]!;
-      yield* Effect.suspend(
-        (): Effect.Effect<void, SpawnError | ConcurrencyLimitError> => {
-          if (disposed) {
-            return new SpawnError({ message: "Subagent manager is shutting down." });
-          }
-          if (runningCount(group) + reservedIn(group) + tasks.length > limit) {
-            return new ConcurrencyLimitError({
-              message: `Cannot start ${tasks.length} tasks atomically: ${runningCount(group)} running and ${reservedIn(group)} reserved with maxConcurrent ${limit}.`,
-            });
-          }
-          reserve(group, tasks.length);
-          return Effect.void;
-        },
-      );
+      yield* Effect.suspend((): Effect.Effect<void, SpawnError | ConcurrencyLimitError> => {
+        if (disposed) {
+          return new SpawnError({ message: "Subagent manager is shutting down." });
+        }
+        if (runningCount(group) + reservedIn(group) + tasks.length > limit) {
+          return new ConcurrencyLimitError({
+            message: `Cannot start ${tasks.length} tasks atomically: ${runningCount(group)} running and ${reservedIn(group)} reserved with maxConcurrent ${limit}.`,
+          });
+        }
+        reserve(group, tasks.length);
+        return Effect.void;
+      });
       const started: SubagentSnapshot[] = [];
       return yield* Effect.forEach(
         tasks,
@@ -599,10 +547,7 @@ const makeManager = Effect.gen(function* () {
       );
     });
 
-  const waitFor = (
-    ids: ReadonlyArray<string>,
-    onPending?: (pending: string[]) => void,
-  ) =>
+  const waitFor = (ids: ReadonlyArray<string>, onPending?: (pending: string[]) => void) =>
     Effect.suspend(() => {
       const unique = [...new Set(ids)];
       addInterest(unique);
@@ -631,26 +576,19 @@ const makeManager = Effect.gen(function* () {
   const abortEntry = (entry: Entry) =>
     Effect.gen(function* () {
       if (entry.snapshot.status !== "running") return;
-      const graceful = yield* entry.session.interrupt.pipe(
-        Effect.timeout(STOP_TIMEOUT_MS),
-        Effect.result,
-      );
+      const graceful = yield* entry.session.interrupt.pipe(Effect.timeout(STOP_TIMEOUT_MS), Effect.result);
       if (Result.isFailure(graceful)) {
         // Settle before closing the scope so the pump's stream-ended
         // fallback ("Backend event stream ended unexpectedly") cannot win
         // the race and report the wrong terminal reason.
         yield* Effect.sync(() => {
           settle(entry, { _tag: "Interrupted" });
-          entry.snapshot.errorText =
-            "Abort deadline exceeded; session was force-disposed";
+          entry.snapshot.errorText = "Abort deadline exceeded; session was force-disposed";
           notify(entry.snapshot.id);
         });
         // Bound the close like disposeAll does: a stuck backend finalizer
         // must not hang cancel after the run is already settled.
-        yield* closeEntryScope(entry).pipe(
-          Effect.timeout(STOP_TIMEOUT_MS),
-          Effect.ignore,
-        );
+        yield* closeEntryScope(entry).pipe(Effect.timeout(STOP_TIMEOUT_MS), Effect.ignore);
       }
     });
 
@@ -659,9 +597,7 @@ const makeManager = Effect.gen(function* () {
       const unique = [...new Set(ids)];
       const running = unique
         .map((id) => entries.get(id))
-        .filter(
-          (entry): entry is Entry => entry?.snapshot.status === "running",
-        );
+        .filter((entry): entry is Entry => entry?.snapshot.status === "running");
       const runningIds = running.map((entry) => entry.snapshot.id);
       // Mark consumed before interrupting so cancellation does not also
       // enqueue duplicate automatic result messages into the parent.
@@ -737,21 +673,14 @@ const makeManager = Effect.gen(function* () {
     }
     disposed = true;
     entries.clear();
-    yield* Effect.forEach(
-      all,
-      (entry) =>
-        closeEntryScope(entry).pipe(
-          Effect.timeout(STOP_TIMEOUT_MS),
-          Effect.ignore,
-        ),
-      { concurrency: "unbounded" },
-    );
+    yield* Effect.forEach(all, (entry) => closeEntryScope(entry).pipe(Effect.timeout(STOP_TIMEOUT_MS), Effect.ignore), {
+      concurrency: "unbounded",
+    });
     // Pruning cleanups are detached; bound them like everything else so a
     // stuck backend finalizer cannot block runtime shutdown indefinitely.
     yield* Effect.forEach(
       [...cleanups],
-      (fiber) =>
-        Fiber.await(fiber).pipe(Effect.timeout(STOP_TIMEOUT_MS), Effect.ignore),
+      (fiber) => Fiber.await(fiber).pipe(Effect.timeout(STOP_TIMEOUT_MS), Effect.ignore),
       { concurrency: "unbounded" },
     ).pipe(Effect.ignore);
     yield* Effect.sync(() => notify());
@@ -827,8 +756,7 @@ const makeManager = Effect.gen(function* () {
   });
 });
 
-export const SubagentManagerLive: Layer.Layer<
+export const SubagentManagerLive: Layer.Layer<SubagentManager, never, BackendRegistry> = Layer.effect(
   SubagentManager,
-  never,
-  BackendRegistry
-> = Layer.effect(SubagentManager, makeManager);
+  makeManager,
+);

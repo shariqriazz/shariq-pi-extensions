@@ -1,10 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { StringEnum } from "@earendil-works/pi-ai";
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { clearActivitySource, setActivitySource, type ActivityState } from "../shared/activity-dock.ts";
@@ -39,19 +35,37 @@ import { openTaskDashboard, taskGlyph } from "./ui.ts";
 const ACTIVITY_SOURCE = "task-list";
 const FINISHED_LINGER_MS = 4_000;
 
-const TaskListParams = Type.Object({
-  tasks: Type.Optional(Type.Array(
-    Type.Object({
-      id: Type.String({ minLength: 1, maxLength: 80, description: "Stable id: letters, numbers, dots, underscores, hyphens." }),
-      content: Type.String({ minLength: 1, maxLength: 500, description: "Concrete outcome. Keep user-supplied commands and literals exact." }),
-      status: StringEnum(TASK_STATUSES),
-      priority: Type.Optional(StringEnum(TASK_PRIORITIES, { description: "Default medium." })),
-      note: Type.Optional(Type.String({ maxLength: 1_000, description: "Evidence, blocker, or cancellation reason." })),
-    }, { additionalProperties: false }),
-    { maxItems: 64, description: "The complete ordered list; replaces the previous one." },
-  )),
-  explanation: Type.Optional(Type.String({ maxLength: 1_000, description: "Why the list changed." })),
-}, { additionalProperties: false });
+const TaskListParams = Type.Object(
+  {
+    tasks: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            id: Type.String({
+              minLength: 1,
+              maxLength: 80,
+              description: "Stable id: letters, numbers, dots, underscores, hyphens.",
+            }),
+            content: Type.String({
+              minLength: 1,
+              maxLength: 500,
+              description: "Concrete outcome. Keep user-supplied commands and literals exact.",
+            }),
+            status: StringEnum(TASK_STATUSES),
+            priority: Type.Optional(StringEnum(TASK_PRIORITIES, { description: "Default medium." })),
+            note: Type.Optional(
+              Type.String({ maxLength: 1_000, description: "Evidence, blocker, or cancellation reason." }),
+            ),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 64, description: "The complete ordered list; replaces the previous one." },
+      ),
+    ),
+    explanation: Type.Optional(Type.String({ maxLength: 1_000, description: "Why the list changed." })),
+  },
+  { additionalProperties: false },
+);
 
 function statusColor(status: TaskStatus): "accent" | "success" | "warning" | "error" | "muted" {
   if (status === "in_progress") return "accent";
@@ -71,12 +85,13 @@ function summaryLine(state: TaskListState): string {
 }
 
 function nextUniqueId(state: TaskListState, content: string): string {
-  const base = content
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40) || "task";
+  const base =
+    content
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "task";
   const existing = new Set(state.tasks.map((task) => task.id));
   if (!existing.has(base)) return base;
   for (let suffix = 2; suffix < 10_000; suffix++) {
@@ -112,17 +127,25 @@ export default function taskListExtension(pi: ExtensionAPI) {
 
     const counts = taskCounts(state.tasks);
     const active = hasActiveTasks(state);
-    const visible = (active
-      ? state.tasks.filter((task) => !terminal(task.status))
-      : state.tasks.slice(-3));
-    setActivitySource(ctx, ACTIVITY_SOURCE, visible.map((task) => ({
-      id: task.id,
-      label: `Tasks ${state.tasks.findIndex((item) => item.id === task.id) + 1}/${counts.total}`,
-      title: task.content,
-      detail: task.status.replaceAll("_", " "),
-      state: (task.status === "in_progress" ? "active" : task.status === "completed" ? "success" : task.status === "blocked" ? "error" : "muted") as ActivityState,
-      priority: task.status === "blocked" ? 100 : task.status === "in_progress" ? 60 : 10,
-    })));
+    const visible = active ? state.tasks.filter((task) => !terminal(task.status)) : state.tasks.slice(-3);
+    setActivitySource(
+      ctx,
+      ACTIVITY_SOURCE,
+      visible.map((task) => ({
+        id: task.id,
+        label: `Tasks ${state.tasks.findIndex((item) => item.id === task.id) + 1}/${counts.total}`,
+        title: task.content,
+        detail: task.status.replaceAll("_", " "),
+        state: (task.status === "in_progress"
+          ? "active"
+          : task.status === "completed"
+            ? "success"
+            : task.status === "blocked"
+              ? "error"
+              : "muted") as ActivityState,
+        priority: task.status === "blocked" ? 100 : task.status === "in_progress" ? 60 : 10,
+      })),
+    );
     ctx.ui.setStatus(ACTIVITY_SOURCE, undefined);
     if (active) return;
 
@@ -149,9 +172,7 @@ export default function taskListExtension(pi: ExtensionAPI) {
   function ensureActiveTask(tasks: TaskItem[]): TaskItem[] {
     if (tasks.some((task) => task.status === "in_progress")) return tasks;
     const next = tasks.find((task) => task.status === "pending");
-    return next
-      ? tasks.map((task) => task.id === next.id ? { ...task, status: "in_progress" } : task)
-      : tasks;
+    return next ? tasks.map((task) => (task.id === next.id ? { ...task, status: "in_progress" } : task)) : tasks;
   }
 
   function mutateState(ctx: ExtensionContext, mutate: (tasks: TaskItem[]) => TaskItem[], explanation?: string): void {
@@ -162,7 +183,12 @@ export default function taskListExtension(pi: ExtensionAPI) {
       revision: state.revision + 1,
       tasks: next.map((task) => {
         const prior = previous.get(task.id);
-        const unchanged = prior && prior.content === task.content && prior.status === task.status && prior.priority === task.priority && prior.note === task.note;
+        const unchanged =
+          prior &&
+          prior.content === task.content &&
+          prior.status === task.status &&
+          prior.priority === task.priority &&
+          prior.note === task.note;
         return { ...task, updatedAt: unchanged ? prior.updatedAt : timestamp };
       }),
       explanation,
@@ -175,7 +201,8 @@ export default function taskListExtension(pi: ExtensionAPI) {
     return messages.flatMap((message) => {
       if (!message || typeof message !== "object") return [];
       const candidate = message as { role?: string; toolName?: string; details?: Partial<TaskListDetails> };
-      if (candidate.role !== "toolResult" || candidate.toolName !== TASK_LIST_TOOL || !candidate.details?.state) return [];
+      if (candidate.role !== "toolResult" || candidate.toolName !== TASK_LIST_TOOL || !candidate.details?.state)
+        return [];
       return [candidate.details.state as TaskListState];
     });
   }
@@ -224,7 +251,10 @@ export default function taskListExtension(pi: ExtensionAPI) {
       if (action.kind === "close") return;
       if (action.kind === "clear") {
         if (!state.tasks.length) continue;
-        const confirmed = await ctx.ui.confirm("Clear task list?", "This removes every current task from this session branch.");
+        const confirmed = await ctx.ui.confirm(
+          "Clear task list?",
+          "This removes every current task from this session branch.",
+        );
         if (confirmed) mutateState(ctx, () => [], "Task list cleared by user.");
         continue;
       }
@@ -241,13 +271,20 @@ export default function taskListExtension(pi: ExtensionAPI) {
           continue;
         }
         const id = nextUniqueId(state, cleaned);
-        mutateState(ctx, (tasks) => [...tasks, {
-          id,
-          content: cleaned,
-          status: tasks.some((task) => task.status === "in_progress") ? "pending" : "in_progress",
-          priority: "medium",
-          updatedAt: Date.now(),
-        }], "Task added by user.");
+        mutateState(
+          ctx,
+          (tasks) => [
+            ...tasks,
+            {
+              id,
+              content: cleaned,
+              status: tasks.some((task) => task.status === "in_progress") ? "pending" : "in_progress",
+              priority: "medium",
+              updatedAt: Date.now(),
+            },
+          ],
+          "Task added by user.",
+        );
         continue;
       }
       const task = state.tasks.find((item) => item.id === action.id);
@@ -261,14 +298,27 @@ export default function taskListExtension(pi: ExtensionAPI) {
           ctx.ui.notify(`Task content exceeds ${MAX_TASK_CONTENT_CHARS} characters.`, "warning");
           continue;
         }
-        mutateState(ctx, (tasks) => tasks.map((item) => item.id === task.id ? { ...item, content: cleaned } : item), "Task edited by user.");
+        mutateState(
+          ctx,
+          (tasks) => tasks.map((item) => (item.id === task.id ? { ...item, content: cleaned } : item)),
+          "Task edited by user.",
+        );
       } else if (action.kind === "delete") {
         const confirmed = await ctx.ui.confirm("Delete task?", task.content);
-        if (confirmed) mutateState(ctx, (tasks) => tasks.filter((item) => item.id !== task.id), "Task deleted by user.");
+        if (confirmed)
+          mutateState(ctx, (tasks) => tasks.filter((item) => item.id !== task.id), "Task deleted by user.");
       } else if (action.kind === "status") {
-        mutateState(ctx, (tasks) => tasks.map((item) => item.id === task.id ? { ...item, status: action.status } : item), "Task status changed by user.");
+        mutateState(
+          ctx,
+          (tasks) => tasks.map((item) => (item.id === task.id ? { ...item, status: action.status } : item)),
+          "Task status changed by user.",
+        );
       } else if (action.kind === "priority") {
-        mutateState(ctx, (tasks) => tasks.map((item) => item.id === task.id ? { ...item, priority: action.priority } : item), "Task priority changed by user.");
+        mutateState(
+          ctx,
+          (tasks) => tasks.map((item) => (item.id === task.id ? { ...item, priority: action.priority } : item)),
+          "Task priority changed by user.",
+        );
       }
     }
   }
@@ -292,7 +342,10 @@ export default function taskListExtension(pi: ExtensionAPI) {
           ctx.ui.notify("No tasks to clear.", "info");
           return;
         }
-        const confirmed = await ctx.ui.confirm("Clear task list?", "This removes every current task from this session branch.");
+        const confirmed = await ctx.ui.confirm(
+          "Clear task list?",
+          "This removes every current task from this session branch.",
+        );
         if (!confirmed) return;
         mutateState(ctx, () => [], "Task list cleared by user.");
         ctx.ui.notify("Task list cleared.", "info");
@@ -336,8 +389,8 @@ Send the first list as its own tool call in the same response as the first real 
       const count = args.tasks?.length;
       text.setText(
         theme.fg("toolTitle", theme.bold("task_list ")) +
-        theme.fg("muted", action) +
-        (count == null ? "" : theme.fg("dim", ` · ${count} item${count === 1 ? "" : "s"}`)),
+          theme.fg("muted", action) +
+          (count == null ? "" : theme.fg("dim", ` · ${count} item${count === 1 ? "" : "s"}`)),
       );
       return text;
     },
@@ -355,7 +408,9 @@ Send the first list as its own tool call in the same response as the first real 
       }
       const counts = details.counts;
       const complete = counts.total > 0 && counts.completed + counts.cancelled === counts.total;
-      let output = theme.fg(complete ? "success" : "accent", complete ? "✓ " : "◆ ") + theme.fg("muted", summaryLine(details.state));
+      let output =
+        theme.fg(complete ? "success" : "accent", complete ? "✓ " : "◆ ") +
+        theme.fg("muted", summaryLine(details.state));
       const visible = expanded
         ? details.state.tasks
         : details.state.tasks.filter((task) => task.status === "in_progress" || task.status === "blocked").slice(0, 3);

@@ -22,9 +22,13 @@ type DockUi = ExtensionContext["ui"];
 // module-local map would give each extension a private dock that overwrites
 // the others. Keep the per-UI state on a process-wide registry instead.
 const REGISTRY_KEY = Symbol.for("shariq-pi-extensions/activity-dock/v1");
-const registry: WeakMap<DockUi, Map<string, ActivityItem[]>> =
-  ((globalThis as Record<symbol, unknown>)[REGISTRY_KEY] as WeakMap<DockUi, Map<string, ActivityItem[]>> | undefined) ??
-  ((globalThis as Record<symbol, unknown>)[REGISTRY_KEY] = new WeakMap<DockUi, Map<string, ActivityItem[]>>()) as WeakMap<DockUi, Map<string, ActivityItem[]>>;
+const registry: WeakMap<DockUi, Map<string, ActivityItem[]>> = ((globalThis as Record<symbol, unknown>)[
+  REGISTRY_KEY
+] as WeakMap<DockUi, Map<string, ActivityItem[]>> | undefined) ??
+(((globalThis as Record<symbol, unknown>)[REGISTRY_KEY] = new WeakMap<
+  DockUi,
+  Map<string, ActivityItem[]>
+>()) as WeakMap<DockUi, Map<string, ActivityItem[]>>);
 
 function sourcesFor(ui: DockUi) {
   let sources = registry.get(ui);
@@ -51,10 +55,11 @@ function glyph(state: ActivityState) {
 function allItems(sources: Map<string, ActivityItem[]>) {
   return [...sources.entries()]
     .flatMap(([source, items]) => items.map((item, index) => ({ source, index, item })))
-    .sort((left, right) =>
-      (right.item.priority ?? 0) - (left.item.priority ?? 0) ||
-      left.source.localeCompare(right.source) ||
-      left.index - right.index,
+    .sort(
+      (left, right) =>
+        (right.item.priority ?? 0) - (left.item.priority ?? 0) ||
+        left.source.localeCompare(right.source) ||
+        left.index - right.index,
     )
     .map(({ item }) => item);
 }
@@ -69,20 +74,29 @@ function publish(ctx: ExtensionContext, sources: Map<string, ActivityItem[]>) {
     render(width: number) {
       const current = allItems(sources);
       const shown = current.slice(0, MAX_VISIBLE_ITEMS);
-      const lines = [truncateToWidth(
-        `${theme.fg("accent", theme.bold("Active work"))} ${theme.fg("muted", `${current.length}`)}`,
-        width,
-      )];
+      const lines = [
+        truncateToWidth(
+          `${theme.fg("accent", theme.bold("Active work"))} ${theme.fg("muted", `${current.length}`)}`,
+          width,
+        ),
+      ];
       for (const item of shown) {
         const tone = color(item.state);
         const detail = item.detail ? theme.fg("dim", ` · ${oneLine(item.detail)}`) : "";
-        lines.push(truncateToWidth(
-          `${theme.fg(tone, glyph(item.state))} ${theme.fg("muted", item.label)} ${theme.fg(tone === "muted" ? "muted" : "text", oneLine(item.title))}${detail}`,
-          width,
-        ));
+        lines.push(
+          truncateToWidth(
+            `${theme.fg(tone, glyph(item.state))} ${theme.fg("muted", item.label)} ${theme.fg(tone === "muted" ? "muted" : "text", oneLine(item.title))}${detail}`,
+            width,
+          ),
+        );
       }
       if (current.length > shown.length) {
-        lines.push(truncateToWidth(theme.fg("dim", `… +${current.length - shown.length} more · open the relevant dashboard`), width));
+        lines.push(
+          truncateToWidth(
+            theme.fg("dim", `… +${current.length - shown.length} more · open the relevant dashboard`),
+            width,
+          ),
+        );
       }
       return lines;
     },
@@ -94,7 +108,11 @@ function publish(ctx: ExtensionContext, sources: Map<string, ActivityItem[]>) {
 export function setActivitySource(ctx: ExtensionContext, source: string, items: ActivityItem[]) {
   if (!ctx.hasUI) return;
   const sources = sourcesFor(ctx.ui);
-  if (items.length) sources.set(source, items.map((item) => ({ ...item })));
+  if (items.length)
+    sources.set(
+      source,
+      items.map((item) => ({ ...item })),
+    );
   else sources.delete(source);
   publish(ctx, sources);
 }

@@ -1,6 +1,11 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { buildSessionProjection, convertToLlm, type ExtensionAPI, type SessionEntry } from "@earendil-works/pi-coding-agent";
+import {
+  buildSessionProjection,
+  convertToLlm,
+  type ExtensionAPI,
+  type SessionEntry,
+} from "@earendil-works/pi-coding-agent";
 
 export type Payload = Record<string, unknown>;
 
@@ -60,7 +65,10 @@ function sameMessage(a: AgentMessage, b: AgentMessage): boolean {
  * handler added to that request alone are skipped when matching; a branch
  * that no longer holds the request's messages returns a reason instead.
  */
-export function messagesSince(branchEntries: readonly SessionEntry[], request: CapturedRequest): AgentMessage[] | string {
+export function messagesSince(
+  branchEntries: readonly SessionEntry[],
+  request: CapturedRequest,
+): AgentMessage[] | string {
   const current = buildSessionProjection([...branchEntries]).messages.filter((message) => message.role !== "system");
   for (let index = request.messages.length - 1; index >= 0; index--) {
     const message = request.messages[index]!;
@@ -79,7 +87,11 @@ function preview(message: ReturnType<typeof convertToLlm>[number]): string | und
   } else if (Array.isArray(content) && (message.role === "user" || message.role === "assistant")) {
     text = content
       .flatMap((block: any) =>
-        block?.type === "text" ? [block.text] : block?.type === "toolCall" ? [`[tool call: ${block.name} ${JSON.stringify(block.arguments)}]`] : [],
+        block?.type === "text"
+          ? [block.text]
+          : block?.type === "toolCall"
+            ? [`[tool call: ${block.name} ${JSON.stringify(block.arguments)}]`]
+            : [],
       )
       .join("\n");
   }
@@ -97,7 +109,11 @@ export interface KeptStart {
   count: number;
 }
 
-export function keptStart(branchEntries: readonly SessionEntry[], firstKeptEntryId: string, sent: readonly AgentMessage[]): KeptStart | undefined {
+export function keptStart(
+  branchEntries: readonly SessionEntry[],
+  firstKeptEntryId: string,
+  sent: readonly AgentMessage[],
+): KeptStart | undefined {
   const projected = buildSessionProjection([...branchEntries]).entries;
   const start = projected.findIndex((entry) => entry.sourceEntry.id === firstKeptEntryId);
   if (start < 0) return undefined;
@@ -145,16 +161,20 @@ export function cachedInstruction(options: {
   sanitize: (text: string) => string;
 }): string {
   const { kept } = options;
-  const repeated = kept.fromEnd > 1
-    ? ` Several kept messages begin with this text; it is number ${kept.fromEnd} of them, counting back from the end.`
-    : "";
+  const repeated =
+    kept.fromEnd > 1
+      ? ` Several kept messages begin with this text; it is number ${kept.fromEnd} of them, counting back from the end.`
+      : "";
   const toolCalls = kept.text.includes("[tool call: ") ? " Tool calls are written as [tool call: name arguments]." : "";
   const prompt = options.hasPreviousCheckpoint
     ? withLeadIn(
-      options.updatePrompt,
-      `The conversation above opens with an earlier checkpoint; it is the ${PREVIOUS_TAG} in the rules below. Merge the turns after it, up to the kept start, into that checkpoint using an intelligent Delta-Merge.`,
-    )
-    : withLeadIn(options.initialPrompt, "Produce a structured context checkpoint of the conversation above, up to the kept start.");
+        options.updatePrompt,
+        `The conversation above opens with an earlier checkpoint; it is the ${PREVIOUS_TAG} in the rules below. Merge the turns after it, up to the kept start, into that checkpoint using an intelligent Delta-Merge.`,
+      )
+    : withLeadIn(
+        options.initialPrompt,
+        "Produce a structured context checkpoint of the conversation above, up to the kept start.",
+      );
   const sections = [
     `Stop working on the task and do not call any tools. Write a context checkpoint of the conversation above for the agent that will continue this work. It will read your checkpoint followed by the last ${kept.count} messages of this conversation, which stay in context verbatim.`,
     `The kept messages start with the message that begins with the text in ${KEPT_OPEN} below.${repeated}${toolCalls}\n\n${KEPT_OPEN}\n${options.sanitize(kept.text)}\n${KEPT_CLOSE}`,

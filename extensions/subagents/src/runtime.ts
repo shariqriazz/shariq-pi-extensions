@@ -11,8 +11,9 @@ import { BackendRegistry, type SubagentBackend } from "./backend.ts";
 import { piBackend } from "./backends/pi.ts";
 import type { BackendName } from "./domain.ts";
 
-const BackendRegistryLive = Layer.sync(BackendRegistry, () =>
-  new Map<BackendName, SubagentBackend>([["pi", piBackend]]),
+const BackendRegistryLive = Layer.sync(
+  BackendRegistry,
+  () => new Map<BackendName, SubagentBackend>([["pi", piBackend]]),
 );
 
 import { SubagentManagerLive } from "./manager.ts";
@@ -35,10 +36,7 @@ export async function runTool<A, E>(
   effect: Effect.Effect<A, E>,
   options: { signal?: AbortSignal; interruptMessage?: string } = {},
 ) {
-  const exit = await runtime.runPromiseExit(
-    effect,
-    options.signal ? { signal: options.signal } : undefined,
-  );
+  const exit = await runtime.runPromiseExit(effect, options.signal ? { signal: options.signal } : undefined);
   if (Exit.isSuccess(exit)) return exit.value;
   if (Cause.hasInterruptsOnly(exit.cause)) {
     throw new Error(options.interruptMessage ?? "Operation was aborted.");

@@ -21,7 +21,9 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   const hooks: string[] = [];
   const fakePi = {
     events: {
-      on() { return () => {}; },
+      on() {
+        return () => {};
+      },
       emit() {},
     },
     registerTool(definition: any) {
@@ -43,18 +45,21 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
 
   extension(fakePi as never);
 
-  assert.deepEqual([...tools.keys()], [
-    "spawn_agent",
-    "wait_agent",
-    "close_agent",
-    "check_agent",
-    "list_agent_profiles",
-    "list_agents",
-    "send_message",
-    "apply_agent_changes",
-    "reply_question",
-    "task",
-  ]);
+  assert.deepEqual(
+    [...tools.keys()],
+    [
+      "spawn_agent",
+      "wait_agent",
+      "close_agent",
+      "check_agent",
+      "list_agent_profiles",
+      "list_agents",
+      "send_message",
+      "apply_agent_changes",
+      "reply_question",
+      "task",
+    ],
+  );
   assert.deepEqual(commands, ["btw", "subagents"]);
   for (const tool of tools.values()) {
     assert.equal(tool.exposure, "model-only", `${tool.name} should stay declared to the model`);
@@ -91,13 +96,7 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
   assert.match(guidelines, /only when the user asks to delegate/);
   assert.match(guidelines, /end the turn/);
   assert.match(guidelines, /instead of polling wait_agent, check_agent, or list_agents/);
-  for (const legacy of [
-    "subagent_spawn",
-    "subagent_wait",
-    "subagent_cancel",
-    "subagent_check",
-    "subagent_list",
-  ]) {
+  for (const legacy of ["subagent_spawn", "subagent_wait", "subagent_cancel", "subagent_check", "subagent_list"]) {
     assert.equal(tools.has(legacy), false);
   }
 });
@@ -105,7 +104,12 @@ test("registers one Pi-only canonical API and the takeover dashboard", () => {
 test("fusion mode swaps the lead's delegation rule and shows the fusion skill only to the lead", () => {
   const handlers = new Map<string, (event: any, ctx: any) => any>();
   const fakePi = {
-    events: { on() { return () => {}; }, emit() {} },
+    events: {
+      on() {
+        return () => {};
+      },
+      emit() {},
+    },
     registerTool() {},
     registerCommand() {},
     registerMessageRenderer() {},
@@ -114,7 +118,9 @@ test("fusion mode swaps the lead's delegation rule and shows the fusion skill on
       handlers.set(name, handler);
     },
     sendMessage() {},
-    getThinkingLevel() { return "medium"; },
+    getThinkingLevel() {
+      return "medium";
+    },
   };
   extension(fakePi as never);
   const hook = handlers.get("before_agent_start")!;
@@ -128,10 +134,16 @@ test("fusion mode swaps the lead's delegation rule and shows the fusion skill on
     const options = {
       selectedTools: tools,
       toolGuidelines: tools.includes("spawn_agent") ? { spawn_agent: [...SUBAGENT_SPAWN_PROMPT_GUIDELINES] } : {},
-      skills: [{ name: "fusion", baseDir: fusionSkillDir }, { name: "other", baseDir: cwd }],
+      skills: [
+        { name: "fusion", baseDir: fusionSkillDir },
+        { name: "other", baseDir: cwd },
+      ],
     };
     hook({ systemPromptOptions: options }, { cwd, isProjectTrusted: () => false });
-    return { guidelines: options.toolGuidelines.spawn_agent?.join("\n") ?? "", skills: options.skills.map((skill) => skill.name) };
+    return {
+      guidelines: options.toolGuidelines.spawn_agent?.join("\n") ?? "",
+      skills: options.skills.map((skill) => skill.name),
+    };
   };
   try {
     const off = run(["read", "spawn_agent"]);
@@ -141,7 +153,10 @@ test("fusion mode swaps the lead's delegation rule and shows the fusion skill on
     saveConfigDocument("global", cwd, JSON.stringify({ fusion: true }));
     const lead = run(["read", "spawn_agent"]);
     assert.match(lead.guidelines, /Fusion mode is on, so delegate without being asked/);
-    assert.match(lead.guidelines, /results you report or act on; a feature that computes metrics is still a sidekick build/);
+    assert.match(
+      lead.guidelines,
+      /results you report or act on; a feature that computes metrics is still a sidekick build/,
+    );
     assert.match(lead.guidelines, /self-contained .*hand it to the sidekick/);
     assert.match(lead.guidelines, /wrong result looks plausible.*you draw and check the conclusions/);
     assert.doesNotMatch(lead.guidelines, /only when the user asks to delegate/);

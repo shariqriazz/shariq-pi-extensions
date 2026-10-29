@@ -39,7 +39,12 @@ export async function createAgentWorktree(exec: Exec, cwd: string, label: string
   }
   const baseCommit = await checked(exec, "git", ["-C", cwd, "rev-parse", "HEAD"]);
   const repoHash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 12);
-  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "agent";
+  const slug =
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) || "agent";
   const suffix = randomUUID().slice(0, 8);
   const worktreePath = path.join(getAgentDir(), "subagent-worktrees", repoHash, `${slug}-${suffix}`);
   const branch = `pi-subagent/${slug}-${suffix}`;
@@ -57,11 +62,21 @@ export async function discardAgentWorktree(exec: Exec, info: WorktreeInfo) {
 }
 
 export async function inspectAgentWorktree(exec: Exec, info: WorktreeInfo) {
-  const baseCommit = info.baseCommit ?? await checked(exec, "git", ["-C", info.repoRoot, "merge-base", "HEAD", info.branch]);
+  const baseCommit =
+    info.baseCommit ?? (await checked(exec, "git", ["-C", info.repoRoot, "merge-base", "HEAD", info.branch]));
   const status = await checked(exec, "git", ["-C", info.path, "status", "--porcelain"]);
   const names = await checked(exec, "git", ["-C", info.path, "diff", "--name-only", baseCommit]);
-  const untracked = status.split(/\r?\n/).filter((line) => line.startsWith("?? ")).map((line) => line.slice(3));
-  const commitsText = await checked(exec, "git", ["-C", info.repoRoot, "rev-list", "--reverse", `${baseCommit}..${info.branch}`]);
+  const untracked = status
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("?? "))
+    .map((line) => line.slice(3));
+  const commitsText = await checked(exec, "git", [
+    "-C",
+    info.repoRoot,
+    "rev-list",
+    "--reverse",
+    `${baseCommit}..${info.branch}`,
+  ]);
   return {
     baseCommit,
     dirty: !!status,
@@ -70,14 +85,11 @@ export async function inspectAgentWorktree(exec: Exec, info: WorktreeInfo) {
   };
 }
 
-export async function applyAgentWorktreeTo(
-  exec: Exec,
-  info: WorktreeInfo,
-  targetCwd: string,
-) {
+export async function applyAgentWorktreeTo(exec: Exec, info: WorktreeInfo, targetCwd: string) {
   const mark = await exec("git", ["-C", info.path, "add", "-N", "--", "."]);
   if (mark.code !== 0) throw commandError("git add -N", mark);
-  const baseCommit = info.baseCommit ?? await checked(exec, "git", ["-C", info.repoRoot, "merge-base", "HEAD", info.branch]);
+  const baseCommit =
+    info.baseCommit ?? (await checked(exec, "git", ["-C", info.repoRoot, "merge-base", "HEAD", info.branch]));
   const diff = await exec("git", ["-C", info.path, "diff", "--binary", baseCommit]);
   if (diff.code !== 0) throw commandError("git diff", diff);
   if (!diff.stdout.trim()) return { action: "patch" as const, changed: false, files: [] as string[] };
@@ -105,25 +117,28 @@ async function commitDirtyWorktree(exec: Exec, info: WorktreeInfo, label: string
   if (!status) return;
   await checked(exec, "git", ["-C", info.path, "add", "-A", "--", "."]);
   await checked(exec, "git", [
-    "-C", info.path,
-    "-c", "user.name=Pi Subagent",
-    "-c", "user.email=pi-subagent@localhost",
-    "commit", "-m", `Apply ${label} subagent changes`,
+    "-C",
+    info.path,
+    "-c",
+    "user.name=Pi Subagent",
+    "-c",
+    "user.email=pi-subagent@localhost",
+    "commit",
+    "-m",
+    `Apply ${label} subagent changes`,
   ]);
 }
 
 async function ensureCleanSource(exec: Exec, info: WorktreeInfo) {
   const status = await checked(exec, "git", ["-C", info.repoRoot, "status", "--porcelain"]);
   if (status) {
-    throw new Error("The source repository must be clean for cherry-pick or merge. Use action=patch to preserve unrelated working-tree changes.");
+    throw new Error(
+      "The source repository must be clean for cherry-pick or merge. Use action=patch to preserve unrelated working-tree changes.",
+    );
   }
 }
 
-async function integrationArgs(
-  exec: Exec,
-  info: WorktreeInfo,
-  action: "cherry-pick" | "merge",
-) {
+async function integrationArgs(exec: Exec, info: WorktreeInfo, action: "cherry-pick" | "merge") {
   const inspected = await inspectAgentWorktree(exec, info);
   if (inspected.commits.length === 0) return { inspected, args: [] as string[] };
   if (action === "merge") return { inspected, args: ["merge", "--no-ff", "--no-edit", info.branch] };
@@ -149,22 +164,30 @@ export async function integrateAgentWorktree(
   await checked(exec, "git", ["-C", info.repoRoot, "worktree", "add", "--detach", preflightPath, "HEAD"]);
   try {
     const preflight = await exec("git", [
-      "-C", preflightPath,
-      "-c", "user.name=Pi Subagent",
-      "-c", "user.email=pi-subagent@localhost",
+      "-C",
+      preflightPath,
+      "-c",
+      "user.name=Pi Subagent",
+      "-c",
+      "user.email=pi-subagent@localhost",
       ...args,
     ]);
     if (preflight.code !== 0) {
-      throw new Error(`Preflight found ${action} conflicts; the source repository was not changed. ${(preflight.stderr || preflight.stdout).trim()}`);
+      throw new Error(
+        `Preflight found ${action} conflicts; the source repository was not changed. ${(preflight.stderr || preflight.stdout).trim()}`,
+      );
     }
   } finally {
     await exec("git", ["-C", info.repoRoot, "worktree", "remove", "--force", preflightPath]);
   }
 
   const applied = await exec("git", [
-    "-C", info.repoRoot,
-    "-c", "user.name=Pi Subagent",
-    "-c", "user.email=pi-subagent@localhost",
+    "-C",
+    info.repoRoot,
+    "-c",
+    "user.name=Pi Subagent",
+    "-c",
+    "user.email=pi-subagent@localhost",
     ...args,
   ]);
   if (applied.code !== 0) {

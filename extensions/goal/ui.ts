@@ -1,8 +1,4 @@
-import type {
-  ExtensionCommandContext,
-  KeybindingsManager,
-  Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import {
@@ -19,12 +15,7 @@ import {
 } from "../shared/tui-dashboard.ts";
 import type { GoalProgressItem, GoalState, GoalStatus } from "./types.ts";
 
-export type GoalDashboardAction =
-  | "close"
-  | "edit"
-  | "pause"
-  | "resume"
-  | "clear";
+export type GoalDashboardAction = "close" | "edit" | "pause" | "resume" | "clear";
 
 interface GoalDashboardOptions {
   getGoal(): GoalState | null;
@@ -147,10 +138,7 @@ export class GoalDashboard implements Component {
     const progress = goal?.progress ?? [];
     this.selected = Math.min(this.selected, Math.max(0, progress.length - 1));
 
-    if (
-      this.keybindings.matches(data, "tui.select.cancel") ||
-      data === "q"
-    ) {
+    if (this.keybindings.matches(data, "tui.select.cancel") || data === "q") {
       this.close("close");
       return;
     }
@@ -208,12 +196,18 @@ export class GoalDashboard implements Component {
     const titleRight = `${status}${theme.fg("dim", ` · ${elapsed}`)}`;
     const lines: string[] = [joinSides(`  ${titleLeft}`, `${titleRight}  `, width)];
 
-    const progressText = goal.progress.length > 0
-      ? `${completed}/${goal.progress.length} complete`
-      : "checklist not started";
-    const progressMeter = goal.progress.length > 0
-      ? meter(theme, completed, goal.progress.length, Math.min(28, Math.max(12, width - 48)), completed === goal.progress.length ? "success" : "active")
-      : theme.fg("borderMuted", "────────");
+    const progressText =
+      goal.progress.length > 0 ? `${completed}/${goal.progress.length} complete` : "checklist not started";
+    const progressMeter =
+      goal.progress.length > 0
+        ? meter(
+            theme,
+            completed,
+            goal.progress.length,
+            Math.min(28, Math.max(12, width - 48)),
+            completed === goal.progress.length ? "success" : "active",
+          )
+        : theme.fg("borderMuted", "────────");
     lines.push(
       joinSides(
         `  ${theme.fg("muted", "PROGRESS")}  ${progressMeter} ${theme.fg("text", progressText)}`,
@@ -266,10 +260,7 @@ export class GoalDashboard implements Component {
         const marker = selected ? theme.fg("accent", "❯") : " ";
         const glyph = theme.fg(progressColor(item), progressGlyph(item));
         const id = theme.fg("dim", `[${oneLine(item.id)}]`);
-        const itemStatus = theme.fg(
-          progressColor(item),
-          item.status.replaceAll("_", " "),
-        );
+        const itemStatus = theme.fg(progressColor(item), item.status.replaceAll("_", " "));
         const right = `${itemStatus} `;
         const left = ` ${marker} ${glyph} ${id} ${selected ? theme.fg("accent", oneLine(item.title)) : theme.fg("text", oneLine(item.title))}`;
         lines.push(framedRow(theme, joinSides(left, right, Math.max(0, width - 2)), width, selected));
@@ -293,9 +284,7 @@ export class GoalDashboard implements Component {
         ),
       );
     } else if (goal.blockedTurnStreak > 0) {
-      lines.push(
-        `  ${theme.fg("warning", `blocked gate ${goal.blockedTurnStreak}/3 turns`)}`,
-      );
+      lines.push(`  ${theme.fg("warning", `blocked gate ${goal.blockedTurnStreak}/3 turns`)}`);
     }
 
     const toggle = goal.status === "active" ? "p pause" : goal.status === "complete" ? "" : "r resume";
@@ -305,7 +294,9 @@ export class GoalDashboard implements Component {
       "e edit",
       "x clear",
       `${configuredKeys(this.keybindings, "tui.select.cancel")} close`,
-    ].filter(Boolean).join(" · ");
+    ]
+      .filter(Boolean)
+      .join(" · ");
     lines.push(truncateToWidth(theme.fg("dim", `  ${hints}`), width));
     return lines.map((line) => padLine(line, width));
   }
@@ -319,8 +310,7 @@ export async function openGoalDashboard(
 ): Promise<GoalDashboardAction> {
   if (ctx.mode !== "tui") return "close";
   return ctx.ui.custom<GoalDashboardAction>(
-    (tui, theme, keybindings, done) =>
-      new GoalDashboard(tui, theme, keybindings, options, done),
+    (tui, theme, keybindings, done) => new GoalDashboard(tui, theme, keybindings, options, done),
     {
       overlay: true,
       overlayOptions: {

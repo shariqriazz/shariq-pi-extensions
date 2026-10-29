@@ -1,13 +1,5 @@
 import type { ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
-import {
-  fuzzyFilter,
-  Input,
-  Key,
-  matchesKey,
-  truncateToWidth,
-  visibleWidth,
-  type TUI,
-} from "@earendil-works/pi-tui";
+import { fuzzyFilter, Input, Key, matchesKey, truncateToWidth, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { frameBottom, frameTop, framedRow, joinSides, padLine } from "./tui-dashboard.ts";
 
 export type ModelPickerItem = {
@@ -87,8 +79,10 @@ export class ModelPickerComponent {
     if (!query.trim()) {
       this.filteredItems = [...this.allItems];
     } else {
-      this.filteredItems = fuzzyFilter(this.allItems, query, (item) =>
-        `${item.provider} ${item.id} ${item.name ?? ""} ${item.description ?? ""}`,
+      this.filteredItems = fuzzyFilter(
+        this.allItems,
+        query,
+        (item) => `${item.provider} ${item.id} ${item.name ?? ""} ${item.description ?? ""}`,
       );
     }
     this.selected = Math.max(0, Math.min(this.selected, this.filteredItems.length - 1));
@@ -103,7 +97,10 @@ export class ModelPickerComponent {
     if (matchesKey(data, Key.return) || matchesKey(data, Key.enter)) {
       const selectedItem = this.filteredItems[this.selected];
       if (selectedItem) {
-        this.close(selectedItem.value ?? (selectedItem.provider === "special" ? selectedItem.id : `${selectedItem.provider}/${selectedItem.id}`));
+        this.close(
+          selectedItem.value ??
+            (selectedItem.provider === "special" ? selectedItem.id : `${selectedItem.provider}/${selectedItem.id}`),
+        );
       } else {
         this.close(undefined);
       }
@@ -163,10 +160,7 @@ export class ModelPickerComponent {
     const total = this.filteredItems.length;
     let start = 0;
     if (total > listHeight) {
-      start = Math.min(
-        Math.max(0, this.selected - Math.floor(listHeight / 2)),
-        total - listHeight,
-      );
+      start = Math.min(Math.max(0, this.selected - Math.floor(listHeight / 2)), total - listHeight);
     }
     const visible = this.filteredItems.slice(start, start + listHeight);
 
@@ -183,17 +177,15 @@ export class ModelPickerComponent {
         const isSel = index === this.selected;
         const marker = isSel ? this.theme.fg("accent", "❯") : item.isCurrent ? this.theme.fg("success", "✓") : " ";
 
-        const providerBadge = item.provider === "special"
-          ? ""
-          : `${this.theme.fg("dim", "[")}${this.theme.fg("muted", item.provider)}${this.theme.fg("dim", "]")} `;
+        const providerBadge =
+          item.provider === "special"
+            ? ""
+            : `${this.theme.fg("dim", "[")}${this.theme.fg("muted", item.provider)}${this.theme.fg("dim", "]")} `;
 
-        const nameText = item.name && item.name !== item.id
-          ? `${item.name} ${this.theme.fg("dim", `(${item.id})`)}`
-          : item.id;
+        const nameText =
+          item.name && item.name !== item.id ? `${item.name} ${this.theme.fg("dim", `(${item.id})`)}` : item.id;
 
-        const mainText = isSel
-          ? this.theme.fg("accent", this.theme.bold(nameText))
-          : this.theme.fg("text", nameText);
+        const mainText = isSel ? this.theme.fg("accent", this.theme.bold(nameText)) : this.theme.fg("text", nameText);
 
         const metaParts: string[] = [];
         if (item.contextWindow) metaParts.push(formatContextSize(item.contextWindow));
@@ -219,7 +211,11 @@ export class ModelPickerComponent {
     // Top status line and framing
     const status = `${this.filteredItems.length} model${this.filteredItems.length === 1 ? "" : "s"}`;
     lines.push(
-      joinSides(`  ${this.theme.fg("accent", this.theme.bold("◆ " + this.title.toUpperCase()))}`, `${this.theme.fg("muted", status)}  `, width),
+      joinSides(
+        `  ${this.theme.fg("accent", this.theme.bold("◆ " + this.title.toUpperCase()))}`,
+        `${this.theme.fg("muted", status)}  `,
+        width,
+      ),
       frameTop(this.theme, width, this.title),
     );
 
@@ -235,10 +231,7 @@ export class ModelPickerComponent {
   }
 }
 
-export function buildModelPickerItems(
-  ctx: ExtensionContext,
-  options: ModelPickerOptions = {},
-): ModelPickerItem[] {
+export function buildModelPickerItems(ctx: ExtensionContext, options: ModelPickerOptions = {}): ModelPickerItem[] {
   const items: ModelPickerItem[] = [];
 
   if (options.extraChoices) {
@@ -281,8 +274,7 @@ export async function openModelPicker(
   const items = options.items ?? buildModelPickerItems(ctx, options);
 
   return ctx.ui.custom<string | undefined>(
-    (tui, theme, keys, done) =>
-      new ModelPickerComponent(tui, theme, keys, options, items, done),
+    (tui, theme, keys, done) => new ModelPickerComponent(tui, theme, keys, options, items, done),
     {
       overlay: true,
       overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
