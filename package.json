@@ -63,7 +63,7 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "node scripts/run-tests.mjs",
     "validate:package": "node scripts/validate-package.mjs",
-    "validate": "bun run check && node scripts/run-tests.mjs && bun run validate:package",
+    "validate": "bun run check && bun fmt --check && node scripts/run-tests.mjs && bun run validate:package",
     "pack:inspect": "npm pack --dry-run",
     "prepublishOnly": "bun run validate"
   },

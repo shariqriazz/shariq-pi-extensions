@@ -16,11 +16,14 @@ mise exec --locked -- bun install
 ## Validation
 
 ```bash
+mise exec --locked -- bun fmt
 mise exec --locked -- bun run validate
 mise exec --locked -- bun run pack:inspect
 ```
 
-`validate` runs the TypeScript check, every `*.test.ts` file under `extensions/` with Node's test runner, and `scripts/validate-package.mjs`. The package check confirms that declared extensions and skills exist, are sorted, have READMEs and tests, and that the npm payload contains no credentials, `.env` files, caches, databases, sessions, logs, or first-party tests.
+`validate` runs the TypeScript check, `bun fmt --check`, every `*.test.ts` file under `extensions/` with Node's test runner, and `scripts/validate-package.mjs`. The package check confirms that declared extensions and skills exist, are sorted, have READMEs and tests, and that the npm payload contains no credentials, `.env` files, caches, databases, sessions, logs, or first-party tests.
+
+`bun fmt` formats TypeScript, JavaScript, Markdown, JSON, and YAML with the settings in `bunfig.toml`. The bulk reformat commit is listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip it in `git blame`.
 
 Read the `pack:inspect` file list before committing a package change.
 

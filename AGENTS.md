@@ -8,7 +8,8 @@ This public repository packages the user's Pi extensions as one suite distribute
 
 - `mise install --locked` — install the pinned Bun and Node toolchains.
 - `mise exec --locked -- bun install` — install locked dependencies.
-- `mise exec --locked -- bun run validate` — typecheck, run runtime tests under Node, and validate package boundaries.
+- `mise exec --locked -- bun fmt` — format the repository (`bunfig.toml`, print width 120).
+- `mise exec --locked -- bun run validate` — typecheck, check formatting, run runtime tests under Node, and validate package boundaries.
 - `mise exec --locked -- bun run pack:inspect` — inspect the package payload.
 
 ## Package boundaries
