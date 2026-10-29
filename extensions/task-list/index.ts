@@ -307,7 +307,7 @@ export default function taskListExtension(pi: ExtensionAPI) {
     label: "Task List",
     description: `Read or replace this session's ordered task list. Omit tasks to read it. Supplying tasks replaces the whole list, so include every item to keep, with stable ids. While pending work remains, keep at least one item in_progress.
 
-Send the first list together with the first real action rather than in a turn of its own. Update the list only when a task finishes, is blocked or cancelled, or the scope changes, and pair the update with the next action. Never spend a turn only on the list: when the last result finishes the work, give the final response without a separate update. The list records progress but does not prove it.`,
+Send the first list as its own tool call in the same response as the first real action, not inside a script and not in a turn of its own. Update the list only when a task finishes, is blocked or cancelled, or the scope changes, and pair the update with the next action. Never spend a turn only on the list: when the last result finishes the work, give the final response without a separate update. The list records progress but does not prove it.`,
     promptSnippet: "Track a visible plan for multi-deliverable work.",
     promptGuidelines: [
       "Use task_list only when the user asks for a plan or checklist, the request has several separate deliverables, or long multi-phase work benefits from visible progress. Work on a single objective directly, even when it takes many reads, edits, and test runs.",

@@ -83,7 +83,7 @@ test("registers a whole-list tool, a narrow trigger, and /tasks", () => {
   assert.ok(h.commands.has("tasks"));
   assert.equal(tool.exposure, "model-only");
   assert.match(tool.description, /replaces the whole list/);
-  assert.match(tool.description, /together with the first real action/);
+  assert.match(tool.description, /as its own tool call in the same response as the first real action, not inside a script/);
   assert.match(tool.description, /only when a task finishes/);
   assert.match(tool.description, /Never spend a turn only on the list/);
   const guidance = tool.promptGuidelines.join("\n");
