@@ -23,7 +23,7 @@ All parent tools use `model-only` exposure, so codemode scripts cannot call them
 
 The tool guidance tells the model to delegate only when the user asks for delegation or parallel work.
 
-Children receive `message_parent`, `ask_parent`, `list_peers`, and `message_peer`. Peer messages go through the main session's manager and can steer a running child or continue an idle one.
+Children receive `message_parent`, `ask_parent`, `list_peers`, and `message_peer`. `list_peers` lists the other agents, not the caller, and a child cannot message itself. Peer messages go through the main session's manager and can steer a running child or continue an idle one.
 
 ## Result delivery
 

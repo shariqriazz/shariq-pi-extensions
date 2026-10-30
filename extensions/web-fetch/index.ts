@@ -200,6 +200,24 @@ function readBounded(res: http.IncomingMessage, maxBytes: number): Promise<{ byt
   });
 }
 
+/**
+ * Keeps cookies for one fetch's redirect chain, because some sites (Google's docs among them) redirect
+ * until a cookie comes back. Host-only and discarded after the call; Domain and Path are ignored.
+ */
+function storeCookies(jar: Map<string, Map<string, string>>, host: string, setCookie: string[] | undefined): void {
+  for (const line of setCookie ?? []) {
+    const [pair = "", ...attributes] = line.split(";");
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    const cookies = jar.get(host) ?? new Map<string, string>();
+    if (attributes.some((attribute) => /^\s*max-age\s*=\s*(0|-)/i.test(attribute))) cookies.delete(name);
+    else cookies.set(name, value);
+    jar.set(host, cookies);
+  }
+}
+
 function request(
   url: URL,
   headers: Record<string, string>,
@@ -208,8 +226,11 @@ function request(
   open: Set<http.ClientRequest>,
   allowPrivate: boolean,
   redirects = 0,
+  jar = new Map<string, Map<string, string>>(),
 ): Promise<RawFetchResponse> {
   const transport = url.protocol === "https:" ? https : http;
+  const cookies = jar.get(url.host);
+  const cookie = cookies?.size ? [...cookies].map(([name, value]) => `${name}=${value}`).join("; ") : undefined;
   return new Promise((resolve, reject) => {
     // Inside the executor so a blocked redirect target rejects instead of throwing.
     checkLiteralHost(url, allowPrivate);
@@ -217,7 +238,7 @@ function request(
       url,
       {
         method: "GET",
-        headers: { ...headers, "Accept-Encoding": "gzip, deflate, br" },
+        headers: { ...headers, "Accept-Encoding": "gzip, deflate, br", ...(cookie ? { Cookie: cookie } : {}) },
         lookup: guardedLookup(allowPrivate),
         signal,
       },
@@ -227,6 +248,7 @@ function request(
         if ([301, 302, 303, 307, 308].includes(status) && location) {
           // Close the redirect body before following; never drain it unbounded.
           res.destroy();
+          storeCookies(jar, url.host, res.headers["set-cookie"]);
           if (redirects >= MAX_REDIRECTS) return reject(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`));
           let next: URL;
           try {
@@ -234,7 +256,7 @@ function request(
           } catch (error) {
             return reject(error);
           }
-          request(next, headers, maxBytes, signal, open, allowPrivate, redirects + 1).then(resolve, reject);
+          request(next, headers, maxBytes, signal, open, allowPrivate, redirects + 1, jar).then(resolve, reject);
           return;
         }
         const declared = Number.parseInt(header(res, "content-length") ?? "", 10);

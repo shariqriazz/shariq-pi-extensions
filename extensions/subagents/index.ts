@@ -197,14 +197,20 @@ export default function (pi: ExtensionAPI) {
         { deliverAs: "followUp", triggerTurn: true },
       );
     },
+    // A child that sees itself among its peers can mistake itself for a sibling and message itself.
     listPeers() {
-      return manager.view.list().map((peer) => ({
-        id: peer.id,
-        title: peer.title,
-        status: peer.status,
-      }));
+      return manager.view
+        .list()
+        .filter((peer) => peer.id !== senderId)
+        .map((peer) => ({
+          id: peer.id,
+          title: peer.title,
+          status: peer.status,
+        }));
     },
     async messagePeer(id: string, message: string) {
+      if (id === senderId)
+        throw new Error(`"${id}" is this agent ("${title}"); message a sibling from list_peers instead.`);
       const target = manager.view.get(id);
       if (!target) throw new Error(`Unknown peer agent "${id}".`);
       const base = {
