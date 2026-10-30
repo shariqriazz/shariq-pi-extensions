@@ -530,19 +530,23 @@ export default function (pi: ExtensionAPI) {
     ui.setStatus("subagents", undefined);
   };
 
+  const resultKey = (id: string) => `subagent:${id}`;
   const deliverResult = (snap: SubagentSnapshot) => {
-    deliverSettlement({
-      customType: "subagent-result",
-      content: buildSubagentResultMessage({
-        id: snap.id,
-        title: snap.title,
-        status: snap.status,
-        errorText: snap.errorText,
-        output: truncatedOutput(snap),
-      }),
-      display: true,
-      details: { id: snap.id, title: snap.title, status: snap.status },
-    });
+    deliverSettlement(
+      {
+        customType: "subagent-result",
+        content: buildSubagentResultMessage({
+          id: snap.id,
+          title: snap.title,
+          status: snap.status,
+          errorText: snap.errorText,
+          output: truncatedOutput(snap),
+        }),
+        display: true,
+        details: { id: snap.id, title: snap.title, status: snap.status },
+      },
+      resultKey(snap.id),
+    );
   };
 
   const onSettled = (snap: SubagentSnapshot, consumed: boolean) => {
@@ -858,6 +862,8 @@ export default function (pi: ExtensionAPI) {
       const snapshots = ids.map((id) => manager.view.get(id)!);
       const settled = snapshots.filter((snap) => snap.status !== "running");
       const pending = snapshots.filter((snap) => snap.status === "running");
+      // These results are returned here, so their queued notices must not arrive again later.
+      for (const snap of settled) deliverSettlement.withdraw(resultKey(snap.id));
 
       const sections: string[] = [];
       let remainingBytes = WAIT_OUTPUT_MAX_BYTES;

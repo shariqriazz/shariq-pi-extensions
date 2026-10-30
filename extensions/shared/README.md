@@ -8,7 +8,7 @@ Runtime helpers used by more than one extension. This directory is not an extens
 - `child-session.ts`: trust-aware resource loading for child sessions, the tool denylist for children, and bounded child shutdown.
 - `context-utilization.ts`: context usage and capacity formatting.
 - `model-picker.ts`: searchable model picker overlay.
-- `settlement-delivery.ts`: one queue per Pi session for asynchronous results. While the parent runs, results wait privately; at the idle edge they are delivered as custom messages and the last one starts a single model turn.
+- `settlement-delivery.ts`: one queue per Pi session for asynchronous results. While the parent runs, results wait privately; at the idle edge they are delivered as custom messages and the last one starts a single model turn. A sender can key a result and withdraw it before delivery when the model already saw it through a tool.
 - `tool-call-timeout.ts`: cancellation-aware time limits for registered tools; an already-cancelled call never starts, and tools that wait for a person can be exempted.
 - `tool-card.ts`: compact tool call and result cards with expandable output.
 - `tui-dashboard.ts`: width-safe, sanitized drawing helpers for terminal dashboards.

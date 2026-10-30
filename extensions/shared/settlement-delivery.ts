@@ -1,14 +1,19 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 type SettlementMessage = Parameters<ExtensionAPI["sendMessage"]>[0];
-type DeliverSettlement = (message: SettlementMessage) => void;
+interface DeliverSettlement {
+  /** Queue a result; `key` lets the sender withdraw it before it is delivered. */
+  (message: SettlementMessage, key?: string): void;
+  /** Drop a queued, undelivered result, for example one the model already read through a tool. */
+  withdraw(key: string): void;
+}
 
 type SessionKey = object;
 
 interface Coordinator {
   parentActive: boolean;
   shuttingDown: boolean;
-  pending: SettlementMessage[];
+  pending: Array<{ message: SettlementMessage; key?: string }>;
   flush(): void;
 }
 
@@ -31,10 +36,10 @@ function createCoordinator(pi: ExtensionAPI): Coordinator {
     flush() {
       if (coordinator.parentActive || coordinator.shuttingDown || coordinator.pending.length === 0) return;
       const batch = coordinator.pending.splice(0);
-      for (const message of batch.slice(0, -1)) {
+      for (const { message } of batch.slice(0, -1)) {
         pi.sendMessage(message, { triggerTurn: false });
       }
-      pi.sendMessage(batch.at(-1)!, { triggerTurn: true });
+      pi.sendMessage(batch.at(-1)!.message, { triggerTurn: true });
     },
   };
   return coordinator;
@@ -80,12 +85,19 @@ export function settlementDelivery(pi: ExtensionAPI): DeliverSettlement {
     sessionKey = undefined;
   });
 
-  return (message) => {
+  const deliver = ((message: SettlementMessage, key?: string) => {
     // session_start precedes model-owned terminal/subagent work. Fail closed if
     // a malformed host calls delivery before initialization instead of showing
     // asynchronous output as user-authored input.
     if (!coordinator || coordinator.shuttingDown) return;
-    coordinator.pending.push(message);
+    coordinator.pending.push({ message, key });
     coordinator.flush();
+  }) as DeliverSettlement;
+  // A result the model already saw through a tool during the run would otherwise
+  // start a turn of its own at the idle edge, only to be dismissed as old.
+  deliver.withdraw = (key) => {
+    if (!coordinator) return;
+    coordinator.pending = coordinator.pending.filter((entry) => entry.key !== key);
   };
+  return deliver;
 }

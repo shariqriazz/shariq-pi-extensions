@@ -155,10 +155,9 @@ test("settlement waits locally while the parent is active and flushes at agent_s
     context,
   );
   await new Promise((resolve) => setTimeout(resolve, 500));
-  const read = await tools
-    .get("read_terminal")
-    .execute("call-read", { id: started.details.id, cursor: 0, wait_ms: 0 }, undefined);
-  assert.equal(read.details.status, "done");
+  // list_terminals reports the exit without showing the output, so the result is still owed.
+  const listed = await tools.get("list_terminals").execute("call-list", {}, undefined);
+  assert.equal(listed.details.terminals.find((terminal: any) => terminal.id === started.details.id)?.status, "done");
   assert.equal(custom.length, 0, "active-parent settlement must stay out of Pi's visible queues");
   assert.deepEqual(user, []);
   hooks.get("agent_settled")?.({});

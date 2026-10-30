@@ -18,6 +18,8 @@ import { formatCompletion, formatReadResult, formatTerminal } from "./src/presen
 import { terminalElapsedMs, type TerminalReadResult, type TerminalSnapshot } from "./src/types.ts";
 import { openTerminalDashboard } from "./src/ui.ts";
 
+const resultKey = (id: string): string => `background-terminal:${id}`;
+
 const STATUS_KEY = "background-terminals";
 const ACTIVITY_SOURCE = "background-terminals";
 
@@ -72,8 +74,10 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     return manager;
   };
 
+  // The model saw this terminal's end through a tool, so its result must not arrive again later.
   const consume = (id: string): void => {
     pendingResults.delete(id);
+    deliverSettlement.withdraw(resultKey(id));
   };
 
   function updateStatus(): void {
@@ -109,17 +113,20 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     const snapshot = pendingResults.get(id);
     if (!snapshot) return;
     pendingResults.delete(id);
-    deliverSettlement({
-      customType: "background-terminal-result",
-      content: formatCompletion(snapshot),
-      display: true,
-      details: {
-        id: snapshot.id,
-        title: snapshot.title,
-        status: snapshot.status,
-        exitCode: snapshot.exitCode,
+    deliverSettlement(
+      {
+        customType: "background-terminal-result",
+        content: formatCompletion(snapshot),
+        display: true,
+        details: {
+          id: snapshot.id,
+          title: snapshot.title,
+          status: snapshot.status,
+          exitCode: snapshot.exitCode,
+        },
       },
-    });
+      resultKey(snapshot.id),
+    );
   }
 
   pi.on("session_start", (_event, ctx) => {
@@ -250,6 +257,8 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         waitMs: params.wait_ms,
         signal,
       });
+      // This read shows the end of the output and the final status.
+      if (result.snapshot.status !== "running") consume(params.id);
       return {
         content: [{ type: "text", text: formatReadResult(result) }],
         details: {

@@ -23,7 +23,7 @@ Delegate only when the user explicitly asks for it. Task size or convenience is 
 
 ## Wait by notification
 
-When a child finishes, its summary arrives as a new message that starts your next turn. Results that land while you are still working are held and delivered together when your turn ends.
+When a child finishes, its summary arrives as a new message that starts your next turn. Results that land while you are still working are held and delivered together when your turn ends; one that `wait_agent` already returned is not delivered again.
 
 After dispatch:
 

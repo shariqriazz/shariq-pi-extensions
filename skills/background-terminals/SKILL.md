@@ -19,7 +19,7 @@ Background terminals are real PTYs. They stream output, accept input and control
 
 Give `start_terminal` the exact command, a short title, and `working_dir` when it differs from the current directory. Set `wait_ms` only when startup output decides your next step.
 
-After the start, continue work that does not depend on the process, or end the turn. When the process exits, its final status and a bounded tail of its output arrive as a new message that starts your next turn. Continue the original task from that message; do not wait for the user, call `read_terminal` for the same output, or announce that you are waiting. If `start_terminal` already returned a settled result, no second message follows.
+After the start, continue work that does not depend on the process, or end the turn. When the process exits, its final status and a bounded tail of its output arrive as a new message that starts your next turn. Continue the original task from that message; do not wait for the user, call `read_terminal` for the same output, or announce that you are waiting. If `start_terminal`, `stop_terminal`, or `read_terminal` already returned the exit, no second message follows.
 
 ## Inspect only for a reason
 
