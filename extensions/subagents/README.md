@@ -27,7 +27,7 @@ Children receive `message_parent`, `ask_parent`, `list_peers`, and `message_peer
 
 ## Result delivery
 
-A child's result is delivered to the parent as a custom message. If the parent is idle, the message starts a new parent turn. If the parent is busy, results wait in a private queue and are delivered together when the parent's run settles, with only the last one starting a turn. They never appear as user-authored or follow-up input. A result that `wait_agent` already returned is withdrawn from the queue, so it does not arrive a second time. Background Terminals uses the same queue.
+A child's result is delivered to the parent as a custom message. If the parent is idle, the message starts a new parent turn. If the parent is busy, results wait in a private queue and are delivered together just before the parent's run would settle, continuing that run. They never appear as user-authored or follow-up input. A result that `wait_agent` already returned is withdrawn from the queue, so it does not arrive a second time. Background Terminals uses the same queue.
 
 ## Profiles and capabilities
 

@@ -19,7 +19,7 @@ scripts/                         test runner and package validation
 Entrypoints register tools, commands, events, renderers, and UI. Code moves to `extensions/shared` only when several extensions use the same contract. Two shared pieces tie the async extensions together:
 
 - the **Active work** dock merges live rows from Task List, Background Terminals, and Subagents into one bounded widget;
-- settlement delivery gives each Pi session one private queue for terminal and subagent results, delivered at the parent's idle edge.
+- settlement delivery gives each Pi session one private queue for terminal and subagent results, delivered before the parent's run settles so the run continues with them, or at the idle edge when nothing is running.
 
 The background-terminal and subagent skills ship beside their extensions, so a new machine gets the lifecycle guidance together with the tools.
 

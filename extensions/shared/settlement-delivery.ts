@@ -6,6 +6,11 @@ interface DeliverSettlement {
   (message: SettlementMessage, key?: string): void;
   /** Drop a queued, undelivered result, for example one the model already read through a tool. */
   withdraw(key: string): void;
+  /**
+   * Keep the run from settling until `done` resolves, so the work's result reaches the model in the
+   * same run. A new user message cancels every hold.
+   */
+  hold(key: string, done: Promise<void>): void;
 }
 
 type SessionKey = object;
@@ -14,8 +19,11 @@ interface Coordinator {
   parentActive: boolean;
   shuttingDown: boolean;
   pending: Array<{ message: SettlementMessage; key?: string }>;
+  holds: Map<string, Promise<void>>;
   flush(): void;
 }
+
+const HOLD_POLL_MS = 250;
 
 // Pi loads every extension entrypoint through its own module instance, so the
 // per-session coordinators live on a process-wide registry. Otherwise each
@@ -33,6 +41,7 @@ function createCoordinator(pi: ExtensionAPI): Coordinator {
     parentActive: false,
     shuttingDown: false,
     pending: [],
+    holds: new Map(),
     flush() {
       if (coordinator.parentActive || coordinator.shuttingDown || coordinator.pending.length === 0) return;
       const batch = coordinator.pending.splice(0);
@@ -48,9 +57,10 @@ function createCoordinator(pi: ExtensionAPI): Coordinator {
 /**
  * Coordinate asynchronous results across every suite extension in one Pi
  * session. Results that settle during a parent run stay in a private local
- * queue until agent_settled; Pi never renders them as queued user/follow-up
- * input. At the safe idle edge, earlier results are appended and the final
- * custom result starts exactly one model turn with the whole batch in context.
+ * queue; Pi never renders them as queued user/follow-up input. At
+ * agent_before_settle they are appended together and continue the same run, so
+ * hosts never see the session settle with a result waiting. Results that cannot
+ * continue the run, or arrive while idle, start exactly one turn at the idle edge.
  */
 export function settlementDelivery(pi: ExtensionAPI): DeliverSettlement {
   let coordinator: Coordinator | undefined;
@@ -69,6 +79,34 @@ export function settlementDelivery(pi: ExtensionAPI): DeliverSettlement {
   pi.on("agent_start", () => {
     if (coordinator) coordinator.parentActive = true;
   });
+  // Paseo and other hosts treat agent_settled as "done", so held results must start their turn
+  // before it: from agent_before_settle, inside the same run.
+  pi.on("agent_before_settle", async (event, ctx) => {
+    const active = coordinator;
+    if (!active || active.shuttingDown || event.outcome === "aborted") return;
+    while (active.holds.size > 0 && !active.shuttingDown) {
+      if (ctx.hasPendingMessages()) {
+        active.holds.clear();
+        break;
+      }
+      await Promise.race([...active.holds.values(), new Promise((resolve) => setTimeout(resolve, HOLD_POLL_MS))]);
+    }
+    if (active.shuttingDown || active.pending.length === 0) return;
+    const batch = active.pending.splice(0);
+    return {
+      entries: [
+        ...event.entries,
+        ...batch.map(({ message }) => ({
+          type: "custom_message" as const,
+          customType: message.customType,
+          content: message.content,
+          display: message.display ?? true,
+          details: message.details,
+        })),
+      ],
+      continue: true,
+    };
+  });
   pi.on("agent_settled", () => {
     if (!coordinator) return;
     coordinator.parentActive = false;
@@ -79,6 +117,7 @@ export function settlementDelivery(pi: ExtensionAPI): DeliverSettlement {
       coordinator.shuttingDown = true;
       coordinator.parentActive = false;
       coordinator.pending.length = 0;
+      coordinator.holds.clear();
     }
     if (sessionKey) coordinators.delete(sessionKey);
     coordinator = undefined;
@@ -98,6 +137,14 @@ export function settlementDelivery(pi: ExtensionAPI): DeliverSettlement {
   deliver.withdraw = (key) => {
     if (!coordinator) return;
     coordinator.pending = coordinator.pending.filter((entry) => entry.key !== key);
+  };
+  deliver.hold = (key, done) => {
+    const active = coordinator;
+    if (!active || active.shuttingDown) return;
+    active.holds.set(key, done);
+    void done.finally(() => {
+      if (active.holds.get(key) === done) active.holds.delete(key);
+    });
   };
   return deliver;
 }

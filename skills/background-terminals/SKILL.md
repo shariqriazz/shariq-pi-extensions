@@ -21,6 +21,8 @@ Give `start_terminal` the exact command, a short title, and `working_dir` when i
 
 After the start, continue work that does not depend on the process, or end the turn. When the process exits, its final status and a bounded tail of its output arrive as a new message that starts your next turn. Continue the original task from that message; do not wait for the user, call `read_terminal` for the same output, or announce that you are waiting. If `start_terminal`, `stop_terminal`, or `read_terminal` already returned the exit, no second message follows.
 
+Set `hold: true` on a finite job whose result the task needs before it can finish, such as a build, test run, or generator in an unattended or scheduled run. The run then stays open until the job exits instead of ending while it runs. Never set it for servers, watchers, or anything meant to keep running; a user message cancels the hold.
+
 ## Inspect only for a reason
 
 - Call `read_terminal` or `list_terminals` only when the user asks for progress or the process needs input, such as a prompt it printed. Do not read on a schedule or use `wait_ms` as a completion timer.

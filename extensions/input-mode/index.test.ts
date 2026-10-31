@@ -63,6 +63,7 @@ test("steer, interrupt, and follow-up modes preserve distinct input semantics", 
     const input = app.hooks.get("input")!;
     let aborts = 0;
     const context = {
+      signal: new AbortController().signal,
       abort() {
         aborts += 1;
       },
@@ -79,6 +80,9 @@ test("steer, interrupt, and follow-up modes preserve distinct input semantics", 
     assert.deepEqual(input(event, context), { action: "handled" });
     assert.equal(aborts, 1);
     assert.equal(app.sent.length, 0);
+    // With no model request to cancel, an interrupt steers instead of waiting for settlement.
+    assert.deepEqual(input(event, { abort: context.abort }), { action: "continue" });
+    assert.equal(aborts, 1);
     app.hooks.get("agent_settled")?.();
     assert.deepEqual(app.sent, [
       {
@@ -143,6 +147,7 @@ test("command validates direct input and exposes non-default mode status", async
     input(
       { type: "input", text: "x", source: "interactive", streamingBehavior: "steer" },
       {
+        signal: new AbortController().signal,
         abort() {
           aborts += 1;
         },

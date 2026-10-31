@@ -114,6 +114,10 @@ export function createInputModeExtension(options: InputModeExtensionOptions = {}
         return { action: "handled" };
       }
 
+      // No model request to cancel (compaction, or a run held open for a background job): steer instead,
+      // because abort cannot end those early and the input would wait for them.
+      if (!ctx.signal) return { action: "continue" };
+
       // Store before signalling abort so even a very fast settlement cannot
       // race past the replacement input. agent_settled is Pi's safe idle edge;
       // it starts one fresh turn after model/tool cancellation completes.

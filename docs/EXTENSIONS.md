@@ -26,7 +26,7 @@ Replaces Pi's compaction summary with a six-section checkpoint plus computed fil
 
 ### [Background terminals](../extensions/background-terminals/README.md)
 
-Managed PTYs for servers, watchers, long builds, and interactive programs: up to eight at once, bounded output in memory, private size-limited logs, and process-group shutdown on reload or exit. The model uses `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`; `/term` and `/ps` open the control center. When a model-started terminal exits, its result arrives as a custom message instead of requiring the model to poll.
+Managed PTYs for servers, watchers, long builds, and interactive programs: up to eight at once, bounded output in memory, private size-limited logs, and process-group shutdown on reload or exit. The model uses `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`; `/term` and `/ps` open the control center. When a model-started terminal exits, its result arrives as a custom message instead of requiring the model to poll; with `hold: true` the run stays open until a finite job exits, so scheduled runs handle its result before they end.
 
 ## Web access
 

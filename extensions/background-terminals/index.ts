@@ -47,6 +47,25 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
   const pendingResults = new Map<string, TerminalSnapshot>();
   const modelOwned = new Set<string>();
   const starting = new Set<string>();
+  // Terminals started with hold: true; resolving releases the run once the result is queued.
+  const holds = new Map<string, () => void>();
+  // Stopped through stop_terminal or /term stop: the caller already sees the final status.
+  const stopping = new Set<string>();
+  const stop = async (ids: string[]) => {
+    for (const id of ids) stopping.add(id);
+    try {
+      return await getManager().kill(ids);
+    } finally {
+      for (const id of ids) {
+        stopping.delete(id);
+        consume(id);
+      }
+    }
+  };
+  const releaseHold = (id: string): void => {
+    holds.get(id)?.();
+    holds.delete(id);
+  };
 
   const getManager = (): TerminalManager => {
     if (manager) return manager;
@@ -59,6 +78,17 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
         .map((s) => `${s.id}: "${oneLine(s.title)}" (pid ${s.pid})`);
     };
     manager.setOnSettled((snapshot) => {
+      try {
+        settle(snapshot);
+      } finally {
+        releaseHold(snapshot.id);
+      }
+    });
+    const settle = (snapshot: TerminalSnapshot): void => {
+      if (stopping.has(snapshot.id)) {
+        modelOwned.delete(snapshot.id);
+        return;
+      }
       if (!modelOwned.delete(snapshot.id)) {
         ui?.notify(
           `${snapshot.id} "${oneLine(snapshot.title)}" ${snapshot.status} (exit ${snapshot.exitCode ?? "?"})`,
@@ -68,7 +98,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       }
       pendingResults.set(snapshot.id, snapshot);
       if (!starting.has(snapshot.id)) flushResult(snapshot.id);
-    });
+    };
     unsubscribe = manager.view.subscribe(updateStatus);
     updateStatus();
     return manager;
@@ -141,6 +171,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
     pendingResults.clear();
     modelOwned.clear();
     starting.clear();
+    for (const id of [...holds.keys()]) releaseHold(id);
     unsubscribe?.();
     unsubscribe = undefined;
     ui?.setStatus(STATUS_KEY, undefined);
@@ -173,6 +204,11 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       wait_ms: Type.Optional(
         Type.Integer({ minimum: 0, maximum: 5_000, description: "Wait for startup output; default 300." }),
       ),
+      hold: Type.Optional(
+        Type.Boolean({
+          description: "Keep the run open until the command exits and handle its result first. Finite jobs only.",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const command = params.command.trim();
@@ -184,6 +220,8 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       });
       modelOwned.add(terminal.id);
       starting.add(terminal.id);
+      if (params.hold)
+        deliverSettlement.hold(resultKey(terminal.id), new Promise<void>((resolve) => holds.set(terminal.id, resolve)));
       let result: TerminalReadResult;
       try {
         result = await getManager().read(terminal.id, {
@@ -414,8 +452,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       ids: Type.Array(Type.String(), { minItems: 1, maxItems: 32 }),
     }),
     async execute(_toolCallId, params) {
-      const terminals = await getManager().kill(params.ids);
-      for (const terminal of terminals) consume(terminal.id);
+      const terminals = await stop(params.ids);
       return {
         content: [
           {
@@ -556,8 +593,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
           return;
         }
         try {
-          const stopped = await getManager().kill(ids);
-          for (const terminal of stopped) consume(terminal.id);
+          const stopped = await stop(ids);
           ctx.ui.notify(stopped.map((terminal) => `${terminal.id}: ${terminal.status}`).join(" · "), "info");
         } catch (error) {
           ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
