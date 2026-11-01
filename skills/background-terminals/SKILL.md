@@ -1,6 +1,6 @@
 ---
 name: background-terminals
-description: Use when a Pi task needs a long-running or interactive terminal process, such as a development server, watcher, REPL, streaming build, or command that must continue while other work proceeds. Do not use for short commands that ordinary bash can complete directly.
+description: Use when a Pi task runs a command that may take more than about a minute or has an unpredictable duration, such as a server, watcher, build, test run, install, download, or a batch script over many files or model calls, or an interactive process such as a REPL. Do not use for short commands whose output is needed now.
 compatibility: Pi with the background-terminals extension and its start_terminal, read_terminal, write_terminal, list_terminals, and stop_terminal tools.
 ---
 
@@ -10,8 +10,10 @@ Background terminals are real PTYs. They stream output, accept input and control
 
 ## Choose the execution path
 
-- Use `bash` for short, non-interactive commands whose result you need now. Do not give `bash` a long timeout to wait for slow work.
-- Use `start_terminal` for servers, watchers, downloads, REPLs, interactive installers, and long or uncertain builds and test runs.
+- Decide by expected duration, not by the kind of command. Use `start_terminal` for anything that may take more than about a minute or whose duration you cannot predict: servers, watchers, builds, test runs, installs, downloads, and scripts that process many files, images, or records, or that call models or remote services in a loop. Also use it for REPLs and interactive installers.
+- Use `bash` only for short, non-interactive commands whose result you need now, such as reading, searching, or a quick check.
+- If you would give `bash` a timeout over 60 seconds, use `start_terminal` instead. A long `bash` call blocks the conversation, so the user cannot talk to you until it ends.
+- When unsure, start it in a terminal: a short command there costs little, while a long one in `bash` stalls everything.
 - A terminal must run a real process. Do not start one only to sleep, time a later check, or wait for subagents; subagent results arrive on their own.
 - Before starting a server or watcher that may already run, call `list_terminals` unless you already know what is running.
 

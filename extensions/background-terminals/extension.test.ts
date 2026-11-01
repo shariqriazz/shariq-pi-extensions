@@ -54,8 +54,8 @@ test("registers the PTY tool surface, control-center commands, and lifecycle cle
   assert.match(start.description, /pseudo-terminal \(PTY\)/);
   assert.match(start.description, /arrives as a new message that starts your next turn/);
   const guidelines = start.promptGuidelines.join("\n");
-  assert.match(guidelines, /Use start_terminal for servers/);
-  assert.match(guidelines, /not with a long timeout/);
+  assert.match(guidelines, /more than about a minute or whose duration you cannot predict/);
+  assert.match(guidelines, /timeout over 60 seconds, use start_terminal instead/);
   assert.match(guidelines, /end the turn/);
   assert.match(guidelines, /instead of polling with read_terminal or list_terminals/);
   assert.match(JSON.stringify(start.parameters), /working_dir/);

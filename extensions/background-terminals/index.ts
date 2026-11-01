@@ -193,7 +193,7 @@ export default function backgroundTerminals(pi: ExtensionAPI) {
       `At most ${MAX_RUNNING_TERMINALS} terminals run at once, and all of them stop when the session ends.`,
     promptSnippet: "Run a long or interactive command in a background PTY.",
     promptGuidelines: [
-      "Use start_terminal for servers, watchers, long builds or test runs, and interactive commands. Use bash for short commands whose output you need now, not with a long timeout.",
+      "Use start_terminal for any command that may take more than about a minute or whose duration you cannot predict, including servers, watchers, builds, tests, installs, downloads, and scripts that process many files or call models in a loop, and for interactive commands. Use bash only for short commands whose output you need now; if bash would need a timeout over 60 seconds, use start_terminal instead.",
       "After start_terminal, continue independent work or end the turn. When the terminal's result message arrives, continue the task from it instead of polling with read_terminal or list_terminals.",
     ],
     exposure: "model-only",
