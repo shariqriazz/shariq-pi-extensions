@@ -100,6 +100,11 @@ test(
     assert.deepEqual([...harness(() => ({})).tools.keys()], ["ask_video"]);
     fs.writeFileSync(path.join(dir, "media-understanding.json"), JSON.stringify({ images: { enabled: true } }));
     assert.deepEqual([...harness(() => ({})).tools.keys()], ["view_image"], "ask_image needs a model");
+    assert.doesNotMatch(
+      harness(() => ({})).tools.get("view_image").description,
+      /ask_image/,
+      "no pointer to a missing tool",
+    );
   }),
 );
 
@@ -109,6 +114,8 @@ test(
     let fail = false;
     const app = harness(() => (fail ? { error: "quota" } : { text: "A login form with the error: Invalid password." }));
     assert.deepEqual([...app.tools.keys()].sort(), ["ask_image", "view_image"]);
+    assert.match(app.tools.get("view_image").description, /ask_image keeps the conversation smaller/);
+    assert.match(app.tools.get("ask_image").description, /read text or check details; only the answer enters/);
     await app.hooks.get("input")!({ text: "check the login page", source: "interactive" }, app.ctx);
     const event = {
       toolName: "screenshot",

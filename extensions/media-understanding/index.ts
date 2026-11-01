@@ -527,7 +527,8 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
       name: "view_image",
       label: "View Image",
       description:
-        "Show an image file to you directly, optionally zoomed to a region at full resolution. Descriptions can miss visual detail: view the image when the question depends on how it looks (layout, color, alignment, quality) or a description seems wrong.",
+        "Show an image file to you directly, optionally zoomed to a region at full resolution. Descriptions can miss visual detail: view the image when the question depends on how it looks (layout, color, alignment, quality) or a description seems wrong." +
+        (askImage ? " For text or details, ask_image keeps the conversation smaller." : ""),
       exposure: "model-only",
       annotations: { readOnlyHint: true, openWorldHint: false },
       parameters: Type.Object({
@@ -587,7 +588,7 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
       name: "ask_image",
       label: "Ask About Image",
       description:
-        "Ask the image model a question about an image file, optionally about a region at full resolution, without adding the image to the conversation.",
+        "Ask the image model a question about an image file, optionally about a region at full resolution. Use it to read text or check details; only the answer enters the conversation.",
       exposure: "model-only",
       annotations: { readOnlyHint: true, openWorldHint: true },
       parameters: Type.Object({
