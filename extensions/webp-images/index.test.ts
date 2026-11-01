@@ -133,6 +133,21 @@ test(
     assert.equal(result.action, "transform");
     assert.deepEqual(await size(result.images[0]), { width: 500, height: 333, format: "webp" });
     assert.equal(result.images[1], animated);
+    assert.equal(
+      result.text,
+      "look\n\n[Image: original 1200x800, displayed at 500x333. Multiply coordinates by 2.40 to map to original image.]",
+    );
+
+    const shot = await app.hooks.get("tool_result")!(
+      { toolName: "screenshot", toolCallId: "3", input: {}, content: [attached] },
+      app.ctx,
+    );
+    assert.equal(shot.content[0].mimeType, "image/webp");
+    assert.match(
+      shot.content[1].text,
+      /^\[Image: original 1200x800, displayed at 500x333\./,
+      "the resize note follows its image",
+    );
     assert.deepEqual(await app.hooks.get("input")!({ text: "x", images: [attached], source: "extension" }, app.ctx), {
       action: "continue",
     });

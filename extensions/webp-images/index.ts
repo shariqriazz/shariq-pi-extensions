@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { formatDimensionNote, getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ImageContent } from "@earendil-works/pi-ai";
 
 /**
@@ -88,6 +88,12 @@ function orientedSize(meta: { width?: number; height?: number; orientation?: num
   return swapped ? { width: meta.height, height: meta.width } : { width: meta.width, height: meta.height };
 }
 
+export interface Converted {
+  image: ImageContent;
+  /** Pi's dimension note when this conversion shrank the image, so the model knows the original size. */
+  note?: string;
+}
+
 /**
  * Convert one image to WebP. `source` is the original file behind a resized
  * copy, so the WebP is encoded from full-quality pixels at the copy's size.
@@ -100,14 +106,15 @@ export async function convertImage(
   quality: number,
   limits: Limits,
   source?: Buffer,
-): Promise<ImageContent> {
-  if (!CONVERTIBLE.has(baseMime(image.mimeType))) return image;
+): Promise<Converted> {
+  const unchanged = { image };
+  if (!CONVERTIBLE.has(baseMime(image.mimeType))) return unchanged;
   const sharp = await loadSharp();
   const current = Buffer.from(image.data, "base64");
   const currentMeta = await sharp(current).metadata();
-  if ((currentMeta.pages ?? 1) > 1) return image;
+  if ((currentMeta.pages ?? 1) > 1) return unchanged;
   const currentSize = orientedSize(currentMeta);
-  if (!currentSize) return image;
+  if (!currentSize) return unchanged;
 
   let pipeline: import("sharp").Sharp | undefined;
   if (source) {
@@ -128,9 +135,23 @@ export async function convertImage(
     .rotate()
     .resize({ width: limits.maxWidth, height: limits.maxHeight, fit: "inside", withoutEnlargement: true });
 
-  const webp = await pipeline.webp({ quality }).toBuffer();
-  if (webp.length >= current.length || base64Length(webp.length) >= limits.maxBytes) return image;
-  return { type: "image", data: webp.toString("base64"), mimeType: "image/webp" };
+  const { data: webp, info } = await pipeline.webp({ quality }).toBuffer({ resolveWithObject: true });
+  if (webp.length >= current.length || base64Length(webp.length) >= limits.maxBytes) return unchanged;
+  const converted: ImageContent = { type: "image", data: webp.toString("base64"), mimeType: "image/webp" };
+  // Pi adds this note only when it resizes; an image shrunk here reaches Pi within its limits.
+  const note =
+    info.width !== currentSize.width || info.height !== currentSize.height
+      ? formatDimensionNote({
+          data: "",
+          mimeType: "image/webp",
+          originalWidth: currentSize.width,
+          originalHeight: currentSize.height,
+          width: info.width,
+          height: info.height,
+          wasResized: true,
+        })
+      : undefined;
+  return note ? { image: converted, note } : { image: converted };
 }
 
 /** The original file behind a `read` result, when it is an image file. */
@@ -170,12 +191,12 @@ export default function webpImages(pi: ExtensionAPI) {
   const convertAll = (ctx: ExtensionContext, images: ImageContent[], source?: Buffer) => {
     const limits = limitsFor(ctx);
     return Promise.all(
-      images.map((image) =>
+      images.map((image): Promise<Converted> | Converted =>
         sharpFailed
-          ? image
+          ? { image }
           : convertImage(image, config.quality, limits, source).catch((error: unknown) => {
               reportFailure(ctx, error, `Image kept as ${image.mimeType}`);
-              return image;
+              return { image };
             }),
       ),
     );
@@ -225,9 +246,15 @@ export default function webpImages(pi: ExtensionAPI) {
 
   pi.on("input", async (event, ctx) => {
     if (event.source === "extension" || !event.images?.length) return { action: "continue" };
-    const images = await convertAll(ctx, event.images);
-    if (images.every((image, index) => image === event.images![index])) return { action: "continue" };
-    return { action: "transform", text: event.text, images };
+    const results = await convertAll(ctx, event.images);
+    if (results.every((result, index) => result.image === event.images![index])) return { action: "continue" };
+    const notes = results.flatMap((result) => (result.note ? [result.note] : []));
+    // Pi appends its own image notes to the prompt text the same way.
+    return {
+      action: "transform",
+      text: notes.length ? `${event.text}\n\n${notes.join("\n")}` : event.text,
+      images: results.map((result) => result.image),
+    };
   });
 
   pi.on("tool_result", async (event, ctx) => {
@@ -238,10 +265,15 @@ export default function webpImages(pi: ExtensionAPI) {
     // One read returns one image; its original file gives the cleanest encode.
     const source = images.length === 1 ? readSource(ctx, event.toolName, event.input) : undefined;
     const converted = await convertAll(ctx, images, source);
-    if (converted.every((image, index) => image === images[index])) return undefined;
+    if (converted.every((result, index) => result.image === images[index])) return undefined;
     const replacements = new Map(images.map((image, index) => [image, converted[index]!]));
     return {
-      content: event.content.map((block) => (block.type === "image" ? (replacements.get(block) ?? block) : block)),
+      // Like Pi's own normalization, a resize note follows its image.
+      content: event.content.flatMap((block) => {
+        const result = block.type === "image" ? replacements.get(block) : undefined;
+        if (!result) return [block];
+        return result.note ? [result.image, { type: "text" as const, text: result.note }] : [result.image];
+      }),
       // Only the encoding changed, so a structured result still matches; Pi drops it unless returned.
       ...(event.structuredContent === undefined ? {} : { structuredContent: event.structuredContent }),
     };
