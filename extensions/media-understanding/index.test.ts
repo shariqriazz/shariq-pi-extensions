@@ -140,6 +140,7 @@ test(
     assert.equal(result.action, "transform");
     assert.deepEqual(result.images, []);
     assert.match(result.text, /^what is this\?\n\n\[Image described by flash; saved at .*\]\nA bar chart/s);
+    assert.doesNotMatch(result.text, /ask_image|view_image/, "descriptions name only tools that exist");
   }),
 );
 
@@ -165,6 +166,13 @@ test(
     const crop = await sharp(Buffer.from(zoomed.content[1].data, "base64")).metadata();
     assert.deepEqual([crop.width, crop.height], [400, 200], "the crop keeps full resolution");
 
+    for (const attempt of ["f1", "f2", "f3"]) {
+      await assert.rejects(
+        view.execute(attempt, { path: "shot.png", region: [3000, 3000, 3100, 3100] }, undefined, undefined, app.ctx),
+        /outside the 2400x1200 image/,
+        "a failed view does not count toward the cap",
+      );
+    }
     const full = await view.execute("2", { path: "shot.png" }, undefined, undefined, app.ctx);
     assert.match(full.content[0].text, /original 2400x1200, displayed at 1568x784/);
     await view.execute("3", { path: "shot.png" }, undefined, undefined, app.ctx);
@@ -220,6 +228,10 @@ test(
       await assert.rejects(
         tool.execute("2", { path: "clip.mkv", question: "?" }, undefined, undefined, app.ctx),
         /Unsupported video format "\.mkv"/,
+      );
+      await assert.rejects(
+        tool.execute("2b", { path: "missing.mp4", question: "?" }, undefined, undefined, app.ctx),
+        /File not found/,
       );
       await assert.rejects(
         tool.execute("3", { path: "big.mp4", question: "?" }, undefined, undefined, app.ctx),

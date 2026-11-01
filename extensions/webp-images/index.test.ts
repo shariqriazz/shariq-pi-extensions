@@ -148,9 +148,16 @@ test(
       /^\[Image: original 1200x800, displayed at 500x333\./,
       "the resize note follows its image",
     );
-    assert.deepEqual(await app.hooks.get("input")!({ text: "x", images: [attached], source: "extension" }, app.ctx), {
-      action: "continue",
-    });
+    // Input Mode resends interrupting input as an extension message; its images are converted too.
+    const resent = await app.hooks.get("input")!({ text: "x", images: [attached], source: "extension" }, app.ctx);
+    assert.equal(resent.images[0].mimeType, "image/webp");
+    // A WebP already within the limits is left alone instead of losing quality to a second encode.
+    assert.deepEqual(
+      await app.hooks.get("input")!({ text: "x", images: [resent.images[0]], source: "interactive" }, app.ctx),
+      {
+        action: "continue",
+      },
+    );
   }),
 );
 

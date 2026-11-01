@@ -99,6 +99,8 @@ const MEDIA_PROMPT = [
 ].join("\n");
 
 const DESCRIBE_TIMEOUT_MS = 120_000;
+// A tool can return many screenshots at once; bound the parallel description calls.
+const DESCRIBE_CONCURRENCY = 4;
 const MEDIA_TIMEOUT_MS = 300_000;
 const MAX_ANSWER_TOKENS = 8_000;
 const STORE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -170,11 +172,28 @@ function pruneStore(): void {
   }
 }
 
-function readImageFile(cwd: string, requested: string): { file: string; bytes: Buffer; mimeType: string } {
+function readFileChecked(cwd: string, requested: string): { file: string; bytes: Buffer } {
   const file = path.resolve(cwd, requested);
-  const mimeType = IMAGE_MIME[extensionOf(file)];
-  if (!mimeType) throw new Error(`Not a supported image file (png, jpg, webp, gif): ${file}`);
-  return { file, bytes: fs.readFileSync(file), mimeType };
+  if (!fs.existsSync(file)) throw new Error(`File not found: ${file}`);
+  if (!fs.statSync(file).isFile()) throw new Error(`Not a file: ${file}`);
+  return { file, bytes: fs.readFileSync(file) };
+}
+
+/** Image bytes with their real type, which can differ from the file extension. */
+async function readImageFile(
+  cwd: string,
+  requested: string,
+): Promise<{ file: string; bytes: Buffer; mimeType: string }> {
+  const { file, bytes } = readFileChecked(cwd, requested);
+  const format = await (
+    await loadSharp()
+  )(bytes)
+    .metadata()
+    .then((meta) => meta.format)
+    .catch(() => undefined);
+  const mimeType = format === "jpeg" ? "image/jpeg" : format && IMAGE_MIME[format];
+  if (!mimeType) throw new Error(`Not a supported image (png, jpg, webp, gif): ${file}`);
+  return { file, bytes, mimeType };
 }
 
 type Sharp = typeof import("sharp").default;
@@ -333,9 +352,23 @@ export async function askMediaModel(
   return text;
 }
 
-function descriptionBlock(model: string, file: string, description: string): string {
+function descriptionBlock(model: string, file: string, description: string, tools: string[]): string {
   const label = model.split("/").pop() ?? model;
-  return `[Image described by ${label}; saved at ${file}. Use ask_image for details or view_image to see it.]\n${description}`;
+  const hint = tools.length ? ` Use ${tools.join(" or ")} for a closer look.` : "";
+  return `[Image described by ${label}; saved at ${file}.${hint}]\n${description}`;
+}
+
+async function mapLimited<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await run(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 function excerpt(text: string, limit: number): string {
@@ -354,6 +387,7 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
 
   let lastUserText = "";
   const views = new Map<string, number>();
+  const followUpTools = [...(askImage ? ["ask_image"] : []), ...(images.enabled ? ["view_image"] : [])];
 
   pi.on("session_start", (_event, ctx) => {
     views.clear();
@@ -383,23 +417,21 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
       purpose: string,
       original?: { bytes: Buffer; extension: string },
     ): Promise<Array<{ image: ImageContent; text?: string }>> =>
-      Promise.all(
-        list.map(async (image) => {
-          try {
-            const file = storeImage(image, list.length === 1 ? original : undefined);
-            const description = await askVisionModel(ctx, images, image, purpose, ctx.signal);
-            return { image, text: descriptionBlock(images.model, file, description) };
-          } catch (error) {
-            if (ctx.signal?.aborted) throw error;
-            if (ctx.hasUI)
-              ctx.ui.notify(`Image left as is: ${error instanceof Error ? error.message : String(error)}`, "warning");
-            return { image };
-          }
-        }),
-      );
+      mapLimited(list, DESCRIBE_CONCURRENCY, async (image) => {
+        try {
+          const file = storeImage(image, list.length === 1 ? original : undefined);
+          const description = await askVisionModel(ctx, images, image, purpose, ctx.signal);
+          return { image, text: descriptionBlock(images.model, file, description, followUpTools) };
+        } catch (error) {
+          if (ctx.signal?.aborted) throw error;
+          if (ctx.hasUI)
+            ctx.ui.notify(`Image left as is: ${error instanceof Error ? error.message : String(error)}`, "warning");
+          return { image };
+        }
+      });
 
     pi.on("input", async (event, ctx) => {
-      if (event.source === "extension") return { action: "continue" };
+      // Input Mode resends interrupting or follow-up input as an extension message; it is still the user's.
       lastUserText = event.text;
       if (!event.images?.length || !shouldDescribe(ctx)) return { action: "continue" };
       const purpose = `The user attached this image to their message:\n"""\n${excerpt(event.text, 4_000) || "(no text)"}\n"""`;
@@ -449,7 +481,7 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
     });
   } else {
     pi.on("input", (event) => {
-      if (event.source !== "extension") lastUserText = event.text;
+      lastUserText = event.text;
       return { action: "continue" };
     });
   }
@@ -472,7 +504,7 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
             `The current model cannot see images${askImage ? "; use ask_image to ask about it instead" : ""}.`,
           );
         }
-        const source = readImageFile(ctx.cwd, params.path);
+        const source = await readImageFile(ctx.cwd, params.path);
         const key = `${createHash("sha256").update(source.bytes).digest("hex")}:${params.region?.join(",") ?? "full"}`;
         const count = (views.get(key) ?? 0) + 1;
         if (config.maxViewsPerImage > 0 && count > config.maxViewsPerImage) {
@@ -480,7 +512,6 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
             `This image${params.region ? " region" : ""} was already shown ${config.maxViewsPerImage} times in this session; use the earlier view or a different region.`,
           );
         }
-        views.set(key, count);
         const notes: string[] = [];
         let bytes = source.bytes;
         let mimeType = source.mimeType;
@@ -500,6 +531,8 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
           : { type: "image", data: bytes.toString("base64"), mimeType };
         const dimensionNote = resized ? formatDimensionNote(resized) : undefined;
         if (dimensionNote) notes.push(dimensionNote);
+        // Only a view that succeeded counts toward the repeat cap.
+        views.set(key, count);
         return {
           content: [{ type: "text", text: [`Image ${params.path}:`, ...notes].join("\n") }, shown],
           details: { path: params.path, region: params.region, width: resized?.width, height: resized?.height },
@@ -522,7 +555,7 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
         region: regionSchema,
       }),
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-        const source = readImageFile(ctx.cwd, params.path);
+        const source = await readImageFile(ctx.cwd, params.path);
         const crop = params.region ? await cropImage(source.bytes, params.region) : undefined;
         const image: ImageContent = crop?.image ?? {
           type: "image",
@@ -555,6 +588,8 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
       }),
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         const file = path.resolve(ctx.cwd, params.path);
+        if (!fs.existsSync(file)) throw new Error(`File not found: ${file}`);
+        if (!fs.statSync(file).isFile()) throw new Error(`Not a file: ${file}`);
         const extension = extensionOf(file);
         const mimeType = formats[extension];
         if (!mimeType) {

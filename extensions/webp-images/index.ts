@@ -131,6 +131,15 @@ export async function convertImage(
       pipeline = sharp(source).rotate().resize(currentSize.width, currentSize.height, { fit: "fill" });
     }
   }
+  // Already WebP within the limits: encoding it again would only lose quality.
+  if (
+    !pipeline &&
+    baseMime(image.mimeType) === "image/webp" &&
+    currentSize.width <= limits.maxWidth &&
+    currentSize.height <= limits.maxHeight
+  ) {
+    return unchanged;
+  }
   pipeline ??= sharp(current)
     .rotate()
     .resize({ width: limits.maxWidth, height: limits.maxHeight, fit: "inside", withoutEnlargement: true });
@@ -245,7 +254,8 @@ export default function webpImages(pi: ExtensionAPI) {
   if (!config.enabled) return;
 
   pi.on("input", async (event, ctx) => {
-    if (event.source === "extension" || !event.images?.length) return { action: "continue" };
+    // Input Mode resends interrupting or follow-up input as an extension message, images included.
+    if (!event.images?.length) return { action: "continue" };
     const results = await convertAll(ctx, event.images);
     if (results.every((result, index) => result.image === event.images![index])) return { action: "continue" };
     const notes = results.flatMap((result) => (result.note ? [result.note] : []));
