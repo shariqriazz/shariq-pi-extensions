@@ -254,6 +254,14 @@ export async function askVisionModel(
 ): Promise<string> {
   const model = resolveModel(ctx, choice.model, "image");
   if (!model.input.includes("image")) throw new Error(`Model "${choice.model}" does not accept images.`);
+  // Attachments arrive before Pi resizes them, and saved originals are full size; fit the copy sent to the
+  // helper within its own image limits so large photos are not rejected or uploaded at full size.
+  const fitted = await resizeImage(
+    Buffer.from(image.data, "base64"),
+    image.mimeType,
+    model.inputLimits?.images?.resize ?? VIEW_FALLBACK_RESIZE,
+  ).catch(() => null);
+  const sent: ImageContent = fitted ? { type: "image", data: fitted.data, mimeType: fitted.mimeType } : image;
   const timeout = AbortSignal.timeout(DESCRIBE_TIMEOUT_MS);
   const options: Record<string, unknown> = {
     maxTokens: Math.min(MAX_ANSWER_TOKENS, model.maxTokens || MAX_ANSWER_TOKENS),
@@ -266,7 +274,7 @@ export async function askVisionModel(
       model,
       {
         systemPrompt: IMAGE_PROMPT,
-        messages: [{ role: "user", content: [{ type: "text", text: prompt }, image], timestamp: Date.now() }],
+        messages: [{ role: "user", content: [{ type: "text", text: prompt }, sent], timestamp: Date.now() }],
       },
       options as any,
     )

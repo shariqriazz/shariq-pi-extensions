@@ -48,6 +48,7 @@ function harness(
   const hooks = new Map<string, (...args: any[]) => any>();
   const tools = new Map<string, any>();
   const prompts: string[] = [];
+  const sentImages: Array<{ data: string; mimeType: string }> = [];
   const notices: string[] = [];
   mediaUnderstanding({
     on: (name: string, handler: any) => hooks.set(name, handler),
@@ -71,6 +72,7 @@ function harness(
       getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "secret-key", headers: { "x-extra": "1" } }),
       streamSimple(_model: unknown, context: any, options: any) {
         prompts.push(`${options.reasoning}|${context.messages[0].content[0].text}`);
+        sentImages.push(context.messages[0].content[1]);
         const result = reply(context.messages[0].content[0].text);
         return {
           result: async () =>
@@ -81,7 +83,7 @@ function harness(
       },
     },
   };
-  return { hooks, tools, prompts, notices, ctx };
+  return { hooks, tools, prompts, sentImages, notices, ctx };
 }
 
 test(
@@ -180,6 +182,13 @@ test(
       view.execute("4", { path: "shot.png" }, undefined, undefined, app.ctx),
       /already shown 2 times/,
     );
+
+    // A large original is fitted to the helper model's limits before it is sent.
+    await app.tools
+      .get("ask_image")!
+      .execute("q", { path: "shot.png", question: "What color?" }, undefined, undefined, app.ctx);
+    const sent = await sharp(Buffer.from(app.sentImages.at(-1)!.data, "base64")).metadata();
+    assert.deepEqual([sent.width, sent.height], [1568, 784]);
 
     const blind = harness(() => ({ text: "unused" }), TEXT_ONLY, dir);
     await assert.rejects(
