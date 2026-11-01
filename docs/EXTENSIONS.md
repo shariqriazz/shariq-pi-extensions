@@ -28,6 +28,10 @@ Replaces Pi's compaction summary with a six-section checkpoint plus computed fil
 
 Managed PTYs for servers, watchers, long builds, and interactive programs: up to eight at once, bounded output in memory, private size-limited logs, and process-group shutdown on reload or exit. The model uses `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`; `/term` and `/ps` open the control center. When a model-started terminal exits, its result arrives as a custom message instead of requiring the model to poll; with `hold: true` the run stays open until a finite job exits, so scheduled runs handle its result before they end.
 
+### [Image Descriptions](../extensions/image-descriptions/README.md)
+
+Optional and off by default. When enabled, a configured vision model describes each image as it enters the conversation, from your attachments or from tool results such as `read`, and the description replaces the image before it is stored, so history stays text and the prompt cache is never invalidated. Originals are saved for `ask_image` (questions answered by the vision model) and `view_image` (shows the image to the main model directly). Configuration lives in `<agent-dir>/image-descriptions.json`.
+
 ## Web access
 
 ### [Firecrawl web](../extensions/firecrawl-web/README.md)

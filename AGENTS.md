@@ -31,7 +31,7 @@ Tool descriptions, parameter descriptions, `promptSnippet`, and `promptGuideline
 
 ## Secrets and generated state
 
-Never commit API keys, OAuth credentials, `.env`, `auth.json`, caches, sessions, logs, or `node_modules`. Smart Compaction settings belong in `smart-compaction.json`; Input Mode settings belong in `input-mode.json`.
+Never commit API keys, OAuth credentials, `.env`, `auth.json`, caches, sessions, logs, or `node_modules`. Smart Compaction settings belong in `smart-compaction.json`; Input Mode settings belong in `input-mode.json`; Image Descriptions settings belong in `image-descriptions.json`.
 
 ## Validation and releases
 

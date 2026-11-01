@@ -26,6 +26,7 @@ Run `/reload` in an existing Pi session after installation; new sessions load th
 - Pi subagents with profiles, worktree isolation, a takeover dashboard, and an optional Fusion mode (lead plus persistent sidekick across light, medium, and heavy model tiers)
 - Smart Compaction: structured checkpoints with file and worktree state
 - managed background terminals
+- optional image descriptions: a vision model replaces images with text as they enter the conversation
 - Firecrawl web search, scraping, and developer search
 - lightweight URL fetching
 - Context Usage startup card

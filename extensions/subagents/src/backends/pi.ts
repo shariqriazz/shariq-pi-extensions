@@ -59,6 +59,8 @@ const READ_CAPABILITY_TOOLS = new Set([
   "web_scrape",
   "web_fetch",
   "dev_search",
+  "ask_image",
+  "view_image",
   "get_goal",
   "task_list",
   "read_terminal",
