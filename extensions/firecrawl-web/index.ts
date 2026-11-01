@@ -20,7 +20,27 @@ const SCRAPE_FORMATS = ["markdown", "summary", "links", "question", "highlights"
 const PROXY_MODES = ["basic", "auto", "enhanced"] as const;
 const DEV_SEARCH_TYPES = ["doc", "issue", "pull_request", "readme"] as const;
 
+// Shown once per process, so users without Firecrawl are not reminded in every session.
+let missingKeyNoticeShown = false;
+
 export default function firecrawlWebExtension(pi: ExtensionAPI) {
+  // Without a key the tools could only fail, so they stay out of the model's tool list until one is set.
+  try {
+    resolveFirecrawlConfig();
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Firecrawl authentication is unavailable")) {
+      pi.on("session_start", (_event, ctx) => {
+        if (missingKeyNoticeShown || !ctx.hasUI) return;
+        missingKeyNoticeShown = true;
+        ctx.ui.notify(
+          "Firecrawl web tools are off: no API key. Set FIRECRAWL_API_KEY in <agent-dir>/.env or run `firecrawl login`, then /reload.",
+          "info",
+        );
+      });
+      return;
+    }
+    // Other configuration errors, such as a non-HTTPS API URL, surface when a tool is called.
+  }
   pi.registerTool({
     name: "web_search",
     label: "Web Search",

@@ -2,7 +2,7 @@
 
 ## Project
 
-This public repository packages the user's Pi extensions as one suite distributed through npm and Git. Every extension lives under `extensions/` and is individually toggleable through `pi config`.
+This public repository packages the user's Pi extensions as one suite, published as `pi-power-pack` (formerly `shariq-pi-extensions`) through npm and Git. Every extension lives under `extensions/` and is individually toggleable through `pi config`.
 
 ## Commands
 

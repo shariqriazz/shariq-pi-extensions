@@ -1,24 +1,43 @@
 {
-  "name": "shariq-pi-extensions",
-  "version": "0.10.3",
-  "description": "Cross-platform extension suite for the Pi coding agent.",
+  "name": "pi-power-pack",
+  "version": "0.11.0",
+  "description": "Subagents, background terminals, smart compaction, goals, a task list, ask_user, image, video, and audio understanding, WebP images, and web search for the Pi coding agent. Formerly shariq-pi-extensions.",
   "license": "MIT",
   "author": "Shariq Riaz",
   "type": "module",
   "keywords": [
     "pi-package",
-    "pi-extension"
+    "pi-extension",
+    "pi-coding-agent",
+    "pi",
+    "coding-agent",
+    "ai-agent",
+    "subagents",
+    "background-terminal",
+    "context-compaction",
+    "compaction",
+    "goals",
+    "task-list",
+    "ask-user",
+    "vision",
+    "video-understanding",
+    "audio-transcription",
+    "webp",
+    "web-search",
+    "web-fetch",
+    "firecrawl",
+    "shariq-pi-extensions"
   ],
   "engines": {
     "node": ">=22.19.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shariqriazz/shariq-pi-extensions.git"
+    "url": "git+https://github.com/shariqriazz/pi-power-pack.git"
   },
-  "homepage": "https://github.com/shariqriazz/shariq-pi-extensions#readme",
+  "homepage": "https://github.com/shariqriazz/pi-power-pack#readme",
   "bugs": {
-    "url": "https://github.com/shariqriazz/shariq-pi-extensions/issues"
+    "url": "https://github.com/shariqriazz/pi-power-pack/issues"
   },
   "publishConfig": {
     "access": "public",
@@ -59,7 +78,8 @@
     ],
     "themes": [
       "./themes/ember-warm-dark.json"
-    ]
+    ],
+    "changelogPath": "./docs/CHANGELOG.md"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

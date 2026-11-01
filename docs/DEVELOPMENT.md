@@ -57,6 +57,6 @@ Use `getAgentDir()` for user-level state and `CONFIG_DIR_NAME` for project-level
 
 GitHub hosts the source and npm distributes versioned releases. Any functional change bumps `package.json#version` (semantic versioning). Pushing to `main` runs `.github/workflows/ci.yml` and `.github/workflows/publish-npm.yml`; the publish workflow validates and publishes with npm trusted publishing and provenance whenever the version is not yet on npm.
 
-After the publish run succeeds, confirm the release with `npm view shariq-pi-extensions version` and update installed copies with `pi update --extensions`.
+After the publish run succeeds, confirm the release with `npm view pi-power-pack version` and update installed copies with `pi update --extensions`.
 
 An npm install follows published versions. An unpinned Git install follows `main`; pin a tag or commit to keep a machine on a known revision.

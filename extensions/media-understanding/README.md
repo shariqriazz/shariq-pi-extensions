@@ -17,7 +17,7 @@ Optional helper models for images, video, and audio. Every part is off by defaul
 
 - Video: mp4, mpeg, mpg, mov, avi, flv, webm, wmv, 3gp. Audio: wav, mp3, aiff, aac, ogg, flac. Other formats are refused with a hint to convert them with ffmpeg.
 - Files over `maxFileMB` (default 20) are refused with a hint to trim or compress them. This is the extension's own limit, not a measured provider limit.
-- Pi's request types carry only text and images, so these tools send an OpenAI Responses request with the file as an `input_file` data URL, using Pi's credentials and base URL for the configured model. The model must use the `openai-responses` API and accept the media; CLIProxy's Antigravity Gemini route does.
+- Pi's request types carry only text and images, so these tools send an OpenAI Responses request with the file as an `input_file` data URL, using Pi's credentials and base URL for the configured model. The model must use the `openai-responses` API and accept the media, for example a Gemini model behind an OpenAI-compatible Responses endpoint.
 
 ## Configuration
 

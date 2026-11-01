@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "shariq-pi-extensions",
+      "name": "pi-power-pack",
       "dependencies": {
         "@lydell/node-pty": "^1.1.0",
         "effect": "4.0.0",

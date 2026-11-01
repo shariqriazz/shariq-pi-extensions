@@ -8,18 +8,48 @@ import { resolveFirecrawlConfig } from "./auth.ts";
 import { buildDeveloperSearchBody, buildScrapeBody, buildSearchBody, firecrawlRequest } from "./client.ts";
 import { formatDeveloperSearchOutput, formatScrapeOutput, formatSearchOutput } from "./output.ts";
 
-function registeredTools() {
+function registeredTools(key: string | undefined) {
   const tools = new Map<string, { name: string; description: string; promptGuidelines?: string[] }>();
-  firecrawlWebExtension({
-    registerTool(tool: { name: string; description: string; promptGuidelines?: string[] }) {
-      tools.set(tool.name, tool);
-    },
-  } as never);
-  return tools;
+  const hooks = new Map<string, (...args: any[]) => any>();
+  // An empty home and agent dir, so only the given key counts, not this machine's credentials.
+  const saved = {
+    key: process.env.FIRECRAWL_API_KEY,
+    home: process.env.HOME,
+    agentDir: process.env.PI_CODING_AGENT_DIR,
+  };
+  process.env.HOME = process.env.PI_CODING_AGENT_DIR = join(tmpdir(), "pi-firecrawl-empty-home");
+  if (key === undefined) delete process.env.FIRECRAWL_API_KEY;
+  else process.env.FIRECRAWL_API_KEY = key;
+  try {
+    firecrawlWebExtension({
+      registerTool(tool: { name: string; description: string; promptGuidelines?: string[] }) {
+        tools.set(tool.name, tool);
+      },
+      on: (name: string, handler: (...args: any[]) => any) => hooks.set(name, handler),
+    } as never);
+  } finally {
+    for (const [name, value] of [
+      ["FIRECRAWL_API_KEY", saved.key],
+      ["HOME", saved.home],
+      ["PI_CODING_AGENT_DIR", saved.agentDir],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+  return { tools, hooks };
 }
 
+test("without an API key, registers no tools and explains how to add one", () => {
+  const { tools, hooks } = registeredTools(undefined);
+  assert.equal(tools.size, 0);
+  const notices: string[] = [];
+  hooks.get("session_start")!({}, { hasUI: true, ui: { notify: (message: string) => notices.push(message) } });
+  assert.match(notices[0]!, /no API key.*FIRECRAWL_API_KEY.*firecrawl login/);
+});
+
 test("registers native web_search, web_scrape, and dev_search tools", () => {
-  const tools = registeredTools();
+  const { tools } = registeredTools("fc-test-key");
   assert.deepEqual([...tools.keys()].sort(), ["dev_search", "web_scrape", "web_search"]);
   assert.match(tools.get("web_search")!.description, /Firecrawl/);
   assert.match(tools.get("web_scrape")!.description, /web_fetch/);

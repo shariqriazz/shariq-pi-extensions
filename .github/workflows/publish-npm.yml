@@ -28,9 +28,10 @@ jobs:
       - run: mise exec --locked -- bun run validate
       - name: Publish if this exact version is not on npm
         run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           # Check the exact version, so rerunning an older commit never republishes.
-          if npm view "shariq-pi-extensions@$CURRENT_VERSION" version >/dev/null 2>&1; then
+          if npm view "$PACKAGE_NAME@$CURRENT_VERSION" version >/dev/null 2>&1; then
             echo "Version $CURRENT_VERSION is already published on npm. Skipping publish step."
           else
             echo "Publishing version $CURRENT_VERSION..."

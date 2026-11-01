@@ -40,7 +40,7 @@ Optional and off by default. When enabled, images entering the conversation are 
 
 ### [Firecrawl web](../extensions/firecrawl-web/README.md)
 
-`web_search` finds web, news, image, GitHub, research, and PDF results. `web_scrape` extracts rendered or JavaScript-heavy pages. `dev_search` searches the Firecrawl Developer Index of technical docs, GitHub issues, pull requests, and READMEs. Credentials come from the environment, `<agent-dir>/.env`, or the Firecrawl CLI login.
+`web_search` finds web, news, image, GitHub, research, and PDF results. `web_scrape` extracts rendered or JavaScript-heavy pages. `dev_search` searches the Firecrawl Developer Index of technical docs, GitHub issues, pull requests, and READMEs. Credentials come from the environment, `<agent-dir>/.env`, or the Firecrawl CLI login; without one, the tools are not registered.
 
 ### [Web fetch](../extensions/web-fetch/README.md)
 

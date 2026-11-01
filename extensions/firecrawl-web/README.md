@@ -16,7 +16,7 @@ Credential precedence:
 2. `FIRECRAWL_API_KEY` / `FIRECRAWL_API_URL` in `<agent-dir>/.env`.
 3. The existing Firecrawl CLI credential store (`firecrawl login`).
 
-Credentials are read at call time and never appear in tool output. Complete responses that are too large for tool output are saved with restrictive permissions under `pi-firecrawl/` in the system temporary directory.
+Without a key the three tools are not registered, so they never appear in the model's tool list; a one-time notice explains how to add a key, and `/reload` registers them afterwards. Credentials are read at call time and never appear in tool output. Complete responses that are too large for tool output are saved with restrictive permissions under `pi-firecrawl/` in the system temporary directory.
 
 ## Context and cost controls
 
