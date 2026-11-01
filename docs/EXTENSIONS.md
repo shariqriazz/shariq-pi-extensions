@@ -28,9 +28,9 @@ Replaces Pi's compaction summary with a six-section checkpoint plus computed fil
 
 Managed PTYs for servers, watchers, interactive programs, and any command that may run longer than about a minute: up to eight at once, bounded output in memory, private size-limited logs, and process-group shutdown on reload or exit. The model uses `start_terminal`, `read_terminal`, `write_terminal`, `list_terminals`, and `stop_terminal`; `/term` and `/ps` open the control center. When a model-started terminal exits, its result arrives as a custom message instead of requiring the model to poll; with `hold: true` the run stays open until a finite job exits, so scheduled runs handle its result before they end.
 
-### [Image Descriptions](../extensions/image-descriptions/README.md)
+### [Media Understanding](../extensions/media-understanding/README.md)
 
-Optional and off by default. When enabled, a configured vision model describes each image as it enters the conversation, from your attachments or from tool results such as `read`, and the description replaces the image before it is stored, so history stays text and the prompt cache is never invalidated. Originals are saved for `ask_image` (questions answered by the vision model) and `view_image` (shows the image to the main model directly). Configuration lives in `<agent-dir>/image-descriptions.json`.
+Optional helper models for media, each part off by default and enabled on its own; a tool exists only while its part is on. `view_image` shows an image to the main model and can zoom into a region at full resolution, with a per-session cap on repeated views; `ask_image`, `ask_video`, and `ask_audio` send one file and a question to a configured model and return text, so the media never enters the conversation. Images can also be replaced by a description as they arrive, for models that cannot see images (`auto`) or for every model (`always`), once before they are stored so the prompt cache is never invalidated. Configuration lives in `<agent-dir>/media-understanding.json`.
 
 ### [WebP Images](../extensions/webp-images/README.md)
 

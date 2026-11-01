@@ -61,6 +61,8 @@ const READ_CAPABILITY_TOOLS = new Set([
   "dev_search",
   "ask_image",
   "view_image",
+  "ask_video",
+  "ask_audio",
   "get_goal",
   "task_list",
   "read_terminal",
