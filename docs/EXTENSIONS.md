@@ -32,6 +32,10 @@ Managed PTYs for servers, watchers, long builds, and interactive programs: up to
 
 Optional and off by default. When enabled, a configured vision model describes each image as it enters the conversation, from your attachments or from tool results such as `read`, and the description replaces the image before it is stored, so history stays text and the prompt cache is never invalidated. Originals are saved for `ask_image` (questions answered by the vision model) and `view_image` (shows the image to the main model directly). Configuration lives in `<agent-dir>/image-descriptions.json`.
 
+### [WebP Images](../extensions/webp-images/README.md)
+
+Optional and off by default. When enabled, images entering the conversation are re-encoded once as lossy WebP within the model's image limits, before they are stored, so the prompt cache is never invalidated. Requests to models outside `webpModels` (default Claude, GPT, and Gemini) carry WebP images as JPEG or PNG; that fallback stays active when conversion is off. Configuration lives in `<agent-dir>/webp-images.json`.
+
 ## Web access
 
 ### [Firecrawl web](../extensions/firecrawl-web/README.md)

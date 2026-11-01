@@ -238,6 +238,8 @@ export default function imageDescriptions(pi: ExtensionAPI) {
         const text = block.type === "image" ? described.get(block) : undefined;
         return text ? { type: "text", text } : block;
       }),
+      // A structured result does not carry the image itself; Pi drops it unless returned.
+      ...(event.structuredContent === undefined ? {} : { structuredContent: event.structuredContent }),
     };
   });
 

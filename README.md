@@ -27,6 +27,7 @@ Run `/reload` in an existing Pi session after installation; new sessions load th
 - Smart Compaction: structured checkpoints with file and worktree state
 - managed background terminals
 - optional image descriptions: a vision model replaces images with text as they enter the conversation
+- optional WebP images: images are stored as lossy WebP, about a quarter of the size of PNG or JPEG
 - Firecrawl web search, scraping, and developer search
 - lightweight URL fetching
 - Context Usage startup card
