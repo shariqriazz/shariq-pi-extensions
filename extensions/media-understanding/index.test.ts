@@ -190,6 +190,27 @@ test(
     const sent = await sharp(Buffer.from(app.sentImages.at(-1)!.data, "base64")).metadata();
     assert.deepEqual([sent.width, sent.height], [1568, 784]);
 
+    // Formats providers reject reach the model as PNG; unreadable files get a clear message.
+    fs.writeFileSync(
+      path.join(dir, "scan.tiff"),
+      await sharp({ create: { width: 300, height: 200, channels: 3, background: "#ffffff" } })
+        .tiff()
+        .toBuffer(),
+    );
+    await app.tools.get("ask_image")!.execute("t", { path: "scan.tiff", question: "?" }, undefined, undefined, app.ctx);
+    assert.match(app.sentImages.at(-1)!.mimeType, /^image\/(png|jpeg)$/);
+    fs.writeFileSync(
+      path.join(dir, "icon.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="18"/></svg>',
+    );
+    const svgView = await view.execute("s", { path: "icon.svg" }, undefined, undefined, app.ctx);
+    assert.match(svgView.content[1].mimeType, /^image\/(png|jpeg)$/);
+    fs.writeFileSync(path.join(dir, "photo.heic"), Buffer.from("not an image"));
+    await assert.rejects(
+      view.execute("h", { path: "photo.heic" }, undefined, undefined, app.ctx),
+      /HEIC photos need converting/,
+    );
+
     const blind = harness(() => ({ text: "unused" }), TEXT_ONLY, dir);
     await assert.rejects(
       blind.tools.get("view_image")!.execute("5", { path: "shot.png" }, undefined, undefined, blind.ctx),

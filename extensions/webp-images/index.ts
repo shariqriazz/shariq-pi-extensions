@@ -53,8 +53,8 @@ export function loadConfig(file = configPath()): WebpImagesConfig {
 
 /** Pi's built-in limits when the model catalog sets none (utils/image-resize-core.ts). */
 const PI_DEFAULT_LIMITS = { maxWidth: 2000, maxHeight: 2000, maxBytes: 4.5 * 1024 * 1024 };
-// GIFs may be animated, and WebP output keeps only the first frame.
-const CONVERTIBLE = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
+// Formats every provider accepts. GIFs may be animated, and WebP output keeps only the first frame, so they stay.
+const PROVIDER_FORMATS = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
 const IMAGE_FILE = /\.(png|jpe?g|webp)$/i;
 const FALLBACK_JPEG_QUALITY = 90;
 const FALLBACK_CACHE_ENTRIES = 256;
@@ -108,7 +108,11 @@ export async function convertImage(
   source?: Buffer,
 ): Promise<Converted> {
   const unchanged = { image };
-  if (!CONVERTIBLE.has(baseMime(image.mimeType))) return unchanged;
+  const mime = baseMime(image.mimeType);
+  if (mime === "image/gif") return unchanged;
+  // TIFF, AVIF, SVG, and similar are rejected by providers and Pi cannot always convert them, so they are
+  // converted whenever sharp can read them, even if the WebP is larger.
+  const mustConvert = !PROVIDER_FORMATS.has(mime);
   const sharp = await loadSharp();
   const current = Buffer.from(image.data, "base64");
   const currentMeta = await sharp(current).metadata();
@@ -134,7 +138,7 @@ export async function convertImage(
   // Already WebP within the limits: encoding it again would only lose quality.
   if (
     !pipeline &&
-    baseMime(image.mimeType) === "image/webp" &&
+    mime === "image/webp" &&
     currentSize.width <= limits.maxWidth &&
     currentSize.height <= limits.maxHeight
   ) {
@@ -145,7 +149,7 @@ export async function convertImage(
     .resize({ width: limits.maxWidth, height: limits.maxHeight, fit: "inside", withoutEnlargement: true });
 
   const { data: webp, info } = await pipeline.webp({ quality }).toBuffer({ resolveWithObject: true });
-  if (webp.length >= current.length || base64Length(webp.length) >= limits.maxBytes) return unchanged;
+  if ((!mustConvert && webp.length >= current.length) || base64Length(webp.length) >= limits.maxBytes) return unchanged;
   const converted: ImageContent = { type: "image", data: webp.toString("base64"), mimeType: "image/webp" };
   // Pi adds this note only when it resizes; an image shrunk here reaches Pi within its limits.
   const note =

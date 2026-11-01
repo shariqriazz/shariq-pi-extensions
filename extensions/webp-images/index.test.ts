@@ -148,6 +148,16 @@ test(
       /^\[Image: original 1200x800, displayed at 500x333\./,
       "the resize note follows its image",
     );
+    // Providers reject SVG and Pi cannot convert it, so it becomes WebP even though the SVG is smaller.
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="red"/></svg>',
+    );
+    const fromSvg = await app.hooks.get("input")!(
+      { text: "logo", images: [block(svg, "image/svg+xml")], source: "interactive" },
+      app.ctx,
+    );
+    assert.deepEqual(await size(fromSvg.images[0]), { width: 120, height: 60, format: "webp" });
+
     // Input Mode resends interrupting input as an extension message; its images are converted too.
     const resent = await app.hooks.get("input")!({ text: "x", images: [attached], source: "extension" }, app.ctx);
     assert.equal(resent.images[0].mimeType, "image/webp");

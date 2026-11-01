@@ -91,6 +91,7 @@ const IMAGE_PROMPT = [
   "Transcribe all legible text exactly, including error messages, code, labels, numbers, and URLs.",
   "Describe the layout, the main elements, their state, and anything that looks wrong or notable, focusing on what the stated purpose needs.",
   "Be complete but concise. Do not guess at text you cannot read; say it is unreadable.",
+  "Describe only what the image shows; do not comment on why it was sent or what the user intends.",
 ].join("\n");
 const MEDIA_PROMPT = [
   "You answer questions about an attached video or audio file for an AI coding agent that cannot play it.",
@@ -114,6 +115,10 @@ const IMAGE_MIME: Record<string, string> = {
   webp: "image/webp",
   gif: "image/gif",
 };
+// Formats every provider accepts; others are converted to PNG before a model sees them.
+const PROVIDER_FORMATS = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+// sharp format names for images it can read that providers do not accept.
+const OTHER_IMAGE_FORMATS: Record<string, string> = { tiff: "image/tiff", heif: "image/avif", svg: "image/svg+xml" };
 const EXTENSION_FOR_MIME: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -191,9 +196,31 @@ async function readImageFile(
     .metadata()
     .then((meta) => meta.format)
     .catch(() => undefined);
-  const mimeType = format === "jpeg" ? "image/jpeg" : format && IMAGE_MIME[format];
-  if (!mimeType) throw new Error(`Not a supported image (png, jpg, webp, gif): ${file}`);
+  const mimeType = format === "jpeg" ? "image/jpeg" : format && (IMAGE_MIME[format] ?? OTHER_IMAGE_FORMATS[format]);
+  if (!mimeType) {
+    throw new Error(
+      `Cannot read ${file} as an image (png, jpg, webp, gif, tiff, avif, svg). iPhone HEIC photos need converting first, for example to jpg.`,
+    );
+  }
   return { file, bytes, mimeType };
+}
+
+/** PNG for formats providers reject, so a model never receives an image it cannot read. */
+async function providerSafe(image: ImageContent): Promise<ImageContent> {
+  if (PROVIDER_FORMATS.has(image.mimeType)) return image;
+  const png = await (
+    await loadSharp()
+  )(Buffer.from(image.data, "base64"))
+    .rotate()
+    .png()
+    .toBuffer()
+    .catch(() => undefined);
+  if (!png) {
+    throw new Error(
+      `Cannot convert a ${image.mimeType} image for the model. iPhone HEIC photos need converting first.`,
+    );
+  }
+  return { type: "image", data: png.toString("base64"), mimeType: "image/png" };
 }
 
 type Sharp = typeof import("sharp").default;
@@ -256,12 +283,13 @@ export async function askVisionModel(
   if (!model.input.includes("image")) throw new Error(`Model "${choice.model}" does not accept images.`);
   // Attachments arrive before Pi resizes them, and saved originals are full size; fit the copy sent to the
   // helper within its own image limits so large photos are not rejected or uploaded at full size.
+  const readable = await providerSafe(image);
   const fitted = await resizeImage(
-    Buffer.from(image.data, "base64"),
-    image.mimeType,
+    Buffer.from(readable.data, "base64"),
+    readable.mimeType,
     model.inputLimits?.images?.resize ?? VIEW_FALLBACK_RESIZE,
   ).catch(() => null);
-  const sent: ImageContent = fitted ? { type: "image", data: fitted.data, mimeType: fitted.mimeType } : image;
+  const sent: ImageContent = fitted ? { type: "image", data: fitted.data, mimeType: fitted.mimeType } : readable;
   const timeout = AbortSignal.timeout(DESCRIBE_TIMEOUT_MS);
   const options: Record<string, unknown> = {
     maxTokens: Math.min(MAX_ANSWER_TOKENS, model.maxTokens || MAX_ANSWER_TOKENS),
@@ -521,8 +549,13 @@ export default function mediaUnderstanding(pi: ExtensionAPI) {
           );
         }
         const notes: string[] = [];
-        let bytes = source.bytes;
-        let mimeType = source.mimeType;
+        const readable = await providerSafe({
+          type: "image",
+          data: source.bytes.toString("base64"),
+          mimeType: source.mimeType,
+        });
+        let bytes = Buffer.from(readable.data, "base64");
+        let mimeType = readable.mimeType;
         if (params.region) {
           const crop = await cropImage(source.bytes, params.region);
           bytes = Buffer.from(crop.image.data, "base64");
